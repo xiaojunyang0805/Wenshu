@@ -1,0 +1,57 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/*"]
+# The upstream engines are their own workspaces (fetched and patched by `scripts/sync-upstream`);
+# `eval/` holds evaluation clones.
+exclude = ["upstream", "eval"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+rust-version = "1.95"
+repository = "https://github.com/xiaojunyang0805/Wenshu"
+
+[workspace.dependencies]
+wenshu-cjk = { path = "crates/cjk" }
+wenshu-gongwen = { path = "crates/gongwen" }
+wenshu-core = { path = "crates/core" }
+wenshu-fidelity = { path = "crates/fidelity" }
+
+# Upstream engine (WordCraft), pinned by `upstream.lock` and patched by `patches/wordcraft/`.
+wordcraft-engine = { path = "upstream/wordcraft/crates/engine" }
+wordcraft-fonts = { path = "upstream/wordcraft/crates/fonts" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+zip = { version = "3", default-features = false, features = ["deflate"] }
+quick-xml = "0.41"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+# Mirrors upstream/wordcraft/Cargo.toml: a dependent workspace must repeat its patches.
+[patch.crates-io]
+krilla = { git = "https://github.com/storytold/craft-libs", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0" }
+
+[profile.dev.package."*"]
+opt-level = 2
+debug = false
+
+[profile.dev]
+opt-level = 1
+debug = "line-tables-only"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 16
+debug = 0

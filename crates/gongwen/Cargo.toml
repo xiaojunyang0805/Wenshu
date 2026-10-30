@@ -1,0 +1,15 @@
+[package]
+name = "wenshu-gongwen"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "GB/T 9704-2012 official documents (党政机关公文): page spec, DOCX generator and checker"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+zip = { workspace = true }
+quick-xml = { workspace = true }

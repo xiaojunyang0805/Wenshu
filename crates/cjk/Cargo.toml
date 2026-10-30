@@ -1,0 +1,10 @@
+[package]
+name = "wenshu-cjk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Chinese typography data for Wenshu: document-font substitutes and punctuation classes (clreq, GB/T 15834)"
+
+[lints]
+workspace = true

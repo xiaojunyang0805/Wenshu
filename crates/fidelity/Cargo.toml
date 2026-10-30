@@ -1,0 +1,16 @@
+[package]
+name = "wenshu-fidelity"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Wenshu fidelity harness: render a corpus, compare with reference pages, score"
+
+[lints]
+workspace = true
+
+[dependencies]
+wenshu-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+image = { workspace = true }

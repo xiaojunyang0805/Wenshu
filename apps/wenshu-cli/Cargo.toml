@@ -1,0 +1,21 @@
+[package]
+name = "wenshu-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Wenshu from the command line: convert, render, 公文 generate and check, fidelity runs"
+
+[[bin]]
+name = "wenshu"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+wenshu-core = { workspace = true }
+wenshu-gongwen = { workspace = true }
+wenshu-fidelity = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }

@@ -1,0 +1,16 @@
+[package]
+name = "wenshu-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Wenshu document core: the WordCraft engine with Chinese defaults (fonts, region)"
+
+[lints]
+workspace = true
+
+[dependencies]
+wenshu-cjk = { workspace = true }
+wordcraft-engine = { workspace = true }
+wordcraft-fonts = { workspace = true }
+serde_json = { workspace = true }
