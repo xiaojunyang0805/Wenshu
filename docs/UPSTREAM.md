@@ -31,14 +31,18 @@ longer applies, and running the fidelity corpus before and after.
 
 | Patch | Crate | What | Upstream |
 |---|---|---|---|
-| 0001-fonts-substitute-provider-hook | wordcraft-fonts | `SubstituteProvider` + `set_substitute_provider()`: named substitutes from the embedding app, tried before the built-in lists | not yet opened |
-| 0002-layout-grid-cells-and-char-indents | wordcraft-layout | Character grid: text larger than the default size takes `ceil` cells (was `round`: 22 pt glyphs squeezed into one 15.8 pt cell and overlapped); `w:firstLineChars`/`leftChars`/`rightChars` count grid cells on a character grid (a 公文 first line held 25 + indent instead of 26 + indent). 2 tests | not yet opened |
-| 0003-east-asian-hint-and-named-ea-substitutes | doc, docx, layout | Reads and writes `w:rFonts/@w:hint`; with `hint="eastAsia"`, ambiguous characters (“ ” ‘ ’ — … · ° …) use the East Asian font (ECMA-376 §17.3.2.26). An East Asian font substituted *by name* (仿宋_GB2312 → FangSong) is kept instead of dropped to generic fallback. Round-trip + layout tests | not yet opened |
-| 0004-layout-kinsoku-curly-quotes | wordcraft-layout | Kinsoku sets gain ” ’ 〃 〆 ‰ ℃ (no line start) and “ ‘ (no line end), needed once break opportunities beside quotes exist (Unicode 15.1 LB19a, kinsoku-off paths). Test | not yet opened |
-| 0005-layout-punctuation-compression | doc, docx, layout | `Settings::char_spacing` (`w:characterSpacingControl`) is read and written; it was always saved as `doNotCompress`, so a WPS document's `compressPunctuation` was lost on save. With compression on, adjacent full-width marks share one blank half (`。”` `）、` `”（` `《“`; JIS X 4051, clreq §3.1.6), only where the mark's advance is ≥ 0.9 em. Text on a character grid keeps its cells, as with auto-spacing. Auto-spacing and compression share one neighbour walk. 4 layout + 1 docx test, round-trip extended | not yet opened |
+| 0001-fonts-substitute-provider-hook | wordcraft-fonts | `SubstituteProvider` + `set_substitute_provider()`: named substitutes from the embedding app, tried before the built-in lists | [#5002](https://github.com/storytold/wordcraft/pull/5002) (draft) |
+| 0002-layout-grid-cells-and-char-indents | wordcraft-layout | Character grid: text larger than the default size takes `ceil` cells (was `round`: 22 pt glyphs squeezed into one 15.8 pt cell and overlapped); `w:firstLineChars`/`leftChars`/`rightChars` count grid cells on a character grid (a 公文 first line held 25 + indent instead of 26 + indent). 2 tests | [#5003](https://github.com/storytold/wordcraft/pull/5003) (draft) |
+| 0003-east-asian-hint-and-named-ea-substitutes | doc, docx, layout | Reads and writes `w:rFonts/@w:hint`; with `hint="eastAsia"`, ambiguous characters (“ ” ‘ ’ — … · ° …) use the East Asian font (ECMA-376 §17.3.2.26). An East Asian font substituted *by name* (仿宋_GB2312 → FangSong) is kept instead of dropped to generic fallback. Round-trip + layout tests | [#5005](https://github.com/storytold/wordcraft/pull/5005) (draft, on #5003) |
+| 0004-layout-kinsoku-curly-quotes | wordcraft-layout | Kinsoku sets gain ” ’ 〃 〆 ‰ ℃ (no line start) and “ ‘ (no line end), needed once break opportunities beside quotes exist (Unicode 15.1 LB19a, kinsoku-off paths). Test | [#5004](https://github.com/storytold/wordcraft/pull/5004) (draft) |
+| 0005-layout-punctuation-compression | doc, docx, layout | `Settings::char_spacing` (`w:characterSpacingControl`) is read and written; it was always saved as `doNotCompress`, so a WPS document's `compressPunctuation` was lost on save. With compression on, adjacent full-width marks share one blank half (`。”` `）、` `”（` `《“`; JIS X 4051, clreq §3.1.6), only where the mark's advance is ≥ 0.9 em. Text on a character grid keeps its cells, as with auto-spacing. Auto-spacing and compression share one neighbour walk. 4 layout + 1 docx test, round-trip extended | [#5006](https://github.com/storytold/wordcraft/pull/5006) (draft, on #5004) |
 
 All five apply in order on `3b7f7ed`; the `wordcraft-layout` (571), `wordcraft-doc` (242) and
 `wordcraft-docx` (500) suites pass with them, and clippy is clean on doc, docx, layout and engine.
+
+Opened 2026-10-30 from `xiaojunyang0805/wordcraft` branches `cjk/*`, rebased on upstream `5b5810f`.
+Three tests also fail on unmodified upstream `main` on Windows (mcp `automation_roots` dead code,
+`proof` hunspell, `ui-egui` backstage); they are listed in each PR.
 
 ## Issues found (status)
 
