@@ -2,6 +2,27 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-10-30 (3): first review round on #5002–#5006
+
+CodeRabbit reviewed the drafts (triggered with `@coderabbitai review`). There are no human reviews
+yet. Fixed in the `cjk/*` branches and the patch queue:
+
+- #5006: compression now changes the layout-cache key (`env_hash`), so toggling it relays out
+  cached paragraphs. A proportional first mark (Latin “ before 《) keeps its width.
+- #5004: the kinsoku sets apply only beside East Asian text, so `rose 5 ‰` keeps its break.
+- #5003: the cell tolerance is relative 1e-4, so 54.5 pt on a 54 pt grid takes 2 cells.
+  Character indents are now one character pitch per character, whatever the mark size; to be
+  confirmed with a WPS render.
+- #5002: the provider is asked with the document's own font name first; when none of its
+  candidates is installed, the built-in lists still apply.
+- Declined: putting 仿宋_GB2312-style mappings into WordCraft (#5005). That data comes from the
+  app through the #5002 hook.
+- Docs (gaps, layout-parity, ROADMAP): offered in the last PR to merge, or a follow-up, to avoid
+  five-way conflicts on the parity doc's revision line.
+
+Upstream tests on the merged branches: layout 574, docx 500, doc 242, fonts 102, engine 1094;
+fmt and clippy clean.
+
 ## 2026-10-30 (2): M1 Chinese layout patches, upstream PRs
 
 **Landed** (`fd5bca0`, `b5c920b`)

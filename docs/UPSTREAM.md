@@ -41,6 +41,8 @@ All five apply in order on `3b7f7ed`; the `wordcraft-layout` (571), `wordcraft-d
 `wordcraft-docx` (500) suites pass with them, and clippy is clean on doc, docx, layout and engine.
 
 Opened 2026-10-30 from `xiaojunyang0805/wordcraft` branches `cjk/*`, rebased on upstream `5b5810f`.
+The patch files are generated from those branches (first line: the PR link). After review fixes,
+regenerate them with `git diff` between the branches, as in [PROGRESS.md](PROGRESS.md).
 Three tests also fail on unmodified upstream `main` on Windows (mcp `automation_roots` dead code,
 `proof` hunspell, `ui-egui` backstage); they are listed in each PR.
 
