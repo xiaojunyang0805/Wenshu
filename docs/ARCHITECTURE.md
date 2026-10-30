@@ -107,10 +107,10 @@ and the title from YaHei to **STZhongsong**. Both are verified in the exported P
 
 | Hook | Upstream crate | Wenshu data | Why |
 |---|---|---|---|
-| Punctuation compression (标点挤压) | `wordcraft-layout` (line breaking) | `wenshu_cjk::punct::{compressible_em, adjacent_compression_em}` | Missing everywhere; visible in every Chinese paragraph |
-| Kinsoku set provider | `wordcraft-layout::kinsoku` | `wenshu_cjk::punct::{no_line_start, no_line_end}` | Upstream's list misses ” ’ … — |
-| Character-grid fixes | `wordcraft-layout` | corpus cases | Body lines give 27 instead of 28 chars on the 公文 grid; large text squeezed to the pitch |
-| Full-width CJK quotes | `wordcraft-fonts` / shaping | — | “” drawn in the Latin font |
+| ✅ Punctuation compression (标点挤压, patch 0005) | doc, docx, `wordcraft-layout` | — (standard pairs, upstream; `wenshu_cjk::punct` mirrors them) | `w:characterSpacingControl` was dropped on save and never applied |
+| ✅ Kinsoku sets (patch 0004) | `wordcraft-layout::kinsoku` | — (standard sets, upstream) | ” ’ could start a line once quotes become break opportunities |
+| ✅ Character-grid fixes (patch 0002) | `wordcraft-layout` | corpus cases | Body lines gave 27 instead of 28 chars on the 公文 grid; large text squeezed to the pitch |
+| ✅ `w:hint="eastAsia"` + named EA substitutes (patch 0003) | doc, docx, layout | `wenshu_cjk::fonts` via 0001 | “” drawn half-width in the Latin font; 仿宋_GB2312 as `w:eastAsia` dropped to generic fallback |
 
 ## 6. Data flow (CLI)
 

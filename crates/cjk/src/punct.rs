@@ -33,18 +33,20 @@ pub fn classify(c: char) -> Option<PunctClass> {
     })
 }
 
-/// A line may not start with `c` (行首禁则): closing marks, pause and stop marks, middle dots,
-/// and the second half of a dash or ellipsis.
+/// A line may not start with `c` (行首禁则): closing marks, pause and stop marks, middle dots.
+/// Dashes and ellipses may start a line; they only must not be split between two lines
+/// (GB/T 15834-2011 §5.1.6, §5.1.7), which [`no_break_between`] covers.
 pub fn no_line_start(c: char) -> bool {
     matches!(
         classify(c),
-        Some(
-            PunctClass::Closing
-                | PunctClass::PauseOrStop
-                | PunctClass::Middle
-                | PunctClass::Inseparable
-        )
+        Some(PunctClass::Closing | PunctClass::PauseOrStop | PunctClass::Middle)
     ) || matches!(c, '％' | '‰' | '℃' | '々' | '〻')
+}
+
+/// A line may not break between `a` and `b`: the two halves of a dash (——) or an ellipsis
+/// (……).
+pub fn no_break_between(a: char, b: char) -> bool {
+    a == b && classify(a) == Some(PunctClass::Inseparable)
 }
 
 /// A line may not end with `c` (行尾禁则): opening marks and currency signs.
@@ -63,13 +65,13 @@ pub fn compressible_em(c: char) -> f64 {
 }
 
 /// Space, in ems, that compression removes between adjacent marks `a` then `b` (clreq §3.1.6):
-/// a closing or stop mark followed by an opening mark, or two closing or two opening marks, keep
-/// only one blank half between them.
+/// a closing or stop mark followed by any opening, closing or stop mark (`”“` `。”` `）、`), or
+/// two opening marks, keep only one blank half between them. Upstream layout (patch 0005) uses
+/// the same pairs but leaves out ； ： ？ ！, which sit centred in Japanese fonts.
 pub fn adjacent_compression_em(a: char, b: char) -> f64 {
     use PunctClass::{Closing, Opening, PauseOrStop};
     match (classify(a), classify(b)) {
-        (Some(Closing | PauseOrStop), Some(Opening))
-        | (Some(Closing), Some(Closing | PauseOrStop))
+        (Some(Closing | PauseOrStop), Some(Opening | Closing | PauseOrStop))
         | (Some(Opening), Some(Opening)) => 0.5,
         _ => 0.0,
     }
@@ -81,14 +83,14 @@ mod tests {
 
     #[test]
     fn line_start_rules() {
-        for c in [
-            '，', '。', '、', '）', '》', '”', '’', '！', '？', '…', '—', '·',
-        ] {
+        for c in ['，', '。', '、', '）', '》', '”', '’', '！', '？', '·'] {
             assert!(no_line_start(c), "{c}");
         }
-        for c in ['中', 'A', '（', '“', '《'] {
+        for c in ['中', 'A', '（', '“', '《', '—', '…'] {
             assert!(!no_line_start(c), "{c}");
         }
+        assert!(no_break_between('—', '—') && no_break_between('…', '…'));
+        assert!(!no_break_between('—', '…') && !no_break_between('中', '中'));
     }
 
     #[test]
@@ -104,6 +106,8 @@ mod tests {
         assert_eq!(adjacent_compression_em('，', '“'), 0.5);
         assert_eq!(adjacent_compression_em('）', '。'), 0.5);
         assert_eq!(adjacent_compression_em('《', '“'), 0.5);
+        assert_eq!(adjacent_compression_em('。', '”'), 0.5);
+        assert_eq!(adjacent_compression_em('（', '）'), 0.0);
         assert_eq!(adjacent_compression_em('中', '“'), 0.0);
         assert_eq!(compressible_em('·'), 0.25);
     }

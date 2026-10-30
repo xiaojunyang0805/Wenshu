@@ -1,0 +1,454 @@
+Punctuation compression (w:characterSpacingControl): read/write the setting, close up adjacent full-width East Asian punctuation (JIS X 4051, W3C clreq 3.1.6). Upstream PR: not yet opened.
+diff --git a/crates/doc/src/lib.rs b/crates/doc/src/lib.rs
+index 9d0100e..d47d332 100644
+--- a/crates/doc/src/lib.rs
++++ b/crates/doc/src/lib.rs
+@@ -83,8 +83,8 @@ pub use error::{DocError, Result};
+ pub use parts::{MAX_LINKED_BOXES, MAX_TEXT_BOX_INSET, NoteSeparators, Part, PartKind, PermRange, TEXT_BOX_INSET, TextBody, free_id};
+ pub use position::{Path, Pos, StoryRef};
+ pub use settings::{
+-    COMPAT_MODE_CURRENT, CoreProps, CustomProp, DEFAULT_GRID, DEFAULT_HYPHENATION_ZONE, LEGACY_COMPAT_MODE, PagePicture, Settings, Source,
+-    THEME_COLORS, Watermark, Zoom, ZoomFit,
++    COMPAT_MODE_CURRENT, CharSpacing, CoreProps, CustomProp, DEFAULT_GRID, DEFAULT_HYPHENATION_ZONE, LEGACY_COMPAT_MODE, PagePicture, Settings,
++    Source, THEME_COLORS, Watermark, Zoom, ZoomFit,
+ };
+ pub use text_walk::count_words;
+ pub(crate) use text_walk::{PARA_WALK_DEPTH, walk_between};
+diff --git a/crates/doc/src/settings.rs b/crates/doc/src/settings.rs
+index 3d8c341..550a515 100644
+--- a/crates/doc/src/settings.rs
++++ b/crates/doc/src/settings.rs
+@@ -162,6 +162,48 @@ pub struct Settings {
+     /// comments and tracked changes are saved without `w:date`.
+     #[serde(skip_serializing_if = "std::ops::Not::not")]
+     pub remove_date_time: bool,
++    /// East Asian punctuation compression (`w:characterSpacingControl`, ECMA-376 §17.15.1.18).
++    pub char_spacing: CharSpacing,
++}
++
++/// Which East Asian characters give up the blank half of their em (`w:characterSpacingControl`).
++#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
++#[serde(rename_all = "camelCase")]
++pub enum CharSpacing {
++    /// Every character keeps its full advance; ECMA-376's default when the element is absent.
++    #[default]
++    DoNotCompress,
++    /// Adjacent full-width punctuation shares one blank half (`compressPunctuation`).
++    CompressPunctuation,
++    /// Punctuation and Japanese kana (`compressPunctuationAndJapaneseKana`); kana are laid out
++    /// at their full advance for now.
++    CompressPunctuationAndJapaneseKana,
++}
++
++impl CharSpacing {
++    /// The `w:val` of `w:characterSpacingControl`.
++    pub fn to_ooxml(self) -> &'static str {
++        match self {
++            CharSpacing::DoNotCompress => "doNotCompress",
++            CharSpacing::CompressPunctuation => "compressPunctuation",
++            CharSpacing::CompressPunctuationAndJapaneseKana => "compressPunctuationAndJapaneseKana",
++        }
++    }
++
++    /// Parses a `w:val`; `None` for an unknown value.
++    pub fn from_ooxml(v: &str) -> Option<Self> {
++        Some(match v {
++            "doNotCompress" => CharSpacing::DoNotCompress,
++            "compressPunctuation" => CharSpacing::CompressPunctuation,
++            "compressPunctuationAndJapaneseKana" => CharSpacing::CompressPunctuationAndJapaneseKana,
++            _ => return None,
++        })
++    }
++
++    /// Whether punctuation is compressed.
++    pub fn compresses_punctuation(self) -> bool {
++        self != CharSpacing::DoNotCompress
++    }
+ }
+ 
+ /// A saved zoom: a percentage, or a fit mode (the percentage it last came to).
+@@ -307,6 +349,7 @@ impl Default for Settings {
+             zoom: None,
+             remove_personal_info: false,
+             remove_date_time: false,
++            char_spacing: CharSpacing::DoNotCompress,
+         }
+     }
+ }
+diff --git a/crates/docx/src/read/meta.rs b/crates/docx/src/read/meta.rs
+index 9739f66..d89e811 100644
+--- a/crates/docx/src/read/meta.rs
++++ b/crates/docx/src/read/meta.rs
+@@ -58,6 +58,11 @@ impl Reader<'_> {
+                 "w:mirrorMargins" => s.mirror_margins = on_off(k),
+                 "w:autoHyphenation" => s.auto_hyphenation = on_off(k),
+                 "w:doNotHyphenateCaps" => s.hyphenate_caps = !on_off(k),
++                "w:characterSpacingControl" => {
++                    if let Some(v) = k.attr("w:val").and_then(wordcraft_doc::CharSpacing::from_ooxml) {
++                        s.char_spacing = v;
++                    }
++                }
+                 "w:hyphenationZone" => {
+                     if let Some(v) = tw(k, "w:val").filter(|v| v.is_finite() && *v >= 0.0) {
+                         s.hyphenation_zone = v.min(1584.0);
+diff --git a/crates/docx/src/write/settings.rs b/crates/docx/src/write/settings.rs
+index 1c7d20e..23d9c63 100644
+--- a/crates/docx/src/write/settings.rs
++++ b/crates/docx/src/write/settings.rs
+@@ -101,7 +101,7 @@ pub(super) fn settings_xml(doc: &Document, footnotes: bool, endnotes: bool, temp
+             w.val(tag, &crate::units::twips(v.clamp(0.5, 1584.0)));
+         }
+     }
+-    w.val("w:characterSpacingControl", "doNotCompress");
++    w.val("w:characterSpacingControl", s.char_spacing.to_ooxml());
+     write_note_settings(&mut w, s, s_notes, footnotes, endnotes);
+     write_compatibility_settings(&mut w, doc);
+     if let Some(m) = &s.math {
+diff --git a/crates/docx/tests/it/fixtures.rs b/crates/docx/tests/it/fixtures.rs
+index 34b3bd0..0495ca2 100644
+--- a/crates/docx/tests/it/fixtures.rs
++++ b/crates/docx/tests/it/fixtures.rs
+@@ -1053,6 +1053,23 @@ fn with_settings(settings: Option<&str>) -> Document {
+     }
+ }
+ 
++/// `w:characterSpacingControl` (ECMA-376 §17.15.1.18): documents from Chinese and Japanese
++/// editors usually ask for punctuation compression; an absent or unknown value means none.
++#[test]
++fn character_spacing_control_is_read() {
++    use wordcraft_doc::CharSpacing;
++    assert_eq!(with_settings(None).settings.char_spacing, CharSpacing::DoNotCompress);
++    for (val, want) in [
++        ("compressPunctuation", CharSpacing::CompressPunctuation),
++        ("compressPunctuationAndJapaneseKana", CharSpacing::CompressPunctuationAndJapaneseKana),
++        ("doNotCompress", CharSpacing::DoNotCompress),
++        ("bogus", CharSpacing::DoNotCompress),
++    ] {
++        let d = with_settings(Some(&format!(r#"<w:characterSpacingControl w:val="{val}"/>"#)));
++        assert_eq!(d.settings.char_spacing, want, "{val}");
++    }
++}
++
+ #[test]
+ fn table_contextual_spacing_compatibility_flag_is_read() {
+     assert!(!with_settings(None).settings.allow_space_of_same_style_in_table);
+diff --git a/crates/docx/tests/it/roundtrip.rs b/crates/docx/tests/it/roundtrip.rs
+index 944313c..f646674 100644
+--- a/crates/docx/tests/it/roundtrip.rs
++++ b/crates/docx/tests/it/roundtrip.rs
+@@ -1478,6 +1478,7 @@ fn settings_core_theme_round_trip() {
+     d.settings.hyphenation_zone = 27.0;
+     d.settings.hyphenate_caps = false;
+     d.settings.consecutive_hyphen_limit = 2;
++    d.settings.char_spacing = wordcraft_doc::CharSpacing::CompressPunctuation;
+     d.settings.page_color = Some(Rgb(250, 240, 230));
+     d.settings.major_font = "Cambria".into();
+     d.settings.minor_font = "Calibri".into();
+diff --git a/crates/layout/src/kinsoku.rs b/crates/layout/src/kinsoku.rs
+index 546a896..fa36346 100644
+--- a/crates/layout/src/kinsoku.rs
++++ b/crates/layout/src/kinsoku.rs
+@@ -8,6 +8,8 @@
+ //! - Word wrap off: Latin words may break at any character.
+ //! - Automatic spacing (`autoSpaceDE`, `autoSpaceDN`): which neighbouring characters get room
+ //!   between Asian text and Latin text or digits ([`auto_space`]).
++//! - Punctuation compression (`w:characterSpacingControl`): which neighbouring punctuation marks
++//!   share one blank half ([`compresses`]).
+ //!
+ //! Only East Asian characters are in the lists, and the extra breaks need letters on both sides,
+ //! so text with no East Asian characters breaks exactly as before unless word wrap is off.
+@@ -24,6 +26,39 @@ const NO_START: &str = "、。，．・：；？！゛゜ヽヾゝゞ々〻〉
+ /// too, as for [`NO_START`]), currency signs.
+ const NO_END: &str = "〈《「『【〔〖〘〚〝（［｛｟｢＄￡￥“‘﹙﹛";
+ 
++/// Full-width opening brackets and quotes: ink on the right half of the em, the left half blank.
++const OPENING: &str = "（〔［｛〈《「『【〘〖〚〝｟“‘";
++
++/// Full-width closing brackets and quotes, and the comma and full stop: ink on the left half of
++/// the em, the right half blank (Japanese, and Simplified Chinese, W3C clreq §3.1.6). Colons,
++/// semicolons and question and exclamation marks are left out: they sit centred in Japanese
++/// fonts.
++const CLOSING: &str = "）〕］｝〉》」』】〙〗〛〞〟｠”’、。，．";
++
++/// Which mark gives up the blank half of its em when East Asian punctuation is compressed.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum Compress {
++    /// The first mark's trailing blank half.
++    First,
++    /// The second mark's leading blank half.
++    Second,
++}
++
++/// Whether punctuation compression (`compressPunctuation`) closes up `a` and the `b` right
++/// after it, and whose blank half goes: only one blank half stays between two marks whose blank
++/// halves meet or stand between their ink (`”“` `。”` `）、` `《“`), as JIS X 4051 and W3C clreq
++/// set them. The caller checks that the mark is full-width in its font.
++pub fn compresses(a: char, b: char) -> Option<Compress> {
++    let (open_b, close_b) = (OPENING.contains(b), CLOSING.contains(b));
++    if CLOSING.contains(a) && (open_b || close_b) {
++        Some(Compress::First)
++    } else if OPENING.contains(a) && open_b {
++        Some(Compress::Second)
++    } else {
++        None
++    }
++}
++
+ /// Whether `c` is East Asian text: CJK ideographs, kana, bopomofo, CJK punctuation, and
+ /// fullwidth/halfwidth forms (not spaces, not combining sound marks).
+ pub fn is_east_asian(c: char) -> bool {
+@@ -111,7 +146,18 @@ fn is_hangul(c: char) -> bool {
+ 
+ #[cfg(test)]
+ mod tests {
+-    use super::{AsianSide, apply, auto_space};
++    use super::{AsianSide, Compress, apply, auto_space, compresses};
++
++    #[test]
++    fn compression_pairs() {
++        for (a, b) in [('”', '“'), ('。', '”'), ('）', '、'), ('，', '《'), ('」', '。')] {
++            assert_eq!(compresses(a, b), Some(Compress::First), "{a}{b}");
++        }
++        assert_eq!(compresses('《', '“'), Some(Compress::Second));
++        for (a, b) in [('（', '）'), ('“', '好'), ('好', '”'), ('：', '“'), ('"', '('), ('A', '。')] {
++            assert_eq!(compresses(a, b), None, "{a}{b}");
++        }
++    }
+ 
+     #[test]
+     fn auto_space_pairs() {
+diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
+index d422d41..38ddec4 100644
+--- a/crates/layout/src/para/grid.rs
++++ b/crates/layout/src/para/grid.rs
+@@ -88,21 +88,24 @@ pub(super) fn snap_chars(b: &mut Builder, text: &str, grid: &Grid) {
+     }
+ }
+ 
+-/// Automatic spacing (`w:autoSpaceDE`, `w:autoSpaceDN`): a quarter of the Asian character's font
+-/// size between Asian text and Latin text or digits that touch, across runs. Measured on Word's
+-/// PDF of a Chinese document at 16 pt (#2358), as JIS X 4051 asks. A field or note number is
+-/// classed by the text it shows. The room goes after the first of the two characters; returns it
+-/// by cluster index.
+-pub(super) fn auto_space(b: &mut Builder, text: &str, de: bool, dn: bool) -> Vec<(usize, f32)> {
++/// One side of two text clusters that touch: the cluster's index, the character at the touching
++/// side, its font size, and whether the cluster is that one character.
++#[derive(Clone, Copy)]
++struct Side {
++    k: usize,
++    ch: char,
++    size: f32,
++    single: bool,
++}
++
++/// The pairs of text clusters that touch, across runs: the first's last character and the
++/// second's first. A field or note number is classed by the text it shows; any other cluster
++/// (a space, tab, object or break) separates them.
++fn touching(b: &Builder, text: &str) -> Vec<(Side, Side)> {
+     let mut out = Vec::new();
+-    if !de && !dn {
+-        return out;
+-    }
+     let mut shown = b.shown.iter().map(|s| (s.0, s.1.as_str())).peekable();
+-    // The previous text cluster: index, its last character, its font size.
+-    let mut prev: Option<(usize, char, f32)> = None;
+-    for k in 0..b.clusters.len() {
+-        let Some(c) = b.clusters.get(k) else { break };
++    let mut prev: Option<Side> = None;
++    for (k, c) in b.clusters.iter().enumerate() {
+         match c.kind {
+             ClKind::Text => {}
+             ClKind::Marker if c.adv == 0.0 => continue,
+@@ -120,22 +123,57 @@ pub(super) fn auto_space(b: &mut Builder, text: &str, de: bool, dn: bool) -> Vec
+             prev = None;
+             continue;
+         };
++        let single = s.chars().nth(1).is_none();
+         let size = b.styles.get(c.style as usize).map_or(0.0, |st| st.size);
+-        if let Some((pk, pc, psize)) = prev
+-            && let Some(side) = crate::kinsoku::auto_space(pc, first, de, dn)
+-        {
+-            let asian = if side == crate::kinsoku::AsianSide::Left { psize } else { size };
+-            let gap = if asian.is_finite() { (asian / 4.0).clamp(0.0, 400.0) } else { 0.0 };
+-            if let Some(pc) = b.clusters.get_mut(pk) {
+-                pc.adv += gap;
+-                out.push((pk, gap));
+-            }
++        if let Some(p) = prev {
++            out.push((p, Side { k, ch: first, size, single }));
+         }
+-        prev = Some((k, last, size));
++        prev = Some(Side { k, ch: last, size, single });
+     }
+     out
+ }
+ 
++/// Automatic spacing (`w:autoSpaceDE`, `w:autoSpaceDN`): a quarter of the Asian character's font
++/// size between Asian text and Latin text or digits that touch, across runs. Measured on Word's
++/// PDF of a Chinese document at 16 pt (#2358), as JIS X 4051 asks. A field or note number is
++/// classed by the text it shows. The room goes after the first of the two characters; returns it
++/// by cluster index.
++pub(super) fn auto_space(b: &mut Builder, text: &str, de: bool, dn: bool) -> Vec<(usize, f32)> {
++    let mut out = Vec::new();
++    if !de && !dn {
++        return out;
++    }
++    for (p, n) in touching(b, text) {
++        let Some(side) = crate::kinsoku::auto_space(p.ch, n.ch, de, dn) else { continue };
++        let asian = if side == crate::kinsoku::AsianSide::Left { p.size } else { n.size };
++        let gap = if asian.is_finite() { (asian / 4.0).clamp(0.0, 400.0) } else { 0.0 };
++        if let Some(pc) = b.clusters.get_mut(p.k) {
++            pc.adv += gap;
++            out.push((p.k, gap));
++        }
++    }
++    out
++}
++
++/// Punctuation compression (`w:characterSpacingControl` other than `doNotCompress`): where two
++/// full-width East Asian punctuation marks touch with blank halves between their ink, one blank
++/// half goes ([`crate::kinsoku::compresses`]), half the em of the mark that gives it up. The
++/// first cluster's advance shrinks, so the second and everything after move closer. A mark is
++/// full-width when its advance is at least 0.9 em; a proportional (Latin) quote keeps its width.
++pub(super) fn compress_punct(b: &mut Builder, text: &str) {
++    for (p, n) in touching(b, text) {
++        let Some(who) = crate::kinsoku::compresses(p.ch, n.ch) else { continue };
++        let mark = if who == crate::kinsoku::Compress::First { p } else { n };
++        let adv = b.clusters.get(mark.k).map_or(0.0, |c| c.adv);
++        if !mark.single || !mark.size.is_finite() || mark.size <= 0.0 || adv < 0.9 * mark.size {
++            continue;
++        }
++        if let Some(pc) = b.clusters.get_mut(p.k) {
++            pc.adv = (pc.adv - (mark.size / 2.0).min(400.0)).max(0.0);
++        }
++    }
++}
++
+ /// An area text wraps around.
+ #[derive(Clone, Debug, PartialEq)]
+ pub struct Exclusion {
+diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
+index 04d649b..03e2b35 100644
+--- a/crates/layout/src/para/paragraph.rs
++++ b/crates/layout/src/para/paragraph.rs
+@@ -1,7 +1,7 @@
+ use super::bidi::{Dir, bidi_levels, visual_order};
+ use super::builder::{Builder, left_out, overstrike};
+ use super::chars::caps_char;
+-use super::grid::{auto_space, snap_chars};
++use super::grid::{auto_space, compress_punct, snap_chars};
+ use super::justify::hyphenation_points;
+ use super::lines::break_lines;
+ use super::model::{ClKind, Cluster, Enclosed, Glyph, Label, LabelRun, ParaEnv, RubyLayout, undrawable_bullet};
+@@ -573,8 +573,11 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+         snap_chars(&mut sh.b, &p.text, &env.grid);
+     }
+     // Text on a character grid keeps to its cells.
+-    let auto_space =
+-        if rp.snap_to_grid && env.grid.chars.is_some() { Vec::new() } else { auto_space(&mut sh.b, &p.text, rp.auto_space_de, rp.auto_space_dn) };
++    let on_grid = rp.snap_to_grid && env.grid.chars.is_some();
++    if !on_grid && doc.settings.char_spacing.compresses_punctuation() {
++        compress_punct(&mut sh.b, &p.text);
++    }
++    let auto_space = if on_grid { Vec::new() } else { auto_space(&mut sh.b, &p.text, rp.auto_space_de, rp.auto_space_dn) };
+     let mut skip = sh.left.clone();
+     skip.extend(sh.bare.iter().cloned());
+     let bt = BreakText::new(&p.text, skip);
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+index bfce562..a5d9374 100644
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -8,6 +8,7 @@ mod autospace;
+ mod bidi;
+ mod budget;
+ mod complex;
++mod compress;
+ mod grid;
+ mod ligature;
+ pub(crate) mod linear;
+diff --git a/crates/layout/src/tests/compress.rs b/crates/layout/src/tests/compress.rs
+new file mode 100644
+index 0000000..fd2c452
+--- /dev/null
++++ b/crates/layout/src/tests/compress.rs
+@@ -0,0 +1,80 @@
++//! Punctuation compression (`w:characterSpacingControl`): adjacent full-width East Asian marks
++//! share one blank half (JIS X 4051, W3C clreq §3.1.6). Assertions compare a layout with
++//! compression on to the same layout with it off, never font metrics (fonts differ between
++//! machines; a CJK font may be missing, and then the marks are not full-width and stay as they are).
++
++use crate::*;
++use wordcraft_doc::CharSpacing;
++use wordcraft_doc::section::{DocGrid, DocGridType};
++
++fn lay(doc: &Document) -> DocLayout {
++    layout(doc, &mut LayoutCache::new(), &LayoutOptions::default())
++}
++
++fn first_para(l: &DocLayout) -> Arc<ParaLayout> {
++    l.pages[0].items.iter().find_map(|it| if let Placed::Lines { para, .. } = it { Some(para.clone()) } else { None }).unwrap()
++}
++
++/// Each cluster's change in advance with `mode` against `doNotCompress`, rounded to a hundredth,
++/// and what compression should take: for each `(k, mark)` of `compressed`, cluster `k` loses half
++/// the em of cluster `mark` when that mark is full-width.
++fn changes(text: &str, mode: CharSpacing, compressed: &[(usize, usize)]) -> (Vec<f32>, Vec<f32>) {
++    let mut on = Document::from_text(text);
++    on.settings.char_spacing = mode;
++    let off = Document::from_text(text);
++    let (on, off) = (first_para(&lay(&on)), first_para(&lay(&off)));
++    assert_eq!(on.clusters.len(), off.clusters.len());
++    let r = |v: f32| (v * 100.0).round() / 100.0;
++    let got = on.clusters.iter().zip(&off.clusters).map(|(a, b)| r(a.adv - b.adv)).collect();
++    let want = off
++        .clusters
++        .iter()
++        .enumerate()
++        .map(|(k, _)| {
++            let Some(&(_, m)) = compressed.iter().find(|c| c.0 == k) else { return 0.0 };
++            let c = &off.clusters[m];
++            let size = off.styles.get(c.style as usize).map_or(0.0, |s| s.size);
++            if c.adv >= 0.9 * size { r(-size / 2.0) } else { 0.0 }
++        })
++        .collect();
++    (got, want)
++}
++
++#[test]
++fn adjacent_full_width_marks_share_one_blank_half() {
++    // 他说：“你好。”（再见）、《“书”》: 。” — ”（ — ）、 — 、《 — 《“ (the second's blank, taken
++    // from the first's advance) — ”》.
++    let text = "他说：“你好。”（再见）、《“书”》";
++    let marks = [(6, 6), (7, 7), (11, 11), (12, 12), (13, 14), (16, 16)];
++    let (got, want) = changes(text, CharSpacing::CompressPunctuation, &marks);
++    assert_eq!(got, want);
++    let (kana, _) = changes(text, CharSpacing::CompressPunctuationAndJapaneseKana, &marks);
++    assert_eq!(kana, want, "kana mode compresses punctuation too");
++}
++
++#[test]
++fn nothing_changes_without_compression_or_between_other_characters() {
++    let text = "他说：“你好。”（再见）";
++    let (got, _) = changes(text, CharSpacing::DoNotCompress, &[]);
++    assert!(got.iter().all(|&v| v == 0.0), "{got:?}");
++    // Ideographs beside marks, a mark before a space, opening then closing, Latin quotes.
++    for text in ["你“好”吗", "好。 “是", "（）", "\"(a)\"", "say \u{201D}\u{201C} it"] {
++        let (got, _) = changes(text, CharSpacing::CompressPunctuation, &[]);
++        assert!(got.iter().all(|&v| v == 0.0), "{text}: {got:?}");
++    }
++}
++
++#[test]
++fn text_on_a_character_grid_keeps_its_cells() {
++    let text = "“你好。”（再见）";
++    let grid = |d: &mut Document| {
++        d.last_section.doc_grid = Some(DocGrid { kind: DocGridType::LinesAndChars, line_pitch: 15.6, char_space: 0 });
++    };
++    let mut on = Document::from_text(text);
++    on.settings.char_spacing = CharSpacing::CompressPunctuation;
++    grid(&mut on);
++    let mut off = Document::from_text(text);
++    grid(&mut off);
++    let advs = |d: &Document| first_para(&lay(d)).clusters.iter().map(|c| c.adv).collect::<Vec<f32>>();
++    assert_eq!(advs(&on), advs(&off));
++}
