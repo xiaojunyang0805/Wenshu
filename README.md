@@ -7,7 +7,9 @@ typography, GB/T 9704 official documents (公文), OFD and a Chinese fidelity co
 Wenshu is an independent project, not affiliated with Kingsoft or Microsoft. It opens and saves files
 made in WPS Office and Microsoft Word.
 
-**Status: M0 (foundations) done.** See [docs/MVP.md](docs/MVP.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+**Status: M0 (foundations) done; M1 (Chinese layout) in progress:** 4 layout patches done and sent
+upstream as draft PRs, the corpus is next. See [docs/PROGRESS.md](docs/PROGRESS.md), [docs/MVP.md](docs/MVP.md) and
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Build
 
@@ -32,4 +34,4 @@ wenshu fidelity corpus out/fidelity                           # corpus scoreboar
 
 - [Feasibility report](docs/Wenshu_Feasibility_Report.md): landscape, cost and time model
 - [Kit evaluation](eval/EVALUATION_SUMMARY.md): WordCraft, DeckCraft, GridCraft, IronCalc, BetterOffice, Univer
-- [Architecture](docs/ARCHITECTURE.md) · [MVP](docs/MVP.md) · [Upstream policy](docs/UPSTREAM.md) · [Decisions](docs/adr/)
+- [Architecture](docs/ARCHITECTURE.md) · [MVP](docs/MVP.md) · [Upstream policy](docs/UPSTREAM.md) · [Decisions](docs/adr/) · [Progress log](docs/PROGRESS.md)

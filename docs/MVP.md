@@ -23,7 +23,7 @@ Writer only. Slides and Sheets come after the MVP.
 | M | Content | Effort (agents + 1–2 engineers) | Status |
 |---|---|---|---|
 | **M0 Foundations** | Workspace, patch queue, `wenshu-core`, CJK font hook, 公文 generator and checker, fidelity harness, CLI | 1 day | ✅ **done 2026-10-30** |
-| **M1 Chinese layout** | Upstream PRs: grid fixes (28 chars/line) ✅, full-width quotes ✅, kinsoku ✅, punctuation compression ✅. Grow the corpus to 200 real documents with WPS reference renders ⏳ | 3–5 weeks | **in progress** (patches 0002–0005; corpus next) |
+| **M1 Chinese layout** | Upstream PRs: grid fixes (28 chars/line) ✅, full-width quotes ✅, kinsoku ✅, punctuation compression ✅. Grow the corpus to 200 real documents with WPS reference renders ⏳ | 3–5 weeks | **in progress** (patches 0002–0005, upstream PRs #5002–#5006; corpus next) |
 | **M2 Desktop alpha** | Wenshu desktop build (WordCraft UI with `init()`, zh-Hans default, branding), 公文 templates in File › New, "Check 公文" command, Windows/Linux (incl. LoongArch) installers | 3–4 weeks | |
 | **M3 Formats** | OFD export (`wenshu-ofd`); DeckCraft slides with the same font hook; IronCalc zh-CN locale | 4–6 weeks | |
 | **M4 Public beta** | Web build, signed releases, public fidelity scoreboard | 2–3 weeks | |
@@ -38,8 +38,10 @@ beyond what upstream offers.
 
 ## Open questions
 
-1. **Reference renders:** who has WPS and Word licences to produce `corpus/ref/` PNGs, and can they
-   be shared publicly?
+1. **Reference renders:** ~~who has WPS and Word licences?~~ A licensed WPS Office 12.1 is on the dev PC
+   (2026-10-30) with COM automation, so renders can be made locally. Still open: a Word reference,
+   and whether WPS renders may be shared publicly (until then `corpus/ref/` stays local, per
+   `.gitignore`).
 2. **Fonts:** bundle open FangSong/Kai designs (Fandol is GPL with a font exception; LXGW WenKai is
    OFL) in the installer, or rely on the system fonts?
 3. **Governance:** work as a CJK working group inside the storytold/ArtCraft community, or as a
