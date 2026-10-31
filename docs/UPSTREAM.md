@@ -52,13 +52,15 @@ Three tests also fail on unmodified upstream `main` on Windows (mcp `automation_
 
 ## Issues found (status)
 
-- ✅ Character grid: 27 instead of 28 characters per line; large text overlapping. Fixed by 0002.
-  The cell rule for larger text (`ceil(size / default size)`) follows Word's observed spreading of
-  large text on a grid; confirm against a Word/WPS reference render once `corpus/ref/` exists.
+- ⚠️ Character grid: 27 instead of 28 characters per line; large text overlapping. 0002 fixed the
+  line count and the indents (confirmed by WPS), but its cell rule for larger text is wrong: WPS
+  gives each character its own size plus the grid delta, as ECMA-376 defines `w:charSpace`
+  ([WPS-FINDINGS.md](WPS-FINDINGS.md) F2). To rework.
 - ✅ Curly quotes drawn half-width in hinted East Asian runs. Fixed by 0003. Unhinted runs keep the
   Latin font, as the spec says.
 - ✅ Kinsoku for curly quotes. Fixed by 0004. Dashes and ellipses may start a line (GB/T 15834:
   they only must not be split; UAX #14 already keeps —— and …… together).
-- ✅ Punctuation compression for adjacent marks. Done by 0005. Still open: compression at the
-  line start (`w:topLinePunct`) and line end, and whether Word or WPS compress on a
-  `linesAndChars` grid (0005 says no, so 公文 bodies are unchanged). Both need reference renders.
+- ⚠️ Punctuation compression. 0005 reads and writes the setting correctly, but its layout model
+  (half an em between adjacent pairs, off on a grid) does not match WPS. WPS trims about 0.1 em
+  from every full-width mark, on grids too ([WPS-FINDINGS.md](WPS-FINDINGS.md) F1). This is the
+  main cause of our longer page counts on the corpus. To rework once the trim is measured.

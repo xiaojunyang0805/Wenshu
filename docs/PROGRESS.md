@@ -2,6 +2,46 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-10-31 (5): WPS reference renders and first measurements
+
+**Done:** `corpus/tools/wps_render.py` drove WPS 12.1 through COM. All 200 documents rendered
+with no failures: 1,952 pages, a PDF for each (local, `corpus/ref/`, 573 MB).
+
+**Scored baseline:** mean page score **0.903**; page counts match on **112 / 200**. Real WPS
+documents score 0.909 with 34/76 page matches; real Word documents 0.888 with 32/71; generated
+documents 0.969 with 41/42. Where counts differ we are nearly always longer.
+
+**Findings** (details and numbers in [WPS-FINDINGS.md](WPS-FINDINGS.md)):
+
+1. **Compression (0005 / #5006) follows the wrong model.** WPS trims a little (about 0.1 em)
+   from the blank side of *every* full-width mark, whatever its neighbour, and does so on
+   character grids too. We take half an em only between adjacent pairs, and nothing on a grid.
+   This is the main cause of the longer page counts: WPS fits one more character on most lines.
+   Odd: a run with `w:hint="eastAsia"` got no trimming at all.
+2. **Grid large text (0002 / #5003) is wrong too.** WPS gives every character the grid delta
+   (advance = own size + pitch − default size): 22 pt text is 21.8 pt on a 15.8 pt grid, not two
+   cells. This matches ECMA-376's definition of `w:charSpace`.
+3. **Grid indents (0002) confirmed:** two characters is exactly two pitches, whatever the mark
+   size.
+4. **Hint (0003 / #5005):** WPS also sends Latin Extended-A (pinyin `ě ī ō ū ā`) to a GB2312
+   East Asian font, without any language tag. It keeps `á à ü ǎ` in the Latin font even with
+   zh-CN.
+
+**What this means for the upstream PRs:** keep #5003, #5005 and #5006 as drafts. #5003 needs the
+delta rule, which the spec backs. #5005 can add the Extended-A row once the app can say which
+fonts are GB2312/Big5. #5006 needs a new compression model, and the trim amounts must be
+measured first. All of this is WPS evidence. Upstream targets Word, so a Word reference (or the
+spec) is needed before claiming it for Word. #5002 and #5004 are unaffected.
+
+**Next**
+
+1. Measure the compression trim properly: per mark, size and font, from new probes. Explain
+   why the hint disables it.
+2. Rework 0002 (delta rule) and 0005 (trim model) in the patch queue, then re-run the scored
+   corpus to see page matches move.
+3. Tell the maintainers on #5003/#5006 what the measurements show, before they review.
+4. Find a way to get Word references (MVP open question 1).
+
 ## 2026-10-31 (4): the 200-document corpus
 
 **Landed:** `corpus/` now holds 200 Chinese documents with one manifest (`corpus/manifest.csv`)
