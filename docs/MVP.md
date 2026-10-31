@@ -23,7 +23,7 @@ Writer only. Slides and Sheets come after the MVP.
 | M | Content | Effort (agents + 1–2 engineers) | Status |
 |---|---|---|---|
 | **M0 Foundations** | Workspace, patch queue, `wenshu-core`, CJK font hook, 公文 generator and checker, fidelity harness, CLI | 1 day | ✅ **done 2026-10-30** |
-| **M1 Chinese layout** | Upstream PRs: grid fixes (28 chars/line) ✅, full-width quotes ✅, kinsoku ✅, punctuation compression ✅. Grow the corpus to 200 real documents with WPS reference renders ⏳ | 3–5 weeks | **in progress** (patches 0002–0005, upstream PRs #5002–#5006; corpus next) |
+| **M1 Chinese layout** | Upstream PRs: grid fixes (28 chars/line) ✅, full-width quotes ✅, kinsoku ✅, punctuation compression ✅. Grow the corpus to 200 real documents with WPS reference renders ⏳ | 3–5 weeks | **in progress** (patches 0002–0005 done; upstream PRs #5002–#5006 through 4 bot review rounds, awaiting maintainers; corpus 4/200, reference renders not started) |
 | **M2 Desktop alpha** | Wenshu desktop build (WordCraft UI with `init()`, zh-Hans default, branding), 公文 templates in File › New, "Check 公文" command, Windows/Linux (incl. LoongArch) installers | 3–4 weeks | |
 | **M3 Formats** | OFD export (`wenshu-ofd`); DeckCraft slides with the same font hook; IronCalc zh-CN locale | 4–6 weeks | |
 | **M4 Public beta** | Web build, signed releases, public fidelity scoreboard | 2–3 weeks | |

@@ -2,6 +2,45 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-10-31 (3): status review
+
+**Where M1 stands** (day 2 of a 3–5 week milestone)
+
+| Part | State |
+|---|---|
+| Layout patches 0002–0005 (+ hook 0001) | Done. The fourth CodeRabbit round found nothing new and every thread is closed or answered. Drafts, so no maintainer has looked yet |
+| Corpus | 4 synthetic files in `corpus/files` against a target of 200 real documents |
+| WPS reference renders | Not started (WPS 12.1 with COM is on the dev PC) |
+| Open layout questions | 6, all waiting for renders (below) |
+
+Upstream `main` is 12 commits past the pin `3b7f7ed`. The PRs still report mergeable.
+
+**Questions only a reference render can settle**
+
+1. Compression on a `linesAndChars` grid. 0005 says off, so 公文 bodies are unchanged.
+2. `。”` with the quote in a Latin font: compressed (0005) or not.
+3. Line-start and line-end compression (`w:topLinePunct`), and fitting a pair at its compressed
+   width.
+4. Large text on a grid: `ceil(size / default)` cells.
+5. `*Chars` indents: one grid pitch per character whatever the mark size.
+6. The `w:hint="eastAsia"` rows that need a Chinese `w:lang` (pinyin vowels, Latin Extended).
+
+**Next** (in order)
+
+1. **Mark #5002–#5006 ready for review** (the user's call). #5002, #5003 and #5004 stand alone;
+   #5005 stacks on #5003 and #5006 on #5004. Then follow the maintainers' review and rebase on
+   upstream `main` when asked. Bump the pin to match once they merge.
+2. **WPS render script**: docx → PDF → PNG through `KWps.Application` COM. Warn the user first,
+   because WPS may open windows. Start `corpus/ref/` (local only) with the 公文 sample and one
+   test document per question above.
+3. **Settle the six questions** from the renders, and fix the patches where WPS disagrees.
+4. **Grow the corpus** to 200 real documents. Sources need the user's input: public government
+   公文 (many are PDF or OFD only), the user's own documents, or generated variants. Then run a
+   first fidelity scoreboard (`wenshu fidelity`) as the M1 baseline.
+5. **Follow-ups** after the PRs merge: read `w:lang` for the hint rows; line-end compression;
+   the upstream docs (gaps, layout-parity, ROADMAP) in the last PR to merge.
+6. **Prepare M2** (desktop alpha) once the M1 corpus is in place.
+
 ## 2026-10-31 (2): third review round
 
 CodeRabbit withdrew the `full(n)` finding. New points:
