@@ -1,6 +1,6 @@
 """Make reference renders with a licensed WPS Office on Windows: .docx → PDF → ref/<stem>.p<N>.png.
 
-    python corpus/tools/wps_render.py [--only PATTERN] [--dpi 144] [--force]
+    python corpus/tools/wps_render.py [--only PATTERN] [--dpi 144] [--force] [--files DIR --out DIR] [--no-png]
 
 Drives WPS Writer through COM (`KWps.Application`, Word-compatible object model): opens each
 document read-only, exports a PDF, closes it, then rasterises the PDF with PyMuPDF. The PDFs are
@@ -24,12 +24,16 @@ def main():
     ap.add_argument("--only", default="*.docx")
     ap.add_argument("--dpi", type=int, default=144)
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--files", type=Path, default=ROOT / "files", help="documents to render")
+    ap.add_argument("--out", type=Path, default=ROOT / "ref", help="where the PNGs (and pdf/) go")
+    ap.add_argument("--no-png", action="store_true", help="export the PDFs only")
     a = ap.parse_args()
     import fitz  # PyMuPDF
     import pythoncom
     import win32com.client
 
-    files, ref, pdfs = ROOT / "files", ROOT / "ref", ROOT / "ref" / "pdf"
+    files, ref = a.files.resolve(), a.out.resolve()
+    pdfs = ref / "pdf"
     pdfs.mkdir(parents=True, exist_ok=True)
     docs = sorted(p for p in files.glob("*.docx") if fnmatch.fnmatch(p.name, a.only))
     pythoncom.CoInitialize()
@@ -51,6 +55,9 @@ def main():
                     failed += 1
                     continue
                 print(f"{p.name}: {time.time() - t:.1f}s")
+            if a.no_png:
+                done += 1
+                continue
             for old in ref.glob(f"{p.stem}.p*.png"):
                 old.unlink()
             with fitz.open(pdf) as d:

@@ -2,6 +2,32 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-10-31 (6): how WPS compresses punctuation, measured
+
+`corpus/tools/trim_probes.py` gives 2,361 marks measured across six fonts, four sizes and four
+font setups, compression on against off, plus a width sweep. `wps_render.py` gained `--files`,
+`--out` and `--no-png` for scratch sets. **The model** ([WPS-FINDINGS.md](WPS-FINDINGS.md) F1):
+
+- **Overflowing lines only:** when the next unit would overflow, every compressible side on the
+  line shrinks equally, up to **0.1 em** each, just enough to end at the margin. Lines that fit
+  are untouched, and **adjacent pairs are never closed up**.
+- **Line end:** a closing mark ending a line doesn't need room for its blank half.
+- **Compressible:** the right side of `。，、：；！）》」』】〕”’·` and the left side of
+  `（《「『【〔“`, when the glyph is full-width. Never `？ — …`.
+- The same on character grids. The probe 05 "hint" puzzle was a long unbreakable chunk that
+  couldn't fit even at full squeeze.
+
+This replaces 0005's layout half (pair compression) with a line-fitting rule. The setting's
+read/write half stays as it is. Upstream's breaker already shrinks spaces for justification
+(`shrink_spaces`); the squeeze would be a second shrinkable resource.
+
+**Next**
+
+1. Rework 0005: replace pair compression with the squeeze and the line-end half; and 0002: the
+   delta rule for grid text. Re-score the corpus.
+2. Comment on #5003/#5006 with the measurements before maintainers review.
+3. Word references (MVP open question 1).
+
 ## 2026-10-31 (5): WPS reference renders and first measurements
 
 **Done:** `corpus/tools/wps_render.py` drove WPS 12.1 through COM. All 200 documents rendered

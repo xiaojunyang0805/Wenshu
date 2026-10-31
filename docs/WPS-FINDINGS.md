@@ -1,6 +1,6 @@
 # What WPS does: measured findings
 
-*v0.1 · 2026-10-31 · WPS Office 12.1.0.29161 on Windows 11*
+*v0.2 · 2026-10-31 · WPS Office 12.1.0.29161 on Windows 11*
 
 Measured from WPS's own PDF exports of the corpus (`corpus/tools/wps_render.py`). PyMuPDF reads
 each character's origin from the PDF, so advances are exact to about 0.1 pt. The renders and PDFs
@@ -31,27 +31,44 @@ The line height matches. On a line-grid letter that runs two pages long
 (`dc-correspondence-195b80f877`), WPS and Wenshu both use a 30 pt pitch, but **WPS fits one more
 character on most lines** (26 against 25). The cause is how WPS compresses punctuation (F1).
 
-## F1. Punctuation compression is a small trim on every mark, not a half-em between pairs
+## F1. Punctuation compression squeezes overflowing lines; it never closes up pairs
 
-Probes 01–05; `w:characterSpacingControl="compressPunctuation"`.
+Probes 01–07, then `corpus/tools/trim_probes.py`: six fonts × four sizes × four font setups, each
+with compression on and off (2,361 measured marks), and a width sweep from 20 em down to 17 em in
+0.05 em steps. `w:characterSpacingControl="compressPunctuation"` does exactly two things in WPS:
 
-- **Every full-width closing mark and 。，、：； loses a little from its blank right side,
-  whatever follows it.** `。` followed by 他 is trimmed as much as `。` followed by `”`. Opening
-  marks `（《【〔` lose about as much from their blank left side. That shows as a shorter
-  advance for the character before them. `？` is not trimmed.
-- **The trim is small:** in 10.5 pt 宋体, about 0.9–1.0 pt per mark (about 0.09 em), and about
-  2 pt for `、`. In 12 pt 宋体 it is about 0.6 pt. In 16 pt 仿宋 on a 15.8 pt grid it is about
-  1.6–1.8 pt. The amount is not a fixed share of the em. It probably depends on each glyph's
-  side bearings; more measurements are needed.
-- **On a character grid it still applies** (probe 01: `。` 14.0 pt, `、` 12.4 pt on a 15.8 pt
-  pitch). Patch 0005 turns compression off there.
-- **With `w:hint="eastAsia"` on the run, nothing was trimmed** (probe 05, the same text as
-  probe 04). Not yet explained; it needs more probes.
-- `doNotCompress` (probe 03): every mark keeps its full advance.
+1. **A line may squeeze its compressible marks to fit more text.** When the next unit would
+   overflow, every compressible side on the line gives up the same amount, just enough for the
+   line to end exactly at the margin (left-aligned lines too). **The limit is 0.1 em per mark.**
+   That held in 宋体 and 仿宋 at 10.5 and 16 pt: ten `，` absorb 1.0 em at a width of 18.5 em, and
+   at 18.45 em the line breaks earlier. If the next unit doesn't fit even at the limit, nothing
+   is squeezed (probe 05: an unbreakable `〔2026〕“甲”` chunk).
+2. **A closing mark that ends a line doesn't need room for its blank half.** Twenty characters
+   ending in `，` fit down to 19.5 em with no squeeze. With `doNotCompress` they need the full 20 em.
 
-**Consequence for 0005 / #5006:** the JIS-style model (half an em between adjacent pairs, off on
-a character grid) does not match WPS. Compression-on documents are 77% of real documents. This
-is the main cause of our longer page counts.
+Lines that fit are left alone. **Adjacent pairs (`。”` `）（` `、《`) keep their full advances**:
+there is no JIS-style closing-up of pairs.
+
+Compressible sides, when the mark's glyph is full-width (in 宋体, 仿宋, 楷体 and 黑体 alike):
+
+| Side | Marks |
+|---|---|
+| Right (the blank after the ink) | `。，、：；！）》」』】〕”’·` |
+| Left (the blank before the ink) | `（《「『【〔“` |
+| Never | `？ — …` |
+
+In 微软雅黑 and 等线, several marks have proportional glyphs and are left alone, which a glyph-width
+check like 0005's (advance ≥ 0.9 em) reproduces.
+
+- **It applies on a character grid too** (probe 01: about 0.1 em off marks on a 15.8 pt pitch).
+- `doNotCompress`: no squeeze and no free line-end half.
+
+**Consequence for 0005 / #5006:** the half-em pair model is wrong. The WPS model is a line-fitting
+rule: allow each compressible side to shrink up to 0.1 em when that fits the next unit, and don't
+count a final closing mark's blank half. It fits the corpus evidence: WPS gets about one more
+character onto each line of compression-on text (77% of real documents). Upstream's line breaker
+already has a shrinkable-space mechanism for justification (`shrink_spaces`); this would be a
+second shrinkable resource.
 
 ## F2. On a character grid, every character gets the grid delta, whatever its size
 
@@ -91,16 +108,16 @@ Probe 10: run fonts Times New Roman (ascii/hAnsi) and 宋体 (eastAsia), hint se
 Big5 face (a font-charset check, so a font list in the app's data). The language-conditioned
 rows can stay out.
 
-## F5. Line ends (probes 06–07)
+## F5. Line ends
 
-With compression on, `）` is trimmed (about 1.4 pt in 10.5 pt 宋体) on every line, including at
-line ends. With `w:topLinePunct` the trim is about 1.0 pt. A justified line with no room to trim
-kept full advances. To be measured more closely together with F1.
+Covered by F1: with compression on, a closing mark at a line's end doesn't need room for its blank
+half (measured with `，`). `w:topLinePunct` (probe 07) changes the squeeze slightly (about 1.0 pt
+instead of 1.4 pt for `）` in 10.5 pt 宋体). Not yet modelled.
 
 ## Still to measure
 
-- The trim amount per mark and font (F1): more sizes and fonts (仿宋, 楷体, 黑体, 微软雅黑),
-  and whether it comes from glyph bounds.
-- Why the hint disables trimming (F1).
+- Whether every right-compressible mark gets the free line-end half, not only `，` (F1).
+- How the squeeze interacts with justification (`jc=both`) and kinsoku.
+- `w:topLinePunct` (F5).
 - Word's behaviour for each finding. Upstream targets Word, so changes to #5003/#5006 need
   either Word references or an argument from the spec. F2 has one; F1 does not yet.
