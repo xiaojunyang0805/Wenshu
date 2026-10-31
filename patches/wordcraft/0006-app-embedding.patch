@@ -1,10 +1,10 @@
 Upstream: (not yet opened; desktop embedding for Wenshu M2)
 diff --git a/apps/wordcraft/src/lib.rs b/apps/wordcraft/src/lib.rs
 new file mode 100644
-index 0000000..fe6fdcc
+index 0000000..f0a73d2
 --- /dev/null
 +++ b/apps/wordcraft/src/lib.rs
-@@ -0,0 +1,710 @@
+@@ -0,0 +1,716 @@
 +//! WordCraft desktop app, as a library: `main.rs` runs it with WordCraft's [`AppConfig`], and an app
 +//! built on WordCraft runs it with its own name, icon and start-up code ([`run`]).
 +//!
@@ -32,6 +32,7 @@ index 0000000..fe6fdcc
 +mod traffic_lights;
 +
 +use wordcraft_engine::Session;
++pub use wordcraft_ui_egui::AppTool;
 +pub use wordcraft_ui_egui::brand::Brand;
 +use wordcraft_ui_egui::{
 +    Services, UiState, WordApp,
@@ -59,6 +60,8 @@ index 0000000..fe6fdcc
 +    /// Check for WordCraft updates at start-up (Help › Check for Updates stays available). An app
 +    /// with releases of its own turns this off.
 +    pub check_updates: bool,
++    /// Tools the app adds to the ribbon (Review, in a group named after the brand).
++    pub app_tools: Option<fn() -> Vec<AppTool>>,
 +}
 +
 +impl Default for AppConfig {
@@ -71,6 +74,7 @@ index 0000000..fe6fdcc
 +            icon_png: None,
 +            on_start: None,
 +            check_updates: true,
++            app_tools: None,
 +        }
 +    }
 +}
@@ -541,7 +545,9 @@ index 0000000..fe6fdcc
 +            let (file_dialog, dialogs) = file_dialogs::hook(&cc.egui_ctx);
 +            let mut session = Session::new(doc);
 +            session.system_region = region;
-+            let mut app = WordApp::new(session, services(file_dialog, &cc.egui_ctx));
++            let mut services = services(file_dialog, &cc.egui_ctx);
++            services.app_tools = config.app_tools.map(|tools| tools()).unwrap_or_default();
++            let mut app = WordApp::new(session, services);
 +            app.set_startup_update_check(config.check_updates);
 +            load_prefs(&mut app);
 +            load_user_dictionary(&mut app);
@@ -1452,12 +1458,173 @@ index 1c562f4..066b4d5 100644
      #[test]
      fn instance_id_only_safe_values() {
          assert_eq!(parse_instance_id("[Instance]\ninstance-id=abc_123-X\n").as_deref(), Some("abc_123-X"));
+diff --git a/crates/engine/src/lib.rs b/crates/engine/src/lib.rs
+index 529ce06..b758097 100644
+--- a/crates/engine/src/lib.rs
++++ b/crates/engine/src/lib.rs
+@@ -35,7 +35,7 @@ pub use keymap::KeyMap;
+ pub use ribbon::RibbonLayout;
+ pub use session::{
+     CellRange, ColumnBlock, DocInfo, DocState, EditSnapshot, FindState, MathEdit, Prefs, Selection, Session, StylesPaneDock, UNDO_LIST_MAX,
+-    ViewState, WindowView, blank_document, next_math_session, set_system_locale,
++    ViewState, WindowView, blank_document, next_math_session, set_blank_document_hook, set_system_locale,
+ };
+ /// The outcome a command reports for IME receipt classification.
+ ///
+diff --git a/crates/engine/src/session.rs b/crates/engine/src/session.rs
+index 8689864..0c0a34e 100644
+--- a/crates/engine/src/session.rs
++++ b/crates/engine/src/session.rs
+@@ -36,7 +36,7 @@ use ime_state::ImeCaretState;
+ pub use locale::set_system_locale;
+ pub(crate) use locale::system_locale;
+ pub use prefs::Prefs;
+-pub use query::blank_document;
++pub use query::{blank_document, set_blank_document_hook};
+ pub use snapshot_types::EditSnapshot;
+ use snapshot_types::{LayoutSlots, RunSnapshot};
+ pub use view::{StylesPaneDock, ViewState};
+diff --git a/crates/engine/src/session/query.rs b/crates/engine/src/session/query.rs
+index fbefe1c..b9ce69d 100644
+--- a/crates/engine/src/session/query.rs
++++ b/crates/engine/src/session/query.rs
+@@ -280,11 +280,26 @@ impl Session {
+     }
+ }
+ 
+-/// A new blank document on `region`'s paper (see [`Session::blank_document`]).
++/// Adjusts every new blank document for its region, set by an app built on WordCraft
++/// ([`set_blank_document_hook`]).
++static BLANK_HOOK: std::sync::OnceLock<fn(&wordcraft_geom::Region, &mut Document)> = std::sync::OnceLock::new();
++
++/// Have `hook` adjust every new blank document after WordCraft has made it for `region` (an app's
++/// own Normal defaults: fonts, spacing, page setup for its users' region). Only the first call
++/// counts; later ones return `false`.
++pub fn set_blank_document_hook(hook: fn(&wordcraft_geom::Region, &mut Document)) -> bool {
++    BLANK_HOOK.set(hook).is_ok()
++}
++
++/// A new blank document on `region`'s paper (see [`Session::blank_document`]), as the embedding
++/// app's hook adjusts it, if there is one.
+ pub fn blank_document(region: &wordcraft_geom::Region) -> Document {
+     let mut d = Document::new();
+     let (_, w, h) = region.paper();
+     d.last_section.page_w = w;
+     d.last_section.page_h = h;
++    if let Some(hook) = BLANK_HOOK.get() {
++        hook(region, &mut d);
++    }
+     d
+ }
+diff --git a/crates/engine/tests/it/blank_document_hook.rs b/crates/engine/tests/it/blank_document_hook.rs
+new file mode 100644
+index 0000000..8d06408
+--- /dev/null
++++ b/crates/engine/tests/it/blank_document_hook.rs
+@@ -0,0 +1,26 @@
++//! An app built on WordCraft adjusts new blank documents for its region (its Normal defaults).
++//! The hook is process-wide, so no other test here makes a blank document.
++
++use wordcraft_engine::{Region, blank_document, set_blank_document_hook};
++
++fn chinese_defaults(region: &Region, d: &mut wordcraft_doc::Document) {
++    if region.language == "zh" {
++        d.styles.default_chr.font_ea = Some("Hook EA Font".into());
++        d.styles.default_chr.size = Some(10.5);
++    }
++}
++
++#[test]
++fn the_hook_adjusts_blank_documents_after_the_paper_is_set() {
++    assert!(set_blank_document_hook(chinese_defaults));
++    assert!(!set_blank_document_hook(chinese_defaults), "only the first hook counts");
++    let zh = blank_document(&Region::from_tag("zh-CN"));
++    assert_eq!(zh.styles.default_chr.font_ea.as_deref(), Some("Hook EA Font"));
++    assert_eq!(zh.styles.default_chr.size, Some(10.5));
++    // The region's paper is set first and kept: A4 in China.
++    assert!((zh.last_section.page_w - 595.3).abs() < 1.0, "{}", zh.last_section.page_w);
++    // The hook decides what changes: a US blank document stays WordCraft's.
++    let us = blank_document(&Region::from_tag("en-US"));
++    assert_eq!(us.styles.default_chr.font_ea, None);
++    assert_eq!(us.styles.default_chr.size, Some(12.0));
++}
+diff --git a/crates/engine/tests/it/main.rs b/crates/engine/tests/it/main.rs
+index 5b00084..18f31cd 100644
+--- a/crates/engine/tests/it/main.rs
++++ b/crates/engine/tests/it/main.rs
+@@ -1,3 +1,4 @@
++mod blank_document_hook;
+ mod comment_ids;
+ mod date_fields;
+ mod macro_packages;
+diff --git a/crates/ui-egui/src/app/commands.rs b/crates/ui-egui/src/app/commands.rs
+index a188c5d..e0962b6 100644
+--- a/crates/ui-egui/src/app/commands.rs
++++ b/crates/ui-egui/src/app/commands.rs
+@@ -502,6 +502,24 @@ impl WordApp {
+     pub(crate) fn ui_command(&mut self, id: &str, p: &Value) -> Option<Result<Value, String>> {
+         let s = |k: &str| p.get(k).and_then(Value::as_str);
+         Some(Ok(match id {
++            "ui.appTool" => {
++                let id = s("id").unwrap_or_default();
++                let Some(tool) = self.services.app_tools.iter().find(|t| t.id == id) else {
++                    return Some(Err(format!("no app tool {id:?}")));
++                };
++                let report = wordcraft_engine::io::save_bytes("document.docx", &self.session.doc).and_then(|bytes| (tool.run)(&bytes));
++                match report {
++                    Ok(text) => {
++                        let title = tool.label;
++                        self.dialog = Some(crate::dialogs::Dialog::Report { title, text: text.clone() });
++                        json!({"report": text})
++                    }
++                    Err(e) => return Some(Err(e)),
++                }
++            }
++            "ui.checkForUpdates" | "help.checkForUpdates" if !crate::brand::get().updates => {
++                return Some(Err(format!("{} has no update check here", crate::brand::name())));
++            }
+             "ui.checkForUpdates" | "help.checkForUpdates" => {
+                 crate::updates_ui::check(self);
+                 Value::Null
+@@ -748,6 +766,9 @@ impl WordApp {
+                         .into(),
+                 ));
+             }
++            "ui.discord" if !crate::brand::get().community => {
++                return Some(Err(format!("{} has no community link here", crate::brand::name())));
++            }
+             "ui.discord" => {
+                 self.canvas.open_url = Some("https://discord.gg/artcraft".into());
+                 json!({})
+@@ -1035,6 +1056,7 @@ pub(crate) fn works_without_document(id: &str) -> bool {
+             | "ui.fileBrowser"
+             | "ui.makeDefaultApp"
+             | "ui.discord"
++            | "ui.appTool"
+             | "ui.caretAnimation"
+             | "ui.startScreen"
+             | "ui.checkForUpdates"
+diff --git a/crates/ui-egui/src/backstage.rs b/crates/ui-egui/src/backstage.rs
+index eb41eda..69c2841 100644
+--- a/crates/ui-egui/src/backstage.rs
++++ b/crates/ui-egui/src/backstage.rs
+@@ -124,7 +124,9 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
+                 }
+             }
+             ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+-                for (label, id) in [("About", "about"), ("Discord community", "discord")] {
++                let community = crate::brand::get().community;
++                for (label, id) in [("About", "about"), ("Discord community", "discord")].into_iter().filter(|(_, id)| community || *id != "discord")
++                {
+                     let (r, resp) = ui.allocate_exact_size(vec2(200.0, 32.0), Sense::click());
+                     resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), tl!(label)));
+                     if resp.hovered() {
 diff --git a/crates/ui-egui/src/brand.rs b/crates/ui-egui/src/brand.rs
 new file mode 100644
-index 0000000..84cb96f
+index 0000000..07450a5
 --- /dev/null
 +++ b/crates/ui-egui/src/brand.rs
-@@ -0,0 +1,56 @@
+@@ -0,0 +1,63 @@
 +//! The product an embedding app presents WordCraft's front end as: its name in window titles and
 +//! the About box, its version and its About text. WordCraft's own by default; an app built on
 +//! WordCraft sets its own once at start-up ([`set`]), before the first window opens.
@@ -1473,11 +1640,17 @@ index 0000000..84cb96f
 +    pub version: &'static str,
 +    /// The About box's description, in place of WordCraft's (shown as given, not translated).
 +    pub about: Option<&'static str>,
++    /// Show the ArtCraft community links (the Discord button, File › Discord community,
++    /// Help › Community Discord). An app with a community of its own turns them off.
++    pub community: bool,
++    /// Offer WordCraft's updates (Help › Check for Updates). An app with releases of its own
++    /// turns this off.
++    pub updates: bool,
 +}
 +
 +impl Default for Brand {
 +    fn default() -> Brand {
-+        Brand { name: "WordCraft", version: env!("CARGO_PKG_VERSION"), about: None }
++        Brand { name: "WordCraft", version: env!("CARGO_PKG_VERSION"), about: None, community: true, updates: true }
 +    }
 +}
 +
@@ -1512,12 +1685,22 @@ index 0000000..84cb96f
 +        assert_eq!(super::name(), "WordCraft");
 +        assert_eq!(super::about_title(), "About WordCraft");
 +        assert_eq!(super::get().version, env!("CARGO_PKG_VERSION"));
++        assert!(super::get().community && super::get().updates);
 +    }
 +}
 diff --git a/crates/ui-egui/src/chrome.rs b/crates/ui-egui/src/chrome.rs
-index 2f0801f..23a2b20 100644
+index 2f0801f..1b67d2a 100644
 --- a/crates/ui-egui/src/chrome.rs
 +++ b/crates/ui-egui/src/chrome.rs
+@@ -356,7 +356,7 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
+                         let _ = app.run("ui.backstage", json!({"value": true, "page": "options", "pane": "general"}));
+                     }
+                     ui.add_space(8.0);
+-                    if app.ui.show_discord {
++                    if app.ui.show_discord && crate::brand::get().community {
+                         let (r, resp) = ui.allocate_exact_size(vec2(84.0, 22.0), Sense::click());
+                         ui.painter().rect_filled(r, 11.0, if resp.hovered() { t.accent_text } else { t.accent });
+                         icons::paint(
 @@ -379,7 +379,7 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
              // Centred title.
              let title = if !app.has_document() {
@@ -1527,11 +1710,43 @@ index 2f0801f..23a2b20 100644
              } else {
                  format!(
                      "{} — {}",
+diff --git a/crates/ui-egui/src/dialogs.rs b/crates/ui-egui/src/dialogs.rs
+index ee9cac4..3772966 100644
+--- a/crates/ui-egui/src/dialogs.rs
++++ b/crates/ui-egui/src/dialogs.rs
+@@ -212,6 +212,11 @@ pub enum Dialog {
+     WordCount {
+         stats: Value,
+     },
++    /// An app tool's report ([`crate::services::AppTool`]): its label and the text it returned.
++    Report {
++        title: &'static str,
++        text: String,
++    },
+     Zoom {
+         percent: f32,
+     },
+@@ -493,6 +498,7 @@ impl Dialog {
+             Dialog::Link { .. } => "link",
+             Dialog::Bookmark { .. } => "bookmark",
+             Dialog::WordCount { .. } => "wordCount",
++            Dialog::Report { .. } => "report",
+             Dialog::Zoom { .. } => "zoom",
+             Dialog::Watermark { .. } => "watermark",
+             Dialog::Phonetic { .. } => "phonetic",
 diff --git a/crates/ui-egui/src/dialogs/chrome.rs b/crates/ui-egui/src/dialogs/chrome.rs
-index 2cc1b6e..8b0612a 100644
+index 2cc1b6e..53f6e47 100644
 --- a/crates/ui-egui/src/dialogs/chrome.rs
 +++ b/crates/ui-egui/src/dialogs/chrome.rs
-@@ -101,8 +101,8 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
+@@ -88,6 +88,7 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
+         Dialog::Link { .. } => "Insert Hyperlink",
+         Dialog::Bookmark { .. } => "Bookmark",
+         Dialog::WordCount { .. } => "Word Count",
++        Dialog::Report { title, .. } => title,
+         Dialog::Zoom { .. } => "Zoom",
+         Dialog::Watermark { .. } => "Custom Watermark",
+         Dialog::Phonetic { .. } => "Phonetic Guide",
+@@ -101,8 +102,8 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
          Dialog::Refs(d) => d.title(),
          Dialog::Icons { .. } => "Icons",
          Dialog::PasteSpecial { .. } => "Paste Special",
@@ -1543,10 +1758,36 @@ index 2cc1b6e..8b0612a 100644
          Dialog::RecipientList { .. } => "Recipient List",
          Dialog::SelectTable { .. } => "Select Table",
 diff --git a/crates/ui-egui/src/dialogs/dispatch.rs b/crates/ui-egui/src/dialogs/dispatch.rs
-index 46a9fca..cb63cf7 100644
+index 46a9fca..86f851d 100644
 --- a/crates/ui-egui/src/dialogs/dispatch.rs
 +++ b/crates/ui-egui/src/dialogs/dispatch.rs
-@@ -1083,10 +1083,16 @@ fn about_dialog(ui: &mut Ui, d: &mut Dialog) -> bool {
+@@ -26,6 +26,7 @@ pub(super) fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
+         Dialog::Link { .. } => link_dialog(app, ui, d),
+         Dialog::Bookmark { name, by_location, hidden, deleted } => bookmark(app, ui, name, by_location, hidden, deleted),
+         Dialog::WordCount { .. } => word_count_dialog(app, ui, d),
++        Dialog::Report { text, .. } => report_dialog(ui, text),
+         Dialog::Zoom { .. } => zoom_dialog(app, ui, d),
+         Dialog::Watermark { .. } => watermark_dialog(app, ui, d),
+         Dialog::Phonetic { .. } => phonetic_dialog(app, ui, d),
+@@ -785,6 +786,17 @@ fn word_count_dialog(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
+     ok || cancel
+ }
+ 
++/// An app tool's report: its text, scrolling when long, and Close.
++fn report_dialog(ui: &mut Ui, text: &str) -> bool {
++    egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
++        ui.set_min_width(420.0);
++        // The interface font, not monospace: a report may be in any script (Chinese has no monospace face here).
++        ui.add(egui::Label::new(text).wrap());
++    });
++    let (ok, cancel) = buttons(ui, tl!("Close"));
++    ok || cancel
++}
++
+ fn zoom_dialog(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
+     let Dialog::Zoom { percent } = d else {
+         return false;
+@@ -1083,10 +1095,16 @@ fn about_dialog(ui: &mut Ui, d: &mut Dialog) -> bool {
          1 => crate::credits::contributors_ui(ui),
          2 => crate::credits::models_ui(ui),
          _ => {
@@ -1566,8 +1807,20 @@ index 46a9fca..cb63cf7 100644
              ui.add_space(6.0);
              ui.hyperlink_to(tl!("getartcraft.com/apps/wordcraft"), "https://getartcraft.com/apps/wordcraft");
              ui.hyperlink_to(tl!("Join us on Discord: discord.gg/artcraft"), "https://discord.gg/artcraft");
+diff --git a/crates/ui-egui/src/keytips.rs b/crates/ui-egui/src/keytips.rs
+index 9ed3627..9f011f3 100644
+--- a/crates/ui-egui/src/keytips.rs
++++ b/crates/ui-egui/src/keytips.rs
+@@ -390,6 +390,7 @@ fn controls(tab: &str) -> Vec<Control> {
+             c("Full Screen", "view.fullScreen"),
+             c("Macros", "tools.macros"),
+         ],
++        "Help" if !crate::brand::get().community => vec![d("Help", "about"), d("Commands", "commands")],
+         "Help" => vec![d("Help", "about"), c("Community Discord", "ui.discord"), d("Commands", "commands")],
+         "Table Design" => {
+             vec![m("Shading", "table.shading"), m("Borders", "table.borders"), c("Border Painter", "table.borderPainter")]
 diff --git a/crates/ui-egui/src/lib.rs b/crates/ui-egui/src/lib.rs
-index 0e63602..eefd011 100644
+index 0e63602..f65cc65 100644
 --- a/crates/ui-egui/src/lib.rs
 +++ b/crates/ui-egui/src/lib.rs
 @@ -27,6 +27,7 @@ pub mod a11y_pane;
@@ -1578,6 +1831,108 @@ index 0e63602..eefd011 100644
  pub mod canvas;
  pub mod caret_glide;
  pub mod chrome;
+@@ -110,7 +111,7 @@ mod state;
+ use app::control_click_as_secondary;
+ pub(crate) use app::{discards_document, works_without_document};
+ pub use clock::now_ms;
+-pub use services::{HostSaveFn, Inbox, Services};
++pub use services::{AppTool, HostSaveFn, Inbox, Services};
+ pub use state::{AutoSaveBlock, DefaultApp, SaveChoice, keeps_everything};
+ 
+ /// Web: a save the browser's picker hasn't finished ([`async_saves`]).
+diff --git a/crates/ui-egui/src/ribbon/review.rs b/crates/ui-egui/src/ribbon/review.rs
+index 663e71e..2c1f7e2 100644
+--- a/crates/ui-egui/src/ribbon/review.rs
++++ b/crates/ui-egui/src/ribbon/review.rs
+@@ -20,6 +20,15 @@ pub(super) fn review(app: &mut WordApp, ui: &mut Ui) {
+     group(ui, "Speech", None, app, |ui, app| {
+         big(ui, app, "readAloud", "Read\nAloud", "review.readAloud", json!({}), false);
+     });
++    // The embedding app's own tools, in a group named after it.
++    let tools: Vec<(&'static str, &'static str, &'static str)> = app.services.app_tools.iter().map(|t| (t.id, t.label, t.icon)).collect();
++    if !tools.is_empty() {
++        group(ui, crate::brand::name(), None, app, |ui, app| {
++            for (id, label, icon) in tools {
++                big(ui, app, icon, label, "ui.appTool", json!({"id": id}), false);
++            }
++        });
++    }
+     group(ui, "Accessibility", None, app, |ui, app| {
+         big(ui, app, "accessibility", "Check\nAccessibility", "file.accessibility", json!({}), false);
+     });
+@@ -174,8 +183,13 @@ pub(super) fn developer(app: &mut WordApp, ui: &mut Ui) {
+ pub(super) fn help(app: &mut WordApp, ui: &mut Ui) {
+     group(ui, "Help", None, app, |ui, app| {
+         big(ui, app, "help", "Help", "ui.dialog", json!({"name": "about"}), false);
+-        big(ui, app, "checkForUpdates", "Check for\nUpdates…", "ui.checkForUpdates", json!({}), false);
+-        big(ui, app, "discord", "Community\nDiscord", "ui.discord", json!({}), false);
++        let brand = crate::brand::get();
++        if brand.updates {
++            big(ui, app, "checkForUpdates", "Check for\nUpdates…", "ui.checkForUpdates", json!({}), false);
++        }
++        if brand.community {
++            big(ui, app, "discord", "Community\nDiscord", "ui.discord", json!({}), false);
++        }
+     });
+     group(ui, "Agents", None, app, |ui, app| {
+         big(ui, app, "macros", "Commands", "ui.dialog", json!({"name": "commands"}), false);
+diff --git a/crates/ui-egui/src/services.rs b/crates/ui-egui/src/services.rs
+index b591fbc..382e70b 100644
+--- a/crates/ui-egui/src/services.rs
++++ b/crates/ui-egui/src/services.rs
+@@ -1,9 +1,24 @@
+ use super::state::DefaultApp;
+ use super::{FileDialogAnswer, FileDialogRequest, async_saves, paste_picture, printing};
+ 
++/// A tool an app built on WordCraft adds to the ribbon (Review, in a group named after the app's
++/// brand): it gets the document saved as DOCX and returns a report the front end shows in a
++/// dialog, or an error for the status bar.
++pub struct AppTool {
++    /// Stable id, for the `ui.appTool` command (`{"id": …}`).
++    pub id: &'static str,
++    /// The button's label, also the report's title (shown as given, not translated).
++    pub label: &'static str,
++    /// The ribbon icon, by name (`icons.rs`).
++    pub icon: &'static str,
++    pub run: Box<dyn Fn(&[u8]) -> Result<String, String>>,
++}
++
+ /// Platform services injected by the host (file dialogs, file I/O).
+ #[derive(Default)]
+ pub struct Services {
++    /// Tools the embedding app adds to the ribbon ([`AppTool`]).
++    pub app_tools: Vec<AppTool>,
+     /// Desktop: discover configured printers on a worker.
+     pub printers: Option<printing::Discover>,
+     /// Desktop: submit the PDF with the chosen settings on a worker.
+@@ -100,3 +115,27 @@ pub type Inbox = std::sync::Arc<std::sync::Mutex<Vec<(String, Vec<u8>)>>>;
+ /// [`Services::host_save`]: `(file name, bytes, save_as)`. An error means the page didn't get
+ /// the file, and the save failed.
+ pub type HostSaveFn = Box<dyn Fn(&str, &[u8], bool) -> Result<(), String>>;
++
++#[cfg(test)]
++mod tests {
++    use super::{AppTool, Services};
++    use crate::WordApp;
++    use serde_json::json;
++
++    /// An app tool gets the document as DOCX and its report opens in a dialog; an unknown id or a
++    /// failing tool is an error.
++    #[test]
++    fn an_app_tool_reports_on_the_document() {
++        let tools = vec![
++            AppTool { id: "size", label: "Size", icon: "wordCount", run: Box::new(|docx: &[u8]| Ok(format!("zip: {}", docx.starts_with(b"PK")))) },
++            AppTool { id: "fail", label: "Fail", icon: "wordCount", run: Box::new(|_: &[u8]| Err("no".into())) },
++        ];
++        let services = Services { app_tools: tools, ..Default::default() };
++        let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), services);
++        let r = app.run("ui.appTool", json!({"id": "size"})).unwrap();
++        assert_eq!(r["report"], "zip: true");
++        assert!(matches!(&app.dialog, Some(crate::dialogs::Dialog::Report { title: "Size", text }) if text == "zip: true"));
++        assert!(app.run("ui.appTool", json!({"id": "fail"})).is_err());
++        assert!(app.run("ui.appTool", json!({"id": "nope"})).is_err());
++    }
++}
 diff --git a/crates/ui-egui/src/windows.rs b/crates/ui-egui/src/windows.rs
 index e23abb8..ff34e8a 100644
 --- a/crates/ui-egui/src/windows.rs

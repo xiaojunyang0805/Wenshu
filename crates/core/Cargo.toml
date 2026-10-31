@@ -12,5 +12,6 @@ workspace = true
 [dependencies]
 wenshu-cjk = { workspace = true }
 wordcraft-engine = { workspace = true }
+wordcraft-doc = { workspace = true }
 wordcraft-fonts = { workspace = true }
 serde_json = { workspace = true }

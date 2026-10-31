@@ -2,6 +2,45 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-10-31 (9): M2 next steps done; a Windows package
+
+The user's note: **English is also a basic function of the MVP.** The interface follows the system
+language (Chinese or English; File › Options switches it). A blank document gets Chinese defaults
+only in a Chinese region, and every other region keeps WordCraft's English defaults (tested in
+`wenshu-core`).
+
+1. **Blank documents** (`engine::set_blank_document_hook` in patch 0006, `wenshu_core::blank_defaults`).
+   In a `zh` region: 宋体 for East Asian text (新細明體 in TW/HK/MO) and Times New Roman for Latin,
+   10.5 pt (五号), English proofing for Latin text with zh-CN as the East Asian language, single
+   spacing with no space after, justified, 2.54/3.17 cm margins and a 15.6 pt line grid.
+   Seen in the app: Times New Roman 10.5, justified, A4. Pitfall: Git Bash sets
+   `LANG=en_US.UTF-8`, so the app launched from it sees an English region; drive it with the
+   `LANG`/`LC_*` variables removed.
+2. **Community chrome hidden** (`Brand::community`, `Brand::updates`): no Discord button, no
+   File › Discord community, no Help › Community Discord, no Check for Updates; the commands
+   refuse. The comment-author badge and the Zotero tab stay: they're features, not branding.
+3. **检查公文格式** (`services::AppTool`, `AppConfig::app_tools`): Review › 文枢 › 检查公文格式 saves
+   the document as DOCX, runs `wenshu-gongwen`'s checker and shows a report, ✔/✘ per rule in
+   Chinese and English. Seen: a blank page fails 7 of 8, the 通知 template passes all 8. Reports
+   use the interface font; monospace had no CJK glyphs.
+4. **Windows package** (`packaging/windows/package.ps1`): a statically linked (+crt-static)
+   portable zip with `wenshu-desktop.exe`, `wenshu.exe`, the licences, WordCraft's
+   NOTICE/ATTRIBUTION/licences and the bundled fonts' OFL licences (47 MB). The zip is written
+   with Windows' bsdtar for portable paths. Tested: it extracts with unzip, the CLI runs, and the
+   app starts from it, seeds its templates and runs the check. `wenshu.wxs` (per-user MSI) is
+   written but **not built**: no .NET SDK or WiX on this PC, and installing them is the user's
+   call. Linux packages need a Linux machine.
+
+Upstream branch `embed/app-library`: app 52 + 3, engine integration 42, ui-egui 1,012 (the one
+failure is the pre-existing Windows backstage test), control-key 4, clippy clean.
+
+**Next (after the break)**
+
+1. Install WiX (with the user's go-ahead) and build and test the MSI.
+2. Linux packages (AppImage or .deb) on a Linux machine or CI.
+3. Open the embedding hook upstream as a PR (the user's call).
+4. The deferred WPS work (below).
+
 ## 2026-10-31 (8): M2 started — the desktop alpha runs
 
 **Upstream hook, patch 0006** (`embed/app-library` in the worktree, not opened upstream yet):

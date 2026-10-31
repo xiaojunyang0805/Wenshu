@@ -20,7 +20,8 @@ cargo build --release -p wenshu-desktop  # the desktop app (文枢), Chinese int
 ```
 
 `scripts/sync-upstream.sh` also checks out the interface translations (craft-i18n), which
-`.cargo/config.toml` points the build at.
+`.cargo/config.toml` points the build at. `packaging/windows/package.ps1` builds the Windows
+portable zip (and an MSI when WiX v5 is installed) into `dist/`.
 
 Needs Rust ≥ 1.95 (tested on 1.99.1; on Windows use the MSVC toolchain), Git and about 10 GB of disk for the build.
 

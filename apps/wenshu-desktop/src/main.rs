@@ -10,6 +10,7 @@
     windows_subsystem = "windows"
 )]
 
+mod check;
 mod templates;
 
 /// The window and taskbar icon (original artwork, drawn for Wenshu).
@@ -25,6 +26,9 @@ fn main() {
             name: "文枢",
             version: env!("CARGO_PKG_VERSION"),
             about: Some(ABOUT),
+            // Wenshu's own community and releases, not ArtCraft's Discord and WordCraft's updates.
+            community: false,
+            updates: false,
         },
         bin: "wenshu-desktop",
         settings_folder: "Wenshu",
@@ -33,6 +37,7 @@ fn main() {
         on_start: Some(start),
         // Wenshu has releases of its own; WordCraft's update check would offer WordCraft's.
         check_updates: false,
+        app_tools: Some(check::tools),
     };
     if let Err(e) = wordcraft::run(config) {
         // Unlike `eprintln!`, never panics on a closed stderr.

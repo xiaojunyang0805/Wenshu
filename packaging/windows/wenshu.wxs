@@ -1,0 +1,55 @@
+<!--
+  Wenshu (文枢) Windows installer, WiX v5: a per-user install (no admin rights) into
+  %LOCALAPPDATA%\Programs\Wenshu, with a Start menu shortcut. Built by package.ps1, which passes
+  Version, Stage (the staged files) and Icon. Names are ASCII ("Wenshu") because MSI tables use
+  a single code page.
+
+  Status: written 2026-10-31 without WiX on the dev machine; not yet built. The portable zip is
+  the tested package until it is.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Wenshu" Manufacturer="The Wenshu authors" Version="$(var.Version)"
+           UpgradeCode="7d0c3e52-5a8f-4b1e-9c47-2f6a8e1d3b90" Scope="perUser" Language="1033">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Wenshu is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Icon Id="wenshu.ico" SourceFile="$(var.Icon)" />
+    <Property Id="ARPPRODUCTICON" Value="wenshu.ico" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/xiaojunyang0805/Wenshu" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="Wenshu">
+          <Directory Id="NoticesFolder" Name="notices" />
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Component Id="App">
+        <File Id="WenshuDesktop" Source="$(var.Stage)\wenshu-desktop.exe" />
+        <Shortcut Id="StartMenu" Directory="ProgramMenuFolder" Name="Wenshu" Target="[#WenshuDesktop]"
+                  WorkingDirectory="INSTALLFOLDER" Icon="wenshu.ico" />
+        <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\Wenshu" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Id="Cli">
+        <File Source="$(var.Stage)\wenshu.exe" />
+        <RegistryValue Root="HKCU" Key="Software\Wenshu" Name="cli" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Id="Licences">
+        <File Source="$(var.Stage)\LICENSE-MIT" />
+        <File Source="$(var.Stage)\LICENSE-APACHE" />
+        <RegistryValue Root="HKCU" Key="Software\Wenshu" Name="licences" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+    <ComponentGroup Id="NoticeFiles" Directory="NoticesFolder">
+      <Files Include="$(var.Stage)\notices\*" />
+    </ComponentGroup>
+
+    <Feature Id="Main">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentGroupRef Id="NoticeFiles" />
+    </Feature>
+  </Package>
+</Wix>

@@ -102,7 +102,9 @@ mod tests {
 
     #[test]
     fn compression_as_wps_measures_it() {
-        for c in ['。', '，', '、', '：', '；', '！', '）', '》', '”', '（', '《', '“'] {
+        for c in [
+            '。', '，', '、', '：', '；', '！', '）', '》', '”', '（', '《', '“',
+        ] {
             assert_eq!(squeeze_em(c), 0.1, "{c}");
         }
         for c in ['？', '—', '…', '中'] {
