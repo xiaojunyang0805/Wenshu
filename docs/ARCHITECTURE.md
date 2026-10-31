@@ -70,7 +70,7 @@ Wenshu/
 │  ├─ gongwen/             wenshu-gongwen
 │  └─ fidelity/            wenshu-fidelity
 ├─ apps/wenshu-cli/       `wenshu` binary
-├─ corpus/                 files/ (test documents), ref/ (reference renders, local), make_corpus.py
+├─ corpus/                 200-document fidelity corpus: files/, manifest.csv, tools/ (survey, select, probes, fetch, WPS renders), ref/ (local); see corpus/README.md
 ├─ examples/               gongwen-sample.json
 ├─ docs/                   this file, MVP.md, UPSTREAM.md, adr/, feasibility report
 └─ eval/                   kit evaluation (summary + findings kept; clones and targets ignored)

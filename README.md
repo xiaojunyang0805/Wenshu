@@ -8,7 +8,7 @@ Wenshu is an independent project, not affiliated with Kingsoft or Microsoft. It 
 made in WPS Office and Microsoft Word.
 
 **Status: M0 (foundations) done; M1 (Chinese layout) in progress:** 4 layout patches done and reviewed
-in draft PRs upstream; the corpus and WPS reference renders are next. See [docs/PROGRESS.md](docs/PROGRESS.md), [docs/MVP.md](docs/MVP.md) and
+in draft PRs upstream; a 200-document corpus is assembled ([corpus/README.md](corpus/README.md)); WPS reference renders are next. See [docs/PROGRESS.md](docs/PROGRESS.md), [docs/MVP.md](docs/MVP.md) and
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Build

@@ -17,3 +17,5 @@
 *.ttf
 *.ttc
 *.otf
+# Corpus documents of third-party copyright: fetched by corpus/tools/fetch.py from the manifest
+/corpus/files/dc-*

@@ -2,6 +2,44 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-10-31 (4): the 200-document corpus
+
+**Landed:** `corpus/` now holds 200 Chinese documents with one manifest (`corpus/manifest.csv`)
+and its tools. See [corpus/README.md](../corpus/README.md).
+
+| Tier | Count | Source | In git |
+|---|---|---|---|
+| `dc` | 137 | Real web documents from [docx-corpus](https://github.com/superdoc/docx-corpus) (Common Crawl, ~35,000 `zh` files), picked from a seeded 1,420-file pool | No: URL + SHA-256, `tools/fetch.py` |
+| `gov` | 21 | Attachments from Chinese government sites (PRC Copyright Law art. 5), URLs in `corpus/sources/gov.tsv` | Yes |
+| `gen` | 42 | 30 probes (one per layout question), 10 公文 of ten kinds, 2 M0 samples | Yes |
+
+The 158 real documents were written by WPS (76), Word (71) and others (11).
+
+**The survey shows what Chinese documents use** (1,420-file pool): punctuation compression is on
+in 77% and `w:hint="eastAsia"` appears in 83%, so 0003 and 0005 are mainstream behaviour.
+`*Chars` indents 64%, line grid 70%, character grid 6%, exact spacing 59%. Vertical text,
+columns and kinsoku-off are rare (1–3%), but each is in the pick.
+
+**Baseline run** (`wenshu fidelity`, no references yet): all 200 open and render, no failures;
+layout median 5 ms, slowest 0.3 s. Against the page count each authoring app saved
+(`docProps/app.xml`, a rough proxy), we match on 52 of 148 real documents and nearly always
+come out **longer**. The overshoot follows the document grid: 63% of documents on a line grid
+run long (81% on a character grid), against 23% with no grid and 24% with compression off. So
+line-grid snapping making lines too tall is the first thing to check against WPS. Missing 方正
+fonts on this PC are the second suspect.
+
+A probe bug was found and fixed on the way: python-docx's 11 pt default made the 16 pt grid
+probes measure the wrong base. Probes on a 公文 grid now set 16 pt 仿宋 as the default, as real
+公文 do.
+
+**Next**
+
+1. Run `corpus/tools/wps_render.py` (after warning the user; WPS may show windows) to fill
+   `corpus/ref/`, then the harness gives real scores and page-count matches.
+2. Investigate the line-grid page overshoot against those references.
+3. Answer the probe questions (01–10) from the WPS renders.
+4. Mark #5002–#5006 ready (the user's call).
+
 ## 2026-10-31 (3): status review
 
 **Where M1 stands** (day 2 of a 3–5 week milestone)
