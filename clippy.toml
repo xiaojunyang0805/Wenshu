@@ -1,0 +1,4 @@
+# As upstream WordCraft: tests may unwrap and expect; production code may not (workspace lints).
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true

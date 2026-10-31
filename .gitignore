@@ -7,7 +7,6 @@
 /out/
 # Reference renders from proprietary suites: keep local unless their licence allows sharing
 /corpus/ref/
-/.cargo/config.toml
 # Evaluation artefacts: only the written findings are published. Never commit fonts copied from
 # an OS (eval/results/betteroffice/fonts holds proprietary Microsoft fonts).
 /eval/results/**

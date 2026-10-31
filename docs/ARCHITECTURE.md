@@ -70,6 +70,7 @@ Wenshu/
 │  ├─ gongwen/             wenshu-gongwen
 │  └─ fidelity/            wenshu-fidelity
 ├─ apps/wenshu-cli/       `wenshu` binary
+├─ apps/wenshu-desktop/   `wenshu-desktop`: the WordCraft front end as 文枢 (M2)
 ├─ corpus/                 200-document fidelity corpus: files/, manifest.csv, tools/ (survey, select, probes, fetch, WPS renders), ref/ (local); see corpus/README.md
 ├─ examples/               gongwen-sample.json
 ├─ docs/                   this file, MVP.md, UPSTREAM.md, adr/, feasibility report
@@ -85,6 +86,7 @@ Wenshu/
 | `wenshu-gongwen` | zip, quick-xml | `spec` (A4, 37/28 mm, 156×225 mm, 22×28 grid, 3号 仿宋…), `write_docx` (organ mark, number, red rule, title, recipients, body with 一、/（一） headings, signature, date, odd/even "— N —" footers), `check_docx` (8 rules) | ✅ 5 tests |
 | `wenshu-fidelity` | core, image | Render `corpus/files/*`, compare against `corpus/ref/<stem>.p<N>.png` (luminance diff), page-count match, `report.json` | ✅ 1 test |
 | `wenshu-cli` | core, gongwen, fidelity | `wenshu info · render · convert · gongwen new/check · fidelity` | ✅ |
+| `wenshu-desktop` | core, gongwen, wordcraft (app, patch 0006), wordcraft-control-key | `wordcraft::run` with Wenshu's brand (文枢), icon, settings folder (`%APPDATA%\Wenshu`), `wenshu_core::init()` at start-up and 公文 templates seeded into File › New › Personal. The one crate that embeds the UI shell; document work still goes through `wenshu-core` | ✅ alpha |
 | `wenshu-ofd` | core | OFD export (GB/T 33190) from WordCraft's page display list | M3 |
 
 ## 5. How the engine is extended

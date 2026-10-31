@@ -37,7 +37,9 @@ longer applies, and running the fidelity corpus before and after.
 | 0004-layout-kinsoku-curly-quotes | wordcraft-layout | Kinsoku sets gain ” ’ 〃 〆 ‰ ℃ (no line start) and “ ‘ (no line end), needed once break opportunities beside quotes exist (Unicode 15.1 LB19a, kinsoku-off paths). Test | [#5004](https://github.com/storytold/wordcraft/pull/5004) (draft) |
 | 0005-layout-punctuation-compression | doc, docx, layout | `Settings::char_spacing` (`w:characterSpacingControl`) read and written (it was always saved as `doNotCompress`). Layout as WPS does it (measured, [WPS-FINDINGS.md](WPS-FINDINGS.md) F1): a line that fits is untouched; an overflowing line squeezes its full-width marks by up to 0.1 em each (`ParaLayout::squeeze`, `lines::squeeze_line`); a closing mark ending a line needs no room for its blank half (`auto_space`). On character grids too. 7 layout + 1 docx test, round-trip extended | [#5006](https://github.com/storytold/wordcraft/pull/5006) (draft, on #5004) |
 
-All five apply in order on `3b7f7ed`; the `wordcraft-layout` (577), `-fonts` (102), `-doc` (242),
+| 0006-app-embedding | app, ui-egui, control-key | The desktop app as a library: `wordcraft::run(AppConfig)` (name/version/About via `ui_egui::brand::Brand`, executable name, settings folder, app id, icon, start-up hook, update check on/off); `main.rs` runs it with WordCraft's defaults. Tests | not yet opened (M2) |
+
+All six apply in order on `3b7f7ed`; the `wordcraft-layout` (577), `-fonts` (102), `-doc` (242),
 `-docx` (500) and `-engine` (1094) suites pass with them, and fmt and clippy are clean.
 
 **Review status (2026-10-31):** four CodeRabbit rounds; every thread resolved or answered, and the

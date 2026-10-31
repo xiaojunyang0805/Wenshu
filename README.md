@@ -16,7 +16,11 @@ in draft PRs upstream; a 200-document corpus is assembled ([corpus/README.md](co
 ```sh
 scripts/sync-upstream.sh                 # fetch WordCraft at the pinned rev + apply patches/
 cargo build --release -p wenshu-cli      # ~12 min the first time
+cargo build --release -p wenshu-desktop  # the desktop app (文枢), Chinese interface
 ```
+
+`scripts/sync-upstream.sh` also checks out the interface translations (craft-i18n), which
+`.cargo/config.toml` points the build at.
 
 Needs Rust ≥ 1.95 (tested on 1.99.1; on Windows use the MSVC toolchain), Git and about 10 GB of disk for the build.
 

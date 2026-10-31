@@ -2,6 +2,54 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-10-31 (8): M2 started — the desktop alpha runs
+
+**Upstream hook, patch 0006** (`embed/app-library` in the worktree, not opened upstream yet):
+`apps/wordcraft` becomes a library. `wordcraft::run(AppConfig)` is the former `main()`, and
+`main.rs` runs it with WordCraft's defaults. `AppConfig` carries:
+
+- the product (`ui_egui::brand::Brand`: name, version and About text, used in window titles, the
+  About box and the unsaved-changes prompt);
+- the executable name (`--version`, command-line errors);
+- the settings folder (`control_key::set_folder_name`; Rust 2024 forbids setting
+  `WORDCRAFT_PROFILE_DIR` from inside the process without `unsafe`);
+- the app id and icon;
+- a start-up hook that runs after logging is installed;
+- the update check on or off.
+
+WordCraft's own behaviour is unchanged; app 52 + 3 tests, control-key 4, clippy clean.
+
+**`apps/wenshu-desktop`** (`wenshu-desktop`): brand 文枢, an original icon drawn in code, settings
+in `%APPDATA%\Wenshu`, the update check off. `wenshu_core::init()` runs at start-up. Five 公文
+templates (通知 请示 报告 函 纪要) are seeded into `Templates/公文` on first start: built with
+`wenshu-gongwen`, saved as `.dotx` through the engine, never overwriting an existing folder. A test
+checks that they pass `gongwen check`. The workspace mirrors upstream's egui/winit patches;
+`sync-upstream.sh` checks out craft-i18n at WordCraft's pin, and `.cargo/config.toml` (now
+committed) sets `CRAFT_I18N_DIR`.
+
+**Seen running** (control channel, scratch profile): the whole interface in Chinese
+(the system language), the window titled 文档1, and File › New › Personal listing the 公文 category
+with its five templates.
+
+**Next (M2)**
+
+1. Blank documents with Chinese defaults: A4, 宋体/等线 五号, zh-CN proofing language. This needs
+   a hook for the blank document, or a Normal template from the app.
+2. Hide upstream's community chrome (Discord button, account badge, Zotero tab) through the brand.
+3. A "检查公文格式" command (`wenshu-gongwen::check`) on the ribbon.
+4. A Windows installer, then Linux packages.
+
+## Deferred (come back later)
+
+Set aside on 2026-10-31 to move on to M2, at the user's request:
+
+- **The 60 documents still longer than WPS** (mostly on line and character grids), and the 3.7 pt
+  vertical offset from the first body paragraph in `dc-correspondence-195b80f877`. Start from
+  `out/sumref.py`-style tag statistics and the `ycmp.py` line comparison.
+- `w:topLinePunct` (F5) and kana compression.
+- #5005: Latin Extended-A to a GB2312/Big5 East Asian font (F4).
+- A Word reference set (MVP open question 1).
+
 ## 2026-10-31 (7): patches 0002 and 0005 reworked to the measurements
 
 **0002 / #5003** (`8e2323d`): grid text advances its size plus the grid adjustment

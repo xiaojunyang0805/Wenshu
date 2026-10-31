@@ -1,0 +1,7 @@
+[build]
+# Shares compiled dependencies with the WordCraft evaluation build (git-ignored).
+target-dir = "eval/target/wordcraft"
+
+[env]
+# Interface translations for the desktop app (zh-Hans), checked out by scripts/sync-upstream.sh.
+CRAFT_I18N_DIR = { value = "upstream/craft-i18n", relative = true }
