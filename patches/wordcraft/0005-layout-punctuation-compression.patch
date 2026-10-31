@@ -362,6 +362,34 @@ index df370aa..b109499 100644
      }
      out
  }
+diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
+index fac5c94..770574b 100644
+--- a/crates/layout/src/para/lines.rs
++++ b/crates/layout/src/para/lines.rs
+@@ -392,8 +392,9 @@ impl<'e> Breaker<'e> {
+         let hyphen = (sc.end == LineEnd::Wrap && c1 > c0 && pl.hyph_after.binary_search(&((c1 - 1) as u32)).is_ok())
+             .then(|| pl.clusters.get(c1 - 1).map(|c| hyphen_glyph(pl, c.style, &mut self.hcache)))
+             .flatten();
+-        let end_x = match (sc.xs.last(), c1.checked_sub(1).and_then(|k| pl.clusters.get(k))) {
+-            (Some(lx), Some(c)) => lx + c.adv + hyphen.map_or(0.0, |h| h.2),
++        // A last mark whose compressed pair the wrap split gets its blank half back.
++        let end_x = match (sc.xs.last(), c1.checked_sub(1).and_then(|k| pl.clusters.get(k).map(|c| (k, c)))) {
++            (Some(lx), Some((k, c))) => lx + c.adv - pl.auto_space_after(k).min(0.0) + hyphen.map_or(0.0, |h| h.2),
+             _ => sc.line_start_x,
+         };
+         sc.xs.push(end_x);
+@@ -653,8 +654,9 @@ fn content_end(pl: &ParaLayout, sc: &Scan, c1: usize) -> f32 {
+                 content_end = sc.xs.get(k - sc.c0).copied().unwrap_or(content_end);
+             }
+             _ => {
+-                // The automatic space after the line's last character goes with the wrap.
+-                content_end -= pl.auto_space_after(k);
++                // The automatic space after the line's last character goes with the wrap (a
++                // compressed mark's blank half is already back in the line's end x).
++                content_end -= pl.auto_space_after(k).max(0.0);
+                 break;
+             }
+         }
 diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
 index f5fdb3c..c80df7d 100644
 --- a/crates/layout/src/para/paragraph.rs
@@ -403,10 +431,10 @@ index bfce562..a5d9374 100644
  pub(crate) mod linear;
 diff --git a/crates/layout/src/tests/compress.rs b/crates/layout/src/tests/compress.rs
 new file mode 100644
-index 0000000..36f40b7
+index 0000000..12bcd3d
 --- /dev/null
 +++ b/crates/layout/src/tests/compress.rs
-@@ -0,0 +1,122 @@
+@@ -0,0 +1,123 @@
 +//! Punctuation compression (`w:characterSpacingControl`): adjacent full-width East Asian marks
 +//! share one blank half (JIS X 4051, W3C clreq §3.1.6). Assertions compare a layout with
 +//! compression on to the same layout with it off, never font metrics (fonts differ between
@@ -499,6 +527,7 @@ index 0000000..36f40b7
 +        let last = line.c1 - 1;
 +        let (Some(c), Some(f), Some(&x)) = (g.clusters.get(last), full.clusters.get(last), line.xs.get(last - line.c0)) else { continue };
 +        assert!((x + f.adv - line.right).abs() < 0.01, "line ending at {last}: {x} + {} (compressed {}) vs {}", f.adv, c.adv, line.right);
++        assert_eq!(line.cl_right(last), Some(x + f.adv), "the line's end x and selection cover the whole mark");
 +    }
 +}
 +

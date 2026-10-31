@@ -1,6 +1,6 @@
 Upstream: https://github.com/storytold/wordcraft/pull/5002
 diff --git a/crates/fonts/src/word.rs b/crates/fonts/src/word.rs
-index 58cac89..bbf6f70 100644
+index 58cac89..6330de9 100644
 --- a/crates/fonts/src/word.rs
 +++ b/crates/fonts/src/word.rs
 @@ -32,7 +32,29 @@ fn substitutes(family: &str) -> &'static [&'static str] {
@@ -29,7 +29,7 @@ index 58cac89..bbf6f70 100644
 +/// then with its charset alias removed ("仿宋_GB2312 CE" → "仿宋_GB2312").
 +fn provided(family: &str) -> Option<&'static [&'static str]> {
 +    let provider = SUBSTITUTE_PROVIDER.get()?;
-+    let base = charset_base_family(family);
++    let base = base_family(family);
 +    provider(family).or_else(|| if base == family { None } else { provider(base) })
  }
  
@@ -54,7 +54,29 @@ index 58cac89..bbf6f70 100644
      let mut installed = substitutes(family).iter().copied().filter(|s| db.has_family(s));
      if !is_thai_family(family) {
          return installed.next();
-@@ -405,7 +432,7 @@ pub fn resolve(family: &str, bold: bool, italic: bool) -> Resolved {
+@@ -380,6 +407,12 @@ const FAMILY_CACHE_MAX: usize = 4096;
+ /// Family names longer than this (bytes) are resolved but never remembered.
+ const FAMILY_KEY_MAX: usize = 256;
+ 
++/// The family `family` stands for: Symbol for a printer-driver Symbol alias (same encoding), else
++/// the name without its charset alias. The provider and the built-in lists both look it up.
++fn base_family(family: &str) -> &str {
++    if family.trim().eq_ignore_ascii_case("Symbol (PCL6)") { "Symbol" } else { charset_base_family(family) }
++}
++
+ /// Resolve `family` with bold/italic to a face (memoised until user fonts are added or removed,
+ /// [`FontDb::generation`]).
+ pub fn resolve(family: &str, bold: bool, italic: bool) -> Resolved {
+@@ -397,15 +430,14 @@ pub fn resolve(family: &str, bold: bool, italic: bool) -> Resolved {
+             return *r;
+         }
+     }
+-    // Printer-driver Symbol aliases use the same encoding as Symbol.
+-    let base = if family.trim().eq_ignore_ascii_case("Symbol (PCL6)") { "Symbol" } else { charset_base_family(family) };
++    let base = base_family(family);
+     let (fam, substituted) = if db.has_family(family) {
+         (family.to_string(), false)
+     } else if base != family && db.has_family(base) {
          // Windows maps the charset names to the font itself: not a substitution.
          (base.to_string(), false)
      } else {
@@ -63,7 +85,7 @@ index 58cac89..bbf6f70 100644
      };
      let face = db.face(&fam, style_name(bold, italic));
      let r = Resolved { synth_bold: bold && face.weight < 600.0, synth_italic: italic && !face.italic, substituted, face: FaceRef::of(&face) };
-@@ -477,6 +504,40 @@ mod tests {
+@@ -477,6 +509,40 @@ mod tests {
          assert!(!resolve_cache().lock().unwrap_or_else(|e| e.into_inner()).1.keys().any(|k| k.0.len() > 1000));
      }
  
@@ -104,3 +126,12 @@ index 58cac89..bbf6f70 100644
      #[test]
      fn unknown_family_substitutes() {
          let r = resolve("Definitely Not A Font 123", false, false);
+@@ -532,6 +598,8 @@ mod tests {
+ 
+     #[test]
+     fn pcl6_symbol_resolves_as_symbol() {
++        // The substitute provider is asked for Symbol too ([`provided`] shares the alias).
++        assert_eq!(base_family("Symbol (PCL6)"), "Symbol");
+         let actual = resolve("Symbol (PCL6)", false, false);
+         let db = FontDb::global();
+         if db.has_family("Symbol (PCL6)") {

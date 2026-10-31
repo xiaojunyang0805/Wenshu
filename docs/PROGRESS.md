@@ -2,6 +2,24 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-10-31 (2): third review round
+
+CodeRabbit withdrew the `full(n)` finding. New points:
+
+- #5006 (5b7b229): a split pair's line end x (and so selection, `cl_right`) covers the whole
+  first mark. Declined: fitting a pair at its compressed width. The fitter can't yet know
+  whether the line breaks between the two marks; that is part of the line-end compression work
+  (`topLinePunct`). Declined: bundling a CJK test font.
+- #5005 (6bb57f1): a named East Asian font that resolved to the generic fallback is not used
+  as the East Asian face (the check compares against the fallback face, which avoids touching
+  #5002's `resolve`). Its test runs only where the name really falls back; on this Windows box
+  Leelawadee UI covers Khmer, so the test returns early here.
+- #5002 (4eba2f2): the provider is asked for Symbol on `Symbol (PCL6)`, through one
+  `base_family` helper.
+- #5003: docs again; same answer.
+
+Upstream layout 577, fonts 102, doc 242, docx 500, engine 1094; fmt and clippy clean; queue applies on the pin.
+
 ## 2026-10-31: second review round on #5002–#5006
 
 CodeRabbit resolved every first-round thread and raised new points. Still no human reviews.
