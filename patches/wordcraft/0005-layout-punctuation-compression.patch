@@ -229,8 +229,24 @@ index bcb7150..93b33c7 100644
  
      #[test]
      fn auto_space_pairs() {
+diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
+index 25dd940..743b839 100644
+--- a/crates/layout/src/para.rs
++++ b/crates/layout/src/para.rs
+@@ -91,8 +91,9 @@ pub struct ParaLayout {
+     pub shown: Vec<(usize, String, Vec<std::ops::Range<usize>>)>,
+     /// Shapes drawn around overstruck field text (enclosed characters, `EQ \o`), by cluster index.
+     pub enclosures: Vec<(usize, Enclosed)>,
+-    /// Room after a cluster between Asian text and Latin text or digits ([`auto_space`]), by
+-    /// cluster index, sorted. It is part of the cluster's advance, but takes no room at a line's end.
++    /// Room after a cluster between Asian text and Latin text or digits ([`auto_space`]), and
++    /// (negative) the blank half punctuation compression took ([`compress_punct`]), by cluster
++    /// index, sorted. It is part of the cluster's advance, but is undone at a line's end.
+     pub auto_space: Vec<(usize, f32)>,
+ }
+ 
 diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
-index df370aa..ff7664e 100644
+index df370aa..b109499 100644
 --- a/crates/layout/src/para/grid.rs
 +++ b/crates/layout/src/para/grid.rs
 @@ -73,21 +73,24 @@ pub(super) fn snap_chars(b: &mut Builder, text: &str, grid: &Grid) {
@@ -271,7 +287,7 @@ index df370aa..ff7664e 100644
          match c.kind {
              ClKind::Text => {}
              ClKind::Marker if c.adv == 0.0 => continue,
-@@ -105,22 +108,62 @@ pub(super) fn auto_space(b: &mut Builder, text: &str, de: bool, dn: bool) -> Vec
+@@ -105,18 +108,64 @@ pub(super) fn auto_space(b: &mut Builder, text: &str, de: bool, dn: bool) -> Vec
              prev = None;
              continue;
          };
@@ -311,18 +327,20 @@ index df370aa..ff7664e 100644
 +        if let Some(pc) = b.clusters.get_mut(p.k) {
 +            pc.adv += gap;
 +            out.push((p.k, gap));
-         }
--        prev = Some((k, last, size));
-     }
-     out
- }
- 
++        }
++    }
++    out
++}
++
 +/// Punctuation compression (`w:characterSpacingControl` other than `doNotCompress`): where two
-+/// full-width East Asian punctuation marks touch with blank halves between their ink, one blank
-+/// half goes ([`crate::kinsoku::compresses`]), half the em of the mark that gives it up. The
-+/// first cluster's advance shrinks, so the second and everything after move closer. A mark is
-+/// full-width when its advance is at least 0.9 em; a proportional (Latin) quote keeps its width.
-+pub(super) fn compress_punct(b: &mut Builder, text: &str) {
++/// East Asian punctuation marks touch with a blank half between their ink, that blank half goes
++/// ([`crate::kinsoku::compresses`]), half the em of the mark that gives it up. The mark giving it
++/// up and the first cluster, whose advance shrinks, are full-width (advance at least 0.9 em): a
++/// proportional (Latin) quote keeps its width. The second and everything after move closer.
++/// Returns the change by cluster index, negative; like automatic spacing it is undone at a line's
++/// end, where the pair is split.
++pub(super) fn compress_punct(b: &mut Builder, text: &str) -> Vec<(usize, f32)> {
++    let mut out = Vec::new();
 +    for (p, n) in touching(b, text) {
 +        let Some(who) = crate::kinsoku::compresses(p.ch, n.ch) else { continue };
 +        let mark = if who == crate::kinsoku::Compress::First { p } else { n };
@@ -336,16 +354,16 @@ index df370aa..ff7664e 100644
 +            continue;
 +        }
 +        if let Some(pc) = b.clusters.get_mut(p.k) {
-+            pc.adv = (pc.adv - (mark.size / 2.0).min(400.0)).max(0.0);
-+        }
-+    }
-+}
-+
- /// An area text wraps around.
- #[derive(Clone, Debug, PartialEq)]
- pub struct Exclusion {
++            let adv = (pc.adv - (mark.size / 2.0).min(400.0)).max(0.0);
++            out.push((p.k, adv - pc.adv));
++            pc.adv = adv;
+         }
+-        prev = Some((k, last, size));
+     }
+     out
+ }
 diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
-index f5fdb3c..6560f95 100644
+index f5fdb3c..c80df7d 100644
 --- a/crates/layout/src/para/paragraph.rs
 +++ b/crates/layout/src/para/paragraph.rs
 @@ -1,7 +1,7 @@
@@ -364,10 +382,10 @@ index f5fdb3c..6560f95 100644
 -    let auto_space =
 -        if rp.snap_to_grid && env.grid.chars.is_some() { Vec::new() } else { auto_space(&mut sh.b, &p.text, rp.auto_space_de, rp.auto_space_dn) };
 +    let on_grid = rp.snap_to_grid && env.grid.chars.is_some();
-+    if !on_grid && doc.settings.char_spacing.compresses_punctuation() {
-+        compress_punct(&mut sh.b, &p.text);
-+    }
-+    let auto_space = if on_grid { Vec::new() } else { auto_space(&mut sh.b, &p.text, rp.auto_space_de, rp.auto_space_dn) };
++    let compressed = if !on_grid && doc.settings.char_spacing.compresses_punctuation() { compress_punct(&mut sh.b, &p.text) } else { Vec::new() };
++    let mut auto_space = if on_grid { Vec::new() } else { auto_space(&mut sh.b, &p.text, rp.auto_space_de, rp.auto_space_dn) };
++    auto_space.extend(compressed);
++    auto_space.sort_by_key(|a| a.0);
      let mut skip = sh.left.clone();
      skip.extend(sh.bare.iter().cloned());
      let bt = BreakText::new(&p.text, skip);
@@ -385,10 +403,10 @@ index bfce562..a5d9374 100644
  pub(crate) mod linear;
 diff --git a/crates/layout/src/tests/compress.rs b/crates/layout/src/tests/compress.rs
 new file mode 100644
-index 0000000..a29ca15
+index 0000000..36f40b7
 --- /dev/null
 +++ b/crates/layout/src/tests/compress.rs
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,122 @@
 +//! Punctuation compression (`w:characterSpacingControl`): adjacent full-width East Asian marks
 +//! share one blank half (JIS X 4051, W3C clreq §3.1.6). Assertions compare a layout with
 +//! compression on to the same layout with it off, never font metrics (fonts differ between
@@ -396,6 +414,7 @@ index 0000000..a29ca15
 +
 +use crate::*;
 +use wordcraft_doc::CharSpacing;
++use wordcraft_doc::props::Align;
 +use wordcraft_doc::section::{DocGrid, DocGridType};
 +
 +fn lay(doc: &Document) -> DocLayout {
@@ -460,6 +479,27 @@ index 0000000..a29ca15
 +    // A Latin “ (proportional, in the run's Latin font) before a full-width 《: nothing to take.
 +    let (got, _) = changes("A“《书》", CharSpacing::CompressPunctuation, &[]);
 +    assert_eq!(got.get(1).copied(), Some(0.0), "{got:?}");
++}
++
++#[test]
++fn a_pair_split_across_lines_keeps_the_first_mark_whole() {
++    // （甲）（乙）… right-aligned: wherever a line ends on ） before a （ on the next line, the
++    // blank half compression took comes back, so the mark's full advance ends at the right edge.
++    let text = "（甲）".repeat(60);
++    let mut d = Document::from_text(&text);
++    d.settings.char_spacing = CharSpacing::CompressPunctuation;
++    if let Some(Block::Para(p)) = d.body.first_mut().map(Arc::make_mut) {
++        p.props.align = Some(Align::Right);
++    }
++    let mut plain = d.clone();
++    plain.settings.char_spacing = CharSpacing::DoNotCompress;
++    let (g, full) = (first_para(&lay(&d)), first_para(&lay(&plain)));
++    assert!(g.lines.len() > 1);
++    for line in &g.lines[..g.lines.len() - 1] {
++        let last = line.c1 - 1;
++        let (Some(c), Some(f), Some(&x)) = (g.clusters.get(last), full.clusters.get(last), line.xs.get(last - line.c0)) else { continue };
++        assert!((x + f.adv - line.right).abs() < 0.01, "line ending at {last}: {x} + {} (compressed {}) vs {}", f.adv, c.adv, line.right);
++    }
 +}
 +
 +#[test]

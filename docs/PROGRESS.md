@@ -2,6 +2,29 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-10-31: second review round on #5002–#5006
+
+CodeRabbit resolved every first-round thread and raised new points. Still no human reviews.
+
+- #5006 (fd4aa1d): compression is undone at a line's end, like auto-spacing's room (both now
+  live in `ParaLayout::auto_space`). A `）|（` pair split across lines leaves `）` at full width.
+  Declined: requiring the second mark full-width. In `。”` the blank that goes is `。`'s own,
+  whatever font the quote is in. Also declined: asserting that the fixture compresses, because
+  machines with no CJK font have no full-width marks.
+- #5005 (3f8059f): `w:hint="eastAsia"` follows Word's whole block table (MS-OI29500 §2.1.88):
+  Greek, Cyrillic, U+2000–27BF, the listed Latin-1 signs, PUA. The rows that need a Chinese run
+  language (pinyin vowels, Latin Extended) wait until layout reads `w:lang`.
+- #5003 (e6b7a3d), #5002 (8cbf960): test coverage only. Grid indents are checked with a large
+  paragraph mark and on the left and right. The provider test can tell exact-name, base-name
+  and built-in results apart.
+- Docs: still deferred to the last PR to merge. CodeRabbit leaves the timing to the maintainers.
+
+The queue is regenerated and applies on `3b7f7ed`. Upstream layout 576, fonts 102, doc 242,
+docx 500 and engine 1094 tests pass; fmt and clippy clean.
+
+**Open for WPS renders**: `。”` with a Latin-font quote (compress or not), and the pinyin-vowel
+hint rows.
+
 ## 2026-10-30 (3): first review round on #5002–#5006
 
 CodeRabbit reviewed the drafts (triggered with `@coderabbitai review`). There are no human reviews

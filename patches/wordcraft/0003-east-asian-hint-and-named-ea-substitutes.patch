@@ -144,39 +144,43 @@ index d8eebd0..91fcbfb 100644
          let (levels, lbase): (&[u8], usize) = match dir {
              Dir::Para => (&self.levels, base),
 diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
-index 22f4535..9365a4b 100644
+index 22f4535..74aa334 100644
 --- a/crates/layout/src/para/grid.rs
 +++ b/crates/layout/src/para/grid.rs
-@@ -163,3 +163,14 @@ impl Exclusion {
+@@ -163,3 +163,17 @@ impl Exclusion {
  pub(super) fn east_asian(c: char) -> bool {
      crate::kinsoku::is_east_asian(c) || matches!(u32::from(c), 0x1100..=0x11FF | 0x3130..=0x318F | 0xAC00..=0xD7AF)
  }
 +
-+/// Characters both Latin and East Asian text use, whose font `w:hint="eastAsia"` decides
-+/// (ECMA-376 §17.3.2.26): curly quotes, dashes, ellipses and other general punctuation, the middle
-+/// dot, degree, section and multiplication signs, letterlike symbols, Roman numerals, arrows,
-+/// circled numbers and geometric shapes. Letters and digits are never ambiguous.
++/// Characters Word sets in the East Asian font under `w:hint="eastAsia"` whatever the run's
++/// language (ECMA-376 §17.3.2.26, block table in [MS-OI29500] §2.1.88): some Latin-1 signs,
++/// spacing modifiers and combining marks, Greek, Cyrillic, U+2000–27BF (general punctuation
++/// through dingbats: curly quotes, dashes, arrows, box drawing, circled numbers, shapes), CJK
++/// radicals, the private use area and the Latin ligatures. The rows that also depend on a Chinese
++/// run language (accented Latin letters for pinyin) are not applied.
 +pub(super) fn hint_ambiguous(c: char) -> bool {
 +    matches!(u32::from(c),
-+        0x00A7 | 0x00A8 | 0x00B0 | 0x00B1 | 0x00B7 | 0x00D7 | 0x00F7
-+        | 0x2010..=0x2027 | 0x2030..=0x2044 | 0x2100..=0x214F | 0x2160..=0x217F | 0x2190..=0x21FF
-+        | 0x2460..=0x24FF | 0x25A0..=0x25FF | 0x2600..=0x26FF)
++        0x00A1 | 0x00A4 | 0x00A7..=0x00A8 | 0x00AA | 0x00AD | 0x00AF | 0x00B0..=0x00B4
++        | 0x00B6..=0x00BA | 0x00BC..=0x00BF | 0x00D7 | 0x00F7
++        | 0x02B0..=0x03CF | 0x0400..=0x04FF | 0x2000..=0x27BF | 0x2E80..=0x2EFF
++        | 0xE000..=0xF8FF | 0xFB00..=0xFB1C)
 +}
 diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
-index dad731e..44ac285 100644
+index 128bc1f..19e98b5 100644
 --- a/crates/layout/src/tests/grid.rs
 +++ b/crates/layout/src/tests/grid.rs
-@@ -130,6 +130,31 @@ fn grid_cells_round_up_only_past_a_whole_cell() {
+@@ -159,6 +159,36 @@ fn grid_cells_round_up_only_past_a_whole_cell() {
      assert_eq!(grid(16.0).cells(f32::NAN), 1.0);
  }
  
 +#[test]
 +fn east_asian_hint_sets_ambiguous_punctuation_in_the_east_asian_font() {
 +    // Bundled faces stand in for a Latin and an East Asian font, so every machine agrees: with
-+    // `w:hint="eastAsia"` the curly quotes and the dash take the East Asian font, the Latin letter
-+    // keeps the run's font; without it everything stays in the run's font.
++    // `w:hint="eastAsia"` the curly quotes, the dash, Greek, Cyrillic and the hinted Latin-1 signs
++    // take the East Asian font, the Latin letter keeps the run's font; without it everything stays
++    // in the run's font.
 +    let face_of = |hint: Option<bool>, ch: char| {
-+        let text = "“x—”";
++        let text = "“x—α¡ж½”";
 +        let mut d = Document::from_text(text);
 +        if let Some(Block::Para(p)) = d.body.first_mut().map(std::sync::Arc::make_mut) {
 +            p.runs[0].props.font = Some("Source Serif 4".into());
@@ -190,6 +194,10 @@ index dad731e..44ac285 100644
 +    let latin = face_of(Some(true), 'x');
 +    assert_ne!(face_of(Some(true), '“'), latin, "hinted quote in the Latin font");
 +    assert_ne!(face_of(Some(true), '—'), latin, "hinted dash in the Latin font");
++    for c in ['α', '¡', 'ж', '½'] {
++        assert_ne!(face_of(Some(true), c), latin, "hinted {c} in the Latin font");
++        assert_eq!(face_of(None, c), latin, "unhinted {c} left the run's font");
++    }
 +    assert_eq!(face_of(Some(true), '“'), face_of(Some(true), '”'));
 +    assert_eq!(face_of(None, '“'), face_of(None, 'x'), "unhinted quote left the run's font");
 +    assert_eq!(face_of(Some(false), '—'), face_of(Some(false), 'x'));
