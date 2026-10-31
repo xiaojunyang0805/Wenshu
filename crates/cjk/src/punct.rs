@@ -1,8 +1,9 @@
 //! Chinese punctuation classes after W3C *Requirements for Chinese Text Layout* (clreq) §3.1 and
 //! GB/T 15834-2011, for line breaking (避头尾) and punctuation compression (标点挤压).
 //!
-//! In Simplified Chinese most punctuation occupies a full em but draws in one half of it; the
-//! other half is blank and may be removed where two such marks meet, or at a line end.
+//! In Simplified Chinese most punctuation occupies a full em but draws in one half of it. With
+//! compression on, WPS lets that blank half shrink by up to a tenth of an em when a line is full,
+//! and lets a closing mark end a line without room for its blank half (docs/WPS-FINDINGS.md F1).
 
 /// A punctuation mark's layout class.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -54,25 +55,23 @@ pub fn no_line_end(c: char) -> bool {
     classify(c) == Some(PunctClass::Opening) || matches!(c, '￥' | '＄' | '￡' | '¥')
 }
 
-/// The blank half of `c` that compression may remove, in ems: 0.5 for opening, closing, pause
-/// and stop marks, 0.25 a side for middle dots, none otherwise.
-pub fn compressible_em(c: char) -> f64 {
+/// How much of `c`'s blank side compression may take on a full line, in ems: a tenth for the
+/// closing, pause and stop marks (not ？) and the opening marks, none otherwise. Upstream layout
+/// (patch 0005) uses the same marks, measured in WPS.
+pub fn squeeze_em(c: char) -> f64 {
     match classify(c) {
-        Some(PunctClass::Opening | PunctClass::Closing | PunctClass::PauseOrStop) => 0.5,
-        Some(PunctClass::Middle) => 0.25,
+        Some(PunctClass::Opening | PunctClass::Closing) => 0.1,
+        Some(PunctClass::PauseOrStop) if c != '？' => 0.1,
         _ => 0.0,
     }
 }
 
-/// Space, in ems, that compression removes between adjacent marks `a` then `b` (clreq §3.1.6):
-/// a closing or stop mark followed by any opening, closing or stop mark (`”“` `。”` `）、`), or
-/// two opening marks, keep only one blank half between them. Upstream layout (patch 0005) uses
-/// the same pairs but leaves out ； ： ？ ！, which sit centred in Japanese fonts.
-pub fn adjacent_compression_em(a: char, b: char) -> f64 {
-    use PunctClass::{Closing, Opening, PauseOrStop};
-    match (classify(a), classify(b)) {
-        (Some(Closing | PauseOrStop), Some(Opening | Closing | PauseOrStop))
-        | (Some(Opening), Some(Opening)) => 0.5,
+/// The blank half, in ems, that `c` doesn't need when it ends a line under compression: the
+/// closing brackets and the pause and stop marks (not the curly quotes, not ？).
+pub fn line_end_blank_em(c: char) -> f64 {
+    match classify(c) {
+        Some(PunctClass::Closing) if !matches!(c, '”' | '’') => 0.5,
+        Some(PunctClass::PauseOrStop) if c != '？' => 0.5,
         _ => 0.0,
     }
 }
@@ -102,13 +101,18 @@ mod tests {
     }
 
     #[test]
-    fn compression_pairs() {
-        assert_eq!(adjacent_compression_em('，', '“'), 0.5);
-        assert_eq!(adjacent_compression_em('）', '。'), 0.5);
-        assert_eq!(adjacent_compression_em('《', '“'), 0.5);
-        assert_eq!(adjacent_compression_em('。', '”'), 0.5);
-        assert_eq!(adjacent_compression_em('（', '）'), 0.0);
-        assert_eq!(adjacent_compression_em('中', '“'), 0.0);
-        assert_eq!(compressible_em('·'), 0.25);
+    fn compression_as_wps_measures_it() {
+        for c in ['。', '，', '、', '：', '；', '！', '）', '》', '”', '（', '《', '“'] {
+            assert_eq!(squeeze_em(c), 0.1, "{c}");
+        }
+        for c in ['？', '—', '…', '中'] {
+            assert_eq!(squeeze_em(c), 0.0, "{c}");
+        }
+        for c in ['。', '，', '、', '！', '）', '」'] {
+            assert_eq!(line_end_blank_em(c), 0.5, "{c}");
+        }
+        for c in ['”', '’', '？', '（', '中'] {
+            assert_eq!(line_end_blank_em(c), 0.0, "{c}");
+        }
     }
 }

@@ -2,6 +2,38 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-10-31 (7): patches 0002 and 0005 reworked to the measurements
+
+**0002 / #5003** (`8e2323d`): grid text advances its size plus the grid adjustment
+(`Grid::advance`), not whole cells. Probe 30 confirmed it for smaller text too: 12 pt text
+advances 11.8 pt.
+
+**0005 / #5006** (`c275702`): the pair model is gone. Compressible full-width marks carry a 0.1 em
+squeeze capacity (`ParaLayout::squeeze`). The line fitter counts it like shrinkable spaces, and
+`squeeze_line` shares an overflow across the marks so the line ends at the margin. A closing
+mark's blank half goes into `auto_space`, which takes no room at a line's end. Last round's
+line-end patch-ups in `lines.rs` are gone again (back to upstream). A line-end probe settled the
+set: `。，、：；！）》」』】〕` get the free half; `” ’ ？` don't. It applies on character grids.
+`wenshu-cjk::punct` follows the same model (`squeeze_em`, `line_end_blank_em`).
+
+**Re-scored against WPS:** page-count matches **112 → 122 / 200**, mean page score 0.903 → 0.904,
+28 documents better, 4 slightly worse (the worst by −0.022). The sample letter
+(`dc-correspondence-195b80f877`) now breaks every line where WPS does: 9 pages, was 11.
+
+Upstream: branches pushed, #5003/#5006 descriptions rewritten, notes posted with
+`@coderabbitai review`; #5005 rebased. Combined branch: layout 578, fonts 102, doc 242,
+docx 500, engine 1094; fmt and clippy clean.
+
+**Still long against WPS** (60 documents): mostly line grid (36/82) and character grid (17/27).
+In the sample letter, everything from the first body paragraph sits 3.7 pt lower than in WPS: a
+paragraph-spacing or grid-snap difference, the next lead.
+
+**Next**
+
+1. Find the 3.7 pt vertical offset and the remaining line-grid overshoot.
+2. #5005: Latin Extended-A to a GB2312/Big5 East Asian font (F4).
+3. Watch CodeRabbit on the reworked PRs; then mark them ready (the user's call).
+
 ## 2026-10-31 (6): how WPS compresses punctuation, measured
 
 `corpus/tools/trim_probes.py` gives 2,361 marks measured across six fonts, four sizes and four

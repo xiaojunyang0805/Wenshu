@@ -1,6 +1,6 @@
 # What WPS does: measured findings
 
-*v0.2 · 2026-10-31 · WPS Office 12.1.0.29161 on Windows 11*
+*v0.3 · 2026-10-31 · WPS Office 12.1.0.29161 on Windows 11*
 
 Measured from WPS's own PDF exports of the corpus (`corpus/tools/wps_render.py`). PyMuPDF reads
 each character's origin from the PDF, so advances are exact to about 0.1 pt. The renders and PDFs
@@ -63,12 +63,10 @@ check like 0005's (advance ≥ 0.9 em) reproduces.
 - **It applies on a character grid too** (probe 01: about 0.1 em off marks on a 15.8 pt pitch).
 - `doNotCompress`: no squeeze and no free line-end half.
 
-**Consequence for 0005 / #5006:** the half-em pair model is wrong. The WPS model is a line-fitting
-rule: allow each compressible side to shrink up to 0.1 em when that fits the next unit, and don't
-count a final closing mark's blank half. It fits the corpus evidence: WPS gets about one more
-character onto each line of compression-on text (77% of real documents). Upstream's line breaker
-already has a shrinkable-space mechanism for justification (`shrink_spaces`); this would be a
-second shrinkable resource.
+**Done in 0005 / #5006** (2026-10-31): the squeeze (`ParaLayout::squeeze`, `lines::squeeze_line`)
+and the free line-end half (`auto_space`) replace the pair model. Re-scored: page-count matches
+112 → 122 of 200, mean page score 0.903 → 0.904, 28 documents better and 4 slightly worse. The
+sample letter now breaks every line where WPS does (9 pages, was 11).
 
 ## F2. On a character grid, every character gets the grid delta, whatever its size
 
@@ -83,9 +81,9 @@ Probe 08: 16 pt default on a 15.8 pt pitch (`charSpace=-842`).
 | 54.5 pt | 54.3 | 54.3 |
 
 Larger text does **not** take whole cells. This is how ECMA-376 defines `w:charSpace`: extra
-space added to each character. Upstream's `round` cell rule and 0002's `ceil` both differ.
+space added to each character. Upstream's `round` cell rule and 0002's first `ceil` both differed; 0002 now implements this rule.
 
-**Consequence for 0002 / #5003:** replace the cell rule with "advance = own size + delta".
+**Done in 0002 / #5003** (2026-10-31): `Grid::advance` = own size + delta; 12 pt text measured 11.8 pt as well (probe 30).
 
 ## F3. `*Chars` indents are grid pitches
 

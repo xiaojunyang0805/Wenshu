@@ -32,10 +32,10 @@ longer applies, and running the fidelity corpus before and after.
 | Patch | Crate | What | Upstream |
 |---|---|---|---|
 | 0001-fonts-substitute-provider-hook | wordcraft-fonts | `SubstituteProvider` + `set_substitute_provider()`: named substitutes from the embedding app, tried before the built-in lists | [#5002](https://github.com/storytold/wordcraft/pull/5002) (draft) |
-| 0002-layout-grid-cells-and-char-indents | wordcraft-layout | Character grid: text larger than the default size takes `ceil` cells (was `round`: 22 pt glyphs squeezed into one 15.8 pt cell and overlapped); `w:firstLineChars`/`leftChars`/`rightChars` count grid cells on a character grid (a 公文 first line held 25 + indent instead of 26 + indent). 2 tests | [#5003](https://github.com/storytold/wordcraft/pull/5003) (draft) |
+| 0002-layout-grid-cells-and-char-indents | wordcraft-layout | Character grid: East Asian text advances its size plus the grid adjustment (`w:charSpace`, ECMA-376 §17.6.5; measured in WPS), not `round` cells (22 pt glyphs had overlapped in one 15.8 pt cell); `w:firstLineChars`/`leftChars`/`rightChars` count pitches, one per character (a 公文 first line held 25 + indent instead of 26 + indent). Tests | [#5003](https://github.com/storytold/wordcraft/pull/5003) (draft) |
 | 0003-east-asian-hint-and-named-ea-substitutes | doc, docx, layout | Reads and writes `w:rFonts/@w:hint`; with `hint="eastAsia"`, the characters Word's block table lists (MS-OI29500 §2.1.88: curly quotes, dashes, Greek, Cyrillic, U+2000–27BF, some Latin-1 signs) use the East Asian font; the rows that need a Chinese `w:lang` are not applied yet. An East Asian font substituted *by name* (仿宋_GB2312 → FangSong) is kept instead of dropped to generic fallback, unless it resolved to the generic fallback itself. Round-trip + layout tests | [#5005](https://github.com/storytold/wordcraft/pull/5005) (draft, on #5003) |
 | 0004-layout-kinsoku-curly-quotes | wordcraft-layout | Kinsoku sets gain ” ’ 〃 〆 ‰ ℃ (no line start) and “ ‘ (no line end), needed once break opportunities beside quotes exist (Unicode 15.1 LB19a, kinsoku-off paths). Test | [#5004](https://github.com/storytold/wordcraft/pull/5004) (draft) |
-| 0005-layout-punctuation-compression | doc, docx, layout | `Settings::char_spacing` (`w:characterSpacingControl`) is read and written; it was always saved as `doNotCompress`, so a WPS document's `compressPunctuation` was lost on save. With compression on, adjacent full-width marks share one blank half (`。”` `）、` `”（` `《“`; JIS X 4051, clreq §3.1.6), only where the mark giving up its blank (and the cluster that shrinks) is ≥ 0.9 em. Undone at a line's end when the wrap splits a pair. Part of the layout-cache key. Text on a character grid keeps its cells, as with auto-spacing. Auto-spacing and compression share one neighbour walk. 6 layout + 1 docx test, round-trip extended | [#5006](https://github.com/storytold/wordcraft/pull/5006) (draft, on #5004) |
+| 0005-layout-punctuation-compression | doc, docx, layout | `Settings::char_spacing` (`w:characterSpacingControl`) read and written (it was always saved as `doNotCompress`). Layout as WPS does it (measured, [WPS-FINDINGS.md](WPS-FINDINGS.md) F1): a line that fits is untouched; an overflowing line squeezes its full-width marks by up to 0.1 em each (`ParaLayout::squeeze`, `lines::squeeze_line`); a closing mark ending a line needs no room for its blank half (`auto_space`). On character grids too. 7 layout + 1 docx test, round-trip extended | [#5006](https://github.com/storytold/wordcraft/pull/5006) (draft, on #5004) |
 
 All five apply in order on `3b7f7ed`; the `wordcraft-layout` (577), `-fonts` (102), `-doc` (242),
 `-docx` (500) and `-engine` (1094) suites pass with them, and fmt and clippy are clean.
@@ -52,15 +52,14 @@ Three tests also fail on unmodified upstream `main` on Windows (mcp `automation_
 
 ## Issues found (status)
 
-- ⚠️ Character grid: 27 instead of 28 characters per line; large text overlapping. 0002 fixed the
-  line count and the indents (confirmed by WPS), but its cell rule for larger text is wrong: WPS
-  gives each character its own size plus the grid delta, as ECMA-376 defines `w:charSpace`
-  ([WPS-FINDINGS.md](WPS-FINDINGS.md) F2). To rework.
+- ✅ Character grid: 27 instead of 28 characters per line; large text overlapping. Fixed by 0002,
+  reworked 2026-10-31 to the measured rule: each character advances its size plus the grid delta
+  ([WPS-FINDINGS.md](WPS-FINDINGS.md) F2); indents are pitches (F3).
 - ✅ Curly quotes drawn half-width in hinted East Asian runs. Fixed by 0003. Unhinted runs keep the
   Latin font, as the spec says.
 - ✅ Kinsoku for curly quotes. Fixed by 0004. Dashes and ellipses may start a line (GB/T 15834:
   they only must not be split; UAX #14 already keeps —— and …… together).
-- ⚠️ Punctuation compression. 0005 reads and writes the setting correctly, but its layout model
-  (half an em between adjacent pairs, off on a grid) does not match WPS. WPS trims about 0.1 em
-  from every full-width mark, on grids too ([WPS-FINDINGS.md](WPS-FINDINGS.md) F1). This is the
-  main cause of our longer page counts on the corpus. To rework once the trim is measured.
+- ✅ Punctuation compression. 0005 reads and writes the setting, and since 2026-10-31 lays it
+  out as WPS does (F1): squeeze on overflowing lines, free line-end blank half, no pair
+  closing-up. Corpus page-count matches 112 → 122 of 200. Open: `w:topLinePunct`, kana mode, a
+  Word reference.

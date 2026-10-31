@@ -1,44 +1,49 @@
 Upstream: https://github.com/storytold/wordcraft/pull/5003
 diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
-index df370aa..22f4535 100644
+index df370aa..e27201b 100644
 --- a/crates/layout/src/para/grid.rs
 +++ b/crates/layout/src/para/grid.rs
-@@ -29,6 +29,16 @@ impl Grid {
+@@ -29,6 +29,17 @@ impl Grid {
      pub fn key(&self) -> (u32, u32, u32, bool) {
          (self.line.map_or(0, f32::to_bits), self.chars.map_or(0, f32::to_bits), self.font_size.to_bits(), self.snap_all)
      }
-+    /// Cells an East Asian character of `size` points takes on the character grid: one at the
-+    /// default size or below, and as many as a larger size needs, never fewer than its size
-+    /// (Word spaces large text on a character grid out to whole cells rather than squeezing
-+    /// glyphs into one, which is why titles usually turn `snapToGrid` off).
-+    pub fn cells(&self, size: f32) -> f32 {
-+        let base = self.font_size.max(1.0);
-+        // The tolerance only absorbs rounding in the size (16.000001 pt on a 16 pt grid); 54.5 pt
-+        // on a 54 pt grid takes two cells.
-+        if size.is_finite() { (size / base - 1e-4).ceil().clamp(1.0, 64.0) } else { 1.0 }
++    /// The advance of an East Asian character of `size` points on the character grid: its size
++    /// plus the grid's adjustment, the pitch less the default size (`w:charSpace` is space added
++    /// to each character, ECMA-376 §17.6.5). At the default size that is the pitch; larger and
++    /// smaller text keeps its own size, so 22 pt text on a 15.8 pt grid for 16 pt advances
++    /// 21.8 pt and 12 pt text 11.8 pt, as WPS lays them out. `None` without a character grid.
++    pub fn advance(&self, size: f32) -> Option<f32> {
++        let pitch = self.chars?;
++        let size = if size.is_finite() && size > 0.0 { size } else { self.font_size };
++        let adv = size + pitch - self.font_size;
++        Some(if adv.is_finite() { adv.clamp(0.0, 1e4) } else { pitch })
 +    }
      /// `h` rounded up to whole line pitches (unchanged without a line grid).
      pub fn snap_height(&self, h: f32) -> f32 {
          match self.line {
-@@ -49,7 +59,8 @@ pub fn is_east_asian(c: char) -> bool {
+@@ -47,9 +58,9 @@ pub fn is_east_asian(c: char) -> bool {
+         | 0xFE30..=0xFE4F | 0xFF01..=0xFF60 | 0xFFE0..=0xFFE6 | 0x20000..=0x3FFFF)
+ }
  
- /// Character grid: East Asian characters (all text with `snapToChars`) take whole cells of the
- /// pitch, the glyph centred in them. A character at the default size takes one cell, a larger one
+-/// Character grid: East Asian characters (all text with `snapToChars`) take whole cells of the
+-/// pitch, the glyph centred in them. A character at the default size takes one cell, a larger one
 -/// as many as its size needs; Latin text stays proportional unless everything snaps.
-+/// as many as its size needs ([`Grid::cells`]); Latin text stays proportional unless everything
-+/// snaps.
++/// Character grid: East Asian characters advance by their size plus the grid's adjustment
++/// ([`Grid::advance`]: one pitch at the default size), the glyph centred in its advance. Latin
++/// text stays proportional unless everything snaps (`snapToChars`), when it takes whole cells.
  pub(super) fn snap_chars(b: &mut Builder, text: &str, grid: &Grid) {
      let Some(pitch) = grid.chars else { return };
      let base = grid.font_size.max(1.0);
-@@ -63,7 +74,7 @@ pub(super) fn snap_chars(b: &mut Builder, text: &str, grid: &Grid) {
+@@ -63,8 +74,7 @@ pub(super) fn snap_chars(b: &mut Builder, text: &str, grid: &Grid) {
              continue;
          }
          let size = b.styles.get(c.style as usize).map_or(base, |st| st.size);
 -        let cells = if east_asian { (size / base).round() } else { (c.adv / pitch - 0.01).ceil() }.clamp(1.0, 64.0);
-+        let cells = if east_asian { grid.cells(size) } else { (c.adv / pitch - 0.01).ceil().clamp(1.0, 64.0) };
-         let adv = cells * pitch;
+-        let adv = cells * pitch;
++        let adv = if east_asian { grid.advance(size).unwrap_or(pitch) } else { (c.adv / pitch - 0.01).ceil().clamp(1.0, 64.0) * pitch };
          let shift = (adv - c.adv) / 2.0;
          for g in b.glyphs.get_mut(c.g0 as usize..c.g1 as usize).into_iter().flatten() {
+             g.dx += shift;
 diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
 index f5fdb3c..5925b31 100644
 --- a/crates/layout/src/para/paragraph.rs
@@ -61,10 +66,10 @@ index f5fdb3c..5925b31 100644
      list_indents(&mut rp, p, env);
      rp
 diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
-index 87ae674..128bc1f 100644
+index 87ae674..bfc2968 100644
 --- a/crates/layout/src/tests/grid.rs
 +++ b/crates/layout/src/tests/grid.rs
-@@ -63,6 +63,102 @@ fn line_grid_snaps_line_heights_and_fixes_lines_per_page() {
+@@ -63,6 +63,108 @@ fn line_grid_snaps_line_heights_and_fixes_lines_per_page() {
      assert_eq!(lines(&lay(&off)).1[0], lines(&lay(&plain)).1[0]);
  }
  
@@ -83,17 +88,20 @@ index 87ae674..128bc1f 100644
 +}
 +
 +#[test]
-+fn larger_east_asian_text_takes_whole_cells_and_never_overlaps() {
-+    // A title at 1.375 times the default size (22 pt over a 16 pt grid): two cells a character,
-+    // not one cell narrower than the glyph.
-+    let (mut d, size, pitch) = tight_grid("关于通知");
-+    if let Some(Block::Para(p)) = d.body.first_mut().map(std::sync::Arc::make_mut) {
-+        p.runs[0].props.size = Some(size * 1.375);
-+    }
-+    let g = first_para(&lay(&d));
-+    for c in &g.clusters {
-+        assert!((c.adv - 2.0 * pitch).abs() < 0.01, "advance {} for pitch {pitch}", c.adv);
-+        assert!(c.adv >= size * 1.375, "a cell narrower than its glyph");
++fn east_asian_text_of_any_size_keeps_its_size_plus_the_grid_adjustment() {
++    // A title at 1.375 times the default size (22 pt over a 16 pt grid) advances its own size
++    // plus the pitch's difference from the default size, not whole cells, and smaller text too:
++    // WPS gives 22 pt text 21.8 pt and 12 pt text 11.8 pt on a 15.8 pt grid for 16 pt.
++    for scale in [1.375, 0.75] {
++        let (mut d, size, pitch) = tight_grid("关于通知");
++        if let Some(Block::Para(p)) = d.body.first_mut().map(std::sync::Arc::make_mut) {
++            p.runs[0].props.size = Some(size * scale);
++        }
++        let g = first_para(&lay(&d));
++        for c in &g.clusters {
++            let want = size * scale + pitch - size;
++            assert!((c.adv - want).abs() < 0.01, "advance {} for {} pt on pitch {pitch}", c.adv, size * scale);
++        }
 +    }
 +    // Text at the default size keeps one cell, even on a pitch a little under that size.
 +    let (d, _, pitch) = tight_grid("关于通知");
@@ -154,14 +162,17 @@ index 87ae674..128bc1f 100644
 +}
 +
 +#[test]
-+fn grid_cells_round_up_only_past_a_whole_cell() {
-+    let grid = |font_size: f32| para::Grid { line: None, chars: Some(font_size), font_size, snap_all: false };
-+    assert_eq!(grid(16.0).cells(16.0), 1.0);
-+    assert_eq!(grid(16.0).cells(16.000_001), 1.0, "rounding noise");
-+    assert_eq!(grid(16.0).cells(12.0), 1.0);
-+    assert_eq!(grid(16.0).cells(22.0), 2.0);
-+    assert_eq!(grid(54.0).cells(54.5), 2.0, "half a point past the cell");
-+    assert_eq!(grid(16.0).cells(f32::NAN), 1.0);
++fn grid_advance_is_the_size_plus_the_adjustment() {
++    let grid = |pitch: f32| para::Grid { line: None, chars: Some(pitch), font_size: 16.0, snap_all: false };
++    let near = |a: Option<f32>, b: f32| a.is_some_and(|a| (a - b).abs() < 1e-4);
++    assert!(near(grid(15.8).advance(16.0), 15.8));
++    assert!(near(grid(15.8).advance(22.0), 21.8));
++    assert!(near(grid(15.8).advance(54.5), 54.3));
++    assert!(near(grid(15.8).advance(12.0), 11.8));
++    assert!(near(grid(18.0).advance(16.0), 18.0), "a wider pitch adds space");
++    assert!(near(grid(15.8).advance(f32::NAN), 15.8), "an unreadable size takes the pitch");
++    assert!(near(grid(2.0).advance(4.0), 0.0), "never negative");
++    assert_eq!(para::Grid { line: None, chars: None, font_size: 16.0, snap_all: false }.advance(16.0), None);
 +}
 +
  #[test]

@@ -147,10 +147,10 @@ index d8eebd0..e5f73e3 100644
          let (levels, lbase): (&[u8], usize) = match dir {
              Dir::Para => (&self.levels, base),
 diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
-index 22f4535..74aa334 100644
+index e27201b..5a2625f 100644
 --- a/crates/layout/src/para/grid.rs
 +++ b/crates/layout/src/para/grid.rs
-@@ -163,3 +163,17 @@ impl Exclusion {
+@@ -162,3 +162,17 @@ impl Exclusion {
  pub(super) fn east_asian(c: char) -> bool {
      crate::kinsoku::is_east_asian(c) || matches!(u32::from(c), 0x1100..=0x11FF | 0x3130..=0x318F | 0xAC00..=0xD7AF)
  }
@@ -169,11 +169,11 @@ index 22f4535..74aa334 100644
 +        | 0xE000..=0xF8FF | 0xFB00..=0xFB1C)
 +}
 diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
-index 128bc1f..749d118 100644
+index bfc2968..d858556 100644
 --- a/crates/layout/src/tests/grid.rs
 +++ b/crates/layout/src/tests/grid.rs
-@@ -159,6 +159,58 @@ fn grid_cells_round_up_only_past_a_whole_cell() {
-     assert_eq!(grid(16.0).cells(f32::NAN), 1.0);
+@@ -165,6 +165,58 @@ fn grid_advance_is_the_size_plus_the_adjustment() {
+     assert_eq!(para::Grid { line: None, chars: None, font_size: 16.0, snap_all: false }.advance(16.0), None);
  }
  
 +#[test]
