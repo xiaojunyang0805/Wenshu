@@ -2,6 +2,23 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-02 (6): the punctuation squeeze limit is per line (F10)
+
+Our generated 函 (`gen-gongwen-04-han`) lost `来。` to a second line: WPS squeezed its one `，` by half
+an em, which F1's "0.1 em per mark" forbids. Variants (compatibility modes, alignment) and
+width sweeps (`trim_probes.py sweep-k`, about 60 sweeps of 51 widths) replaced the rule: the
+limit is per line, ½ em in mode 14 and older, more when the line ends in a closing mark or has
+closing-opening meetings, and in mode 15 only on justified lines (F10, patch 0012). The model
+also explains F1's original ten-comma data.
+
+Re-scored (0011 → 0012): page-count matches **128 → 135 / 200**, mean 0.9061 → 0.9077, 44
+documents better, 5 slightly worse (worst −0.019); all 13 page-count changes moved towards WPS
+(7 new matches, none lost). Layout 583 tests; fmt and clippy clean; the queue 0001–0012 applies
+on the pin and reproduces the tested tree.
+
+**Next:** the 65 documents still differing in page count; F10's mode-15 additions measured
+precisely; 0011 and 0012 into #5003 and #5006.
+
 ## 2026-11-02 (5): grid advances keep scale and spacing (F9)
 
 A first-divergence pass over the 57 documents longer than WPS (`out/firstdiv.py`: first line

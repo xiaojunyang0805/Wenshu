@@ -33,6 +33,9 @@ character on most lines** (26 against 25). The cause is how WPS compresses punct
 
 ## F1. Punctuation compression squeezes overflowing lines; it never closes up pairs
 
+> **Superseded in part by F10 (2026-11-02):** the limit is per line, not "0.1 em per mark", and
+> it depends on the compatibility mode. The sides table and the line-end half still stand.
+
 Probes 01–07, then `corpus/tools/trim_probes.py`: six fonts × four sizes × four font setups, each
 with compression on and off (2,361 measured marks), and a width sweep from 20 em down to 17 em in
 0.05 em steps. `w:characterSpacingControl="compressPunctuation"` does exactly two things in WPS:
@@ -151,12 +154,38 @@ the grid adjustment plus its spacing**. 0002 used the unscaled size and dropped 
 red-header titles (瑞安市教育局文件: 54 pt at 90%, `jc=distribute` in a 411 pt cell) took 53.8 pt
 a character and lost their last one to a second line. Patch 0011.
 
+## F10. The squeeze limit is per line, and depends on the compatibility mode
+
+Width sweeps (`trim_probes.py sweep-k`, 20-unit lines narrowed from 20 em in 0.05 em steps, 16 pt
+仿宋, rendered in WPS) with 1–8 commas, mixed marks, marks one ideograph apart, closing pairs,
+closing-opening pairs, with and without a closing mark at the line end, left-aligned and justified,
+no grid, a line grid and the 公文 character grid, in compatibility modes 14 and 15:
+
+- **Mode 14 and older, any alignment, any grid:** a line may squeeze **½ em in all**, however many
+  marks (1, 2, 3, 5 or 8 commas, eight different marks, or three closing pairs: always 19.5 em).
+  The marks share it equally (one comma gives up 0.5 em, two 0.25, five 0.1).
+- **A closing mark at the line end** (its blank half free, as in F1) adds ½ em: three or five
+  commas then fit 18.5 em. The end mark itself isn't squeezed.
+- **Closing marks meeting opening marks** (`：“` `”（` `、《` `》“`): every two such places add ½ em
+  (four of them, line ending in an ideograph: 18.5 em, 1.5 em of squeeze; one: ½ em).
+- **Mode 15:** nothing is squeezed on a left-aligned line and a line-end mark gets no free half.
+  On justified lines the base is **1 − 1/(2k) em** for k marks (0.5, 0.75, 0.8, 0.85, 0.85, 0.9,
+  0.9 em measured for k = 1, 2, 3, 4, 5, 6, 8), with the same additions.
+
+F1's "0.1 em per mark" came from ten commas on a line ending in `，`: ½ em free plus ½ + ½ em of
+squeeze, spread over ten marks. `gen-gongwen-04-han` (no `w:compat`, so legacy mode) showed it:
+WPS squeezes a lone `，` by half an em to keep `来。` on the line. Patch 0012 implements the rule
+(`SqueezeRule`, `ParaLayout::squeeze_room`). The documents without `w:compat` (16 of 200) are
+legacy mode, as WordCraft already reads them.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).
 - How the squeeze interacts with justification (`jc=both`) and kinsoku.
 - `w:topLinePunct` (F5).
 - `*Chars` indents with no document grid at all (F8 covers line grids).
+- F10's additions on justified mode-15 lines (measured roughly: 1.33 em for three commas and an
+  end mark, 1.8 em for four closing-opening meetings), and marks of mixed sizes on one line.
 - Where at-least spacing puts the baseline when the minimum is larger than the text (F6 covers
   exact only).
 - Word's behaviour for each finding. Upstream targets Word, so changes to #5003/#5006 need

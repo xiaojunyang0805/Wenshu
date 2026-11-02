@@ -43,6 +43,7 @@ longer applies, and running the fidelity corpus before and after.
 | 0009-balance-sbcs-dbcs-spaces | wordcraft-doc, -docx, -layout | `w:balanceSingleByteDoubleByteWidth` is read into `Settings::balance_sbcs_dbcs`, written back, and makes every U+0020 space half an em of its size (WPS, probe 33). Tests | not opened: measured in WPS only |
 | 0010-layout-line-grid-char-indents | wordcraft-doc, -layout | On a line grid without a character pitch, `leftChars`/`rightChars` count the Normal style's size and `firstLineChars` the mark's (`ResolvedPara::set_char_units`; WPS, probe 34). Test | not opened: builds on 0002 (#5003); measured in WPS only |
 | 0011-layout-grid-scale-spacing | wordcraft-layout | On a character grid an East Asian character advances its `w:w`-scaled size plus the grid adjustment plus its `w:spacing` (WPS, probe 35); 0002 used the unscaled size and dropped the spacing. Test | not opened: fold into #5003 (0002) with the next push |
+| 0012-layout-punctuation-squeeze-per-line | wordcraft-layout | The punctuation squeeze limit is per line (`SqueezeRule`): ½ em in compatibility mode 14 and older, 1 − 1/(2k) em on justified mode-15 lines, ½ em more for a line ending in a closing mark and per two closing-opening meetings; unjustified mode-15 lines neither squeeze nor get the free line-end half (WPS, F10). Tests | not opened: fold into #5006 (0005) |
 
 All six apply in order on `3b7f7ed`; the `wordcraft-layout` (577), `-fonts` (102), `-doc` (242),
 `-docx` (500) and `-engine` (1094) suites pass with them, and fmt and clippy are clean.

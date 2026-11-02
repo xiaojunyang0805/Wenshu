@@ -1,0 +1,301 @@
+Upstream: (not opened; fold into #5006 with 0005: WPS's squeeze limit is per line, not 0.1 em per mark: ½ em in compatibility mode 14 and older, 1 − 1/(2k) em on justified mode-15 lines, ½ em more for a line ending in a closing mark and per two closing-opening meetings; mode 15 leaves other lines alone; F10)
+diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
+index e3e3554..1d636ec 100644
+--- a/crates/layout/src/para/grid.rs
++++ b/crates/layout/src/para/grid.rs
+@@ -140,9 +140,10 @@ pub(super) fn auto_space(b: &mut Builder, text: &str, de: bool, dn: bool) -> Vec
+ }
+ 
+ /// Punctuation compression (`w:characterSpacingControl` other than `doNotCompress`), as WPS
+-/// does it: nothing changes on a line that fits. On a line that would overflow, each compressible
+-/// side of a full-width mark ([`crate::kinsoku::squeeze_side`]) may give up to a tenth of an em
+-/// so the next unit fits ([`Squeeze`], used by the line breaker), and a closing mark ending a
++/// does it: nothing changes on a line that fits. On a line that would overflow, the compressible
++/// sides of full-width marks ([`crate::kinsoku::squeeze_side`]) give up room so the next unit
++/// fits, each the same share, at most its blank half and the line at most what its
++/// [`super::SqueezeRule`] allows ([`Squeeze`], used by the line breaker), and a closing mark ending a
+ /// line takes no room for its blank half ([`crate::kinsoku::end_blank`]). Returns the squeeze
+ /// room and the line-end room by cluster index; a mark is full-width when it is one character
+ /// whose advance is at least 0.9 em, so a proportional (Latin) quote is left alone.
+@@ -159,7 +160,7 @@ pub(super) fn compress_punct(b: &Builder, text: &str) -> (Vec<Squeeze>, Vec<(usi
+             continue;
+         }
+         if let Some(side) = crate::kinsoku::squeeze_side(ch) {
+-            squeeze.push(Squeeze { k, room: (size / 10.0).min(40.0), left: side == crate::kinsoku::Side::Left });
++            squeeze.push(Squeeze { k, room: (size / 2.0).min(200.0), left: side == crate::kinsoku::Side::Left });
+         }
+         if crate::kinsoku::end_blank(ch) {
+             end.push((k, (size / 2.0).min(200.0)));
+diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
+index 000db66..82fd807 100644
+--- a/crates/layout/src/para/lines.rs
++++ b/crates/layout/src/para/lines.rs
+@@ -650,19 +650,20 @@ struct Measure {
+ }
+ 
+ /// Punctuation compression: a line that overflows (it fitted only by counting its marks' squeeze
+-/// room) takes the overflow out of its compressible marks, each in proportion to its room and
+-/// never more, so it ends at the margin as WPS lays it out. An opening mark moves left itself;
+-/// after a closing mark the rest of the line does.
++/// room) takes the overflow out of its compressible marks, each in proportion to its blank half
++/// (the same share at one size), never more than the line's room, so it ends at the margin as
++/// WPS lays it out. An opening mark moves left itself; after a closing mark the rest of the line
++/// does.
+ fn squeeze_line(pl: &ParaLayout, sc: &mut Scan, c1: usize) {
+     let c0 = sc.c0;
+     let over = content_end(pl, sc, c1) - sc.right_edge;
+     let room = pl.squeeze_room(c0, c1);
+-    if over <= 0.0 || room <= 0.0 {
++    let marks = pl.squeeze_marks(c0, c1);
++    let halves: f32 = marks.iter().map(|s| s.room).sum();
++    if over <= 0.0 || room <= 0.0 || halves <= 0.0 {
+         return;
+     }
+-    let f = (over / room).min(1.0);
+-    let from = pl.squeeze.partition_point(|s| s.k < c0);
+-    let marks = pl.squeeze.get(from..).unwrap_or_default();
++    let f = (over.min(room) / halves).min(1.0);
+     let (mut shift, mut m) = (0.0, 0);
+     for k in c0..=c1 {
+         let mut after = 0.0;
+diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
+index 1f0c9aa..089b41e 100644
+--- a/crates/layout/src/para/paragraph.rs
++++ b/crates/layout/src/para/paragraph.rs
+@@ -581,8 +581,16 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+     // Text on a character grid keeps to its cells; compression applies there too (WPS).
+     let mut auto_space =
+         if rp.snap_to_grid && env.grid.chars.is_some() { Vec::new() } else { auto_space(&mut sh.b, &p.text, rp.auto_space_de, rp.auto_space_dn) };
+-    let squeeze = if doc.settings.char_spacing.compresses_punctuation() {
++    // Compatibility mode 15 squeezes justified lines only, and only they get a closing mark's
++    // blank half free at the line end; older modes do both on every line (WPS).
++    let justified = matches!(rp.align, wordcraft_doc::props::Align::Justify | wordcraft_doc::props::Align::Distribute);
++    let squeeze_rule =
++        if doc.settings.compat_mode >= wordcraft_doc::COMPAT_MODE_CURRENT { super::SqueezeRule::Justified } else { super::SqueezeRule::HalfEm };
++    let compresses = doc.settings.char_spacing.compresses_punctuation() && (justified || squeeze_rule == super::SqueezeRule::HalfEm);
++    let mut end_marks = Vec::new();
++    let squeeze = if compresses {
+         let (squeeze, end_blank) = compress_punct(&sh.b, &p.text);
++        end_marks = end_blank.iter().map(|e| e.0).collect();
+         for (k, room) in end_blank {
+             match auto_space.binary_search_by_key(&k, |a| a.0) {
+                 Ok(i) => auto_space.get_mut(i).into_iter().for_each(|a| a.1 += room),
+@@ -626,6 +634,8 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+         enclosures,
+         auto_space,
+         squeeze,
++        squeeze_rule,
++        end_marks,
+     };
+     let auto = env.doc.settings.auto_hyphenation && !pl.rp.suppress_hyphens;
+     pl.hyph_after = hyphenation_points(&bt.text, |i| bt.to_para(i), &pl, auto, env.doc.settings.hyphenate_caps, &runs);
+diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
+index d82a9b3..1b58795 100644
+--- a/crates/layout/src/para.rs
++++ b/crates/layout/src/para.rs
+@@ -98,6 +98,26 @@ pub struct ParaLayout {
+     /// What each compressible mark may give up on a line that would otherwise overflow
+     /// ([`compress_punct`]), by cluster index, sorted. Empty unless punctuation is compressed.
+     pub squeeze: Vec<Squeeze>,
++    /// How much a line may squeeze its marks in all ([`SqueezeRule`]).
++    pub squeeze_rule: SqueezeRule,
++    /// Closing marks whose blank half is free at a line's end ([`compress_punct`]), by cluster
++    /// index, sorted: a line ending in one may squeeze more.
++    pub end_marks: Vec<usize>,
++}
++
++/// How much one line may take from its compressible marks in all, measured in WPS Office on
++/// 20-character lines (sweeps of 1–8 marks, isolated, mixed, in pairs, with and without a closing
++/// mark at the line end). Each mark gives up the same share, at most its blank half. On top of
++/// the base below, a line ending in a closing mark may take another half em, and every two
++/// places where a closing mark meets an opening one (`：“` `”（` `、《`) another half em.
++#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
++pub enum SqueezeRule {
++    /// Compatibility mode 14 and older (any alignment): half an em, however many marks.
++    #[default]
++    HalfEm,
++    /// Mode 15, justified lines only: 1 − 1/(2k) em for k marks (½ em for one mark, ¾ for two,
++    /// approaching a whole em).
++    Justified,
+ }
+ 
+ /// Room one side of a full-width punctuation mark may give up when its line is squeezed.
+@@ -137,10 +157,37 @@ impl ParaLayout {
+     }
+ 
+     /// The automatic space in cluster `k`'s advance ([`auto_space`]), 0 without one.
+-    /// The squeeze room of the clusters `c0..c1`.
+-    fn squeeze_room(&self, c0: usize, c1: usize) -> f32 {
++    /// Whether a line of the clusters `c0..c1` ends in a closing mark whose blank half is free.
++    fn ends_in_free_mark(&self, c0: usize, c1: usize) -> bool {
++        c1 > c0 && self.end_marks.binary_search(&(c1 - 1)).is_ok()
++    }
++    /// The marks of the clusters `c0..c1` that may give up room: not a closing mark ending the
++    /// line, whose blank half is free already.
++    fn squeeze_marks(&self, c0: usize, c1: usize) -> &[Squeeze] {
+         let from = self.squeeze.partition_point(|s| s.k < c0);
+-        self.squeeze.get(from..).unwrap_or_default().iter().take_while(|s| s.k < c1).map(|s| s.room).sum()
++        let end = if self.ends_in_free_mark(c0, c1) { c1 - 1 } else { c1 };
++        let to = self.squeeze.partition_point(|s| s.k < end).max(from);
++        self.squeeze.get(from..to).unwrap_or_default()
++    }
++    /// How much the clusters `c0..c1` may squeeze in all: each mark at most its blank half
++    /// ([`Squeeze::room`]), the line at most what its [`SqueezeRule`] allows.
++    fn squeeze_room(&self, c0: usize, c1: usize) -> f32 {
++        let marks = self.squeeze_marks(c0, c1);
++        if marks.is_empty() {
++            return 0.0;
++        }
++        let k = marks.len() as f32;
++        let rooms: f32 = marks.iter().map(|s| s.room).sum();
++        // A mark's room is half its size, so the marks' mean size is rooms × 2 / k.
++        let em = rooms * 2.0 / k;
++        let base = match self.squeeze_rule {
++            SqueezeRule::HalfEm => 0.5,
++            SqueezeRule::Justified => 1.0 - 0.5 / k,
++        };
++        // A closing mark's side next to an opening mark's.
++        let meets = marks.windows(2).filter(|w| matches!(w, [a, b] if !a.left && b.left && b.k == a.k + 1)).count();
++        let bonus = 0.5 * (f32::from(u8::from(self.ends_in_free_mark(c0, c1))) + (meets / 2) as f32);
++        ((base + bonus) * em).min(rooms)
+     }
+     fn auto_space_after(&self, k: usize) -> f32 {
+         self.auto_space.binary_search_by_key(&k, |a| a.0).ok().and_then(|i| self.auto_space.get(i)).map_or(0.0, |a| a.1)
+diff --git a/crates/layout/src/tests/compress.rs b/crates/layout/src/tests/compress.rs
+index 442c50d..564babe 100644
+--- a/crates/layout/src/tests/compress.rs
++++ b/crates/layout/src/tests/compress.rs
+@@ -1,6 +1,8 @@
+ //! Punctuation compression (`w:characterSpacingControl`) as WPS lays it out: a line that would
+-//! overflow squeezes its full-width marks by up to a tenth of an em each, a closing mark ending a
+-//! line needs no room for its blank half, and a line that fits is left alone. Assertions compare
++//! overflow squeezes its full-width marks, each the same share, by half an em in all in
++//! compatibility mode 14 and older (1 − 1/(2k) em for k marks on justified lines in mode 15,
++//! nothing on other mode-15 lines); a closing mark ending a line needs no room for its blank half
++//! (not on unjustified mode-15 lines); a line that fits is left alone. Assertions compare
+ //! layouts with compression on and off and are relative to the font size, never font metrics; a
+ //! machine without a CJK font draws the marks proportionally, and then nothing is compressed.
+ 
+@@ -23,6 +25,7 @@ fn first_para(l: &DocLayout) -> Arc<ParaLayout> {
+ fn doc(text: &str, mode: CharSpacing, width_em: Option<f32>) -> Document {
+     let mut d = Document::from_text(text);
+     d.settings.char_spacing = mode;
++    d.settings.compat_mode = 14;
+     let probe = first_para(&lay(&Document::from_text("x")));
+     let full = probe.lines[0].right - probe.lines[0].left;
+     if let Some(Block::Para(p)) = d.body.first_mut().map(Arc::make_mut) {
+@@ -59,12 +62,12 @@ fn a_line_that_fits_is_left_alone() {
+ }
+ 
+ #[test]
+-fn an_overflowing_line_squeezes_its_marks_by_up_to_a_tenth_of_an_em() {
++fn an_overflowing_line_squeezes_its_marks_by_half_an_em_in_all() {
+     if !full_width_marks() {
+         return;
+     }
+-    // Ten 中， pairs are 20 em. At 19 em the last ，'s blank half is free (19.5 em) and the ten
+-    // marks give up 0.05 em each; without compression the line holds nine pairs.
++    // Ten 中， pairs are 20 em. At 19 em the last ，'s blank half is free (19.5 em) and the other
++    // nine marks give up the other half em; without compression the line holds nine pairs.
+     let text = "中，".repeat(14);
+     let (on, g) = first_line_chars(&text, CharSpacing::CompressPunctuation, 19.0);
+     let (off, _) = first_line_chars(&text, CharSpacing::DoNotCompress, 19.0);
+@@ -73,23 +76,83 @@ fn an_overflowing_line_squeezes_its_marks_by_up_to_a_tenth_of_an_em() {
+     // The squeezed line ends at the margin (its last mark's blank half hanging past it).
+     let end = line.xs.last().copied().unwrap_or_default();
+     assert!((end - SIZE / 2.0 - line.right).abs() < 0.05, "line ends at {end}, right {}", line.right);
+-    // Each mark gave up the same, a tenth of an em at most.
+-    for k in (1..19).step_by(2) {
++    // Each of the nine gave up the same.
++    for k in (1..18).step_by(2) {
+         let adv = line.xs[k + 1] - line.xs[k];
+-        assert!((adv - (SIZE - 0.05 * SIZE)).abs() < 0.05, "mark {k} advances {adv}");
++        assert!((adv - (SIZE - SIZE / 18.0)).abs() < 0.05, "mark {k} advances {adv}");
+     }
+ }
+ 
+ #[test]
+-fn a_mark_never_gives_up_more_than_a_tenth_of_an_em() {
++fn a_line_gives_up_half_an_em_however_many_marks_it_has() {
+     if !full_width_marks() {
+         return;
+     }
+-    // At 18.4 em ten pairs would need 0.11 em from each mark: the line holds nine pairs.
++    // Ten pairs ending in a ，: its blank half is free and, as the line ends in a closing mark, the
++    // other nine may give up a whole em (WPS: 18.5 em fits, 18.45 em doesn't).
++    let (on, _) = first_line_chars(&"中，".repeat(14), CharSpacing::CompressPunctuation, 18.5);
++    assert_eq!(on, 20);
+     let (on, _) = first_line_chars(&"中，".repeat(14), CharSpacing::CompressPunctuation, 18.4);
+     assert_eq!(on, 18);
+-    let (on, _) = first_line_chars(&"中，".repeat(14), CharSpacing::CompressPunctuation, 18.55);
+-    assert_eq!(on, 20);
++    // Twenty units ending in an ideograph, with one or five commas: 19.5 em fits, 19.4 doesn't
++    // (one comma gives up its whole blank half, five a tenth of an em each).
++    for k in [1usize, 5] {
++        let mut units = vec!['中'; 20];
++        for j in 0..k {
++            units[1 + j * (18 / k)] = '，';
++        }
++        let text: String = units.into_iter().chain("国国国国".chars()).collect();
++        assert_eq!(first_line_chars(&text, CharSpacing::CompressPunctuation, 19.5).0, 20, "{k} commas at 19.5 em");
++        assert_eq!(first_line_chars(&text, CharSpacing::CompressPunctuation, 19.4).0, 19, "{k} commas at 19.4 em");
++    }
++}
++
++#[test]
++fn closing_marks_meeting_opening_marks_squeeze_more() {
++    if !full_width_marks() {
++        return;
++    }
++    // Four places where a closing mark meets an opening one: 1.5 em in all (WPS: 18.5 em fits);
++    // one such place: the usual half em. (「」, not “”, which a test document sets in its Latin font.)
++    let four = "甲中：「中中中」（中中中、《中中中》「中国国国";
++    assert_eq!(first_line_chars(four, CharSpacing::CompressPunctuation, 18.5).0, 20);
++    // (At 18.4 em the line breaks before 「中: an opening mark never ends a line.)
++    assert_eq!(first_line_chars(four, CharSpacing::CompressPunctuation, 18.4).0, 18);
++    let one = "甲中中中中中中中」（中中中中中中中中中中国国国";
++    assert_eq!(first_line_chars(one, CharSpacing::CompressPunctuation, 19.5).0, 20);
++    assert_eq!(first_line_chars(one, CharSpacing::CompressPunctuation, 19.4).0, 19);
++}
++
++#[test]
++fn compatibility_mode_15_squeezes_justified_lines_only() {
++    if !full_width_marks() {
++        return;
++    }
++    let twenty = |k: usize| {
++        let mut units = vec!['中'; 20];
++        for j in 0..k {
++            units[1 + j * (18 / k)] = '，';
++        }
++        units.into_iter().chain("国国国国".chars()).collect::<String>()
++    };
++    let chars = |text: &str, align: Align, width: f32| {
++        let mut d = doc(text, CharSpacing::CompressPunctuation, Some(width));
++        d.settings.compat_mode = 15;
++        if let Some(Block::Para(p)) = d.body.first_mut().map(Arc::make_mut) {
++            p.props.align = Some(align);
++        }
++        let g = first_para(&lay(&d));
++        g.lines[0].c1 - g.lines[0].c0
++    };
++    // Left-aligned: no squeeze and no free blank half at the line end.
++    assert_eq!(chars(&twenty(1), Align::Left, 19.9), 19);
++    assert_eq!(chars(&format!("{}，国国国", "中".repeat(19)), Align::Left, 19.6), 18);
++    // Justified: 1 − 1/(2k) em in all (WPS: 19.50 em for one comma, 19.25 for two, 19.15 for five).
++    for (k, fits, breaks) in [(1, 19.5, 19.45), (2, 19.25, 19.2), (5, 19.15, 19.05)] {
++        assert_eq!(chars(&twenty(k), Align::Justify, fits), 20, "{k} commas at {fits} em");
++        assert_eq!(chars(&twenty(k), Align::Justify, breaks), 19, "{k} commas at {breaks} em");
++    }
++    assert_eq!(chars(&format!("{}，国国国", "中".repeat(19)), Align::Justify, 19.6), 20);
+ }
+ 
+ #[test]
+@@ -141,6 +204,7 @@ fn compression_applies_on_a_character_grid() {
+     let text = "“你好。”（再见）";
+     let mut d = Document::from_text(text);
+     d.settings.char_spacing = CharSpacing::CompressPunctuation;
++    d.settings.compat_mode = 14;
+     d.last_section.doc_grid = Some(DocGrid { kind: DocGridType::LinesAndChars, line_pitch: 15.6, char_space: 0 });
+     let g = first_para(&lay(&d));
+     let size = g.clusters.get(3).and_then(|c| g.styles.get(c.style as usize)).map_or(0.0, |s| s.size);

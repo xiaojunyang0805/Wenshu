@@ -173,9 +173,94 @@ def sweep_read(d):
             k += 1
 
 
+def sweep_k(out, jc="left", grid=""):
+    """Lines of 20 units holding K commas (K = 1, 2, 3, 5) and ending in an ideograph, narrowed from
+    20 em to 17.5 em in 0.05 em steps, in compatibility modes 14 and 15 (16 pt 仿宋).
+
+    The narrowest width that still keeps all 20 units on the first line is 20 em minus the line's
+    total squeeze: it tells a limit per mark from a limit per line."""
+    from docx import Document
+    from lxml import etree
+
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    text_w = 16838 - 1440
+    sz, font = 32, "仿宋"
+    em = sz / 2
+    for mode in (14, 15):
+        cases = []
+        for k in (1, 2, 3, 4, 5, 6, 8):
+            units = ["中"] * 20
+            for j in range(k):
+                units[1 + j * (18 // k)] = "，"
+            units[0] = "甲"
+            cases.append((f"k{k}", "".join(units)))
+        # Mixed marks: is the half em per line, or per kind of mark?
+        for name, marks in (("mix8", "，。、：；）》】"), ("c4p4", "，，，，。。。。"), ("c2p2", "，，。。"), ("mix4", "，。、：")):
+            units = ["中"] * 20
+            for j, m in enumerate(marks):
+                units[1 + j * (18 // len(marks))] = m
+            units[0] = "甲"
+            cases.append((name, "".join(units)))
+        # Adjacent closing pairs, and marks one ideograph apart.
+        cases.append(("pairs4", "甲" + "中中中。”中中中）、中中中》，中中中。”中"[:19]))
+        cases.append(("dense8", "甲" + "中，中。中、中：中；中）中》中】中中中"[:19]))
+        cases.append(("pair1", "甲中中）、中中中，中中中，中中中，中中中"))
+        cases.append(("pair2", "甲中中）、中中中，中中中。”中中中，中中"))
+        cases.append(("pair3-noend", "甲中中。”中中）、中中中》，中中中中中中"))
+        cases.append(("pair1-only", "甲中中中中中中中）、中中中中中中中中中中"))
+        cases.append(("k1-endp", "甲中中中中中中中中，中中中中中中中中中。"))
+        cases.append(("k5-endp", "甲中，中中，中中中，中中中，中中中，中。"))
+        cases.append(("k3-endp", "甲中中中，中中中中，中中中中，中中中中。"))
+        cases.append(("openclose", "甲中：“中中中”（中中中、《中中中》“中"))
+        cases.append(("openclose1", "甲中中中中中中中”（中中中中中中中中中中"))
+        # A closing mark at the line end, no other mark: its blank half, or the whole mark, hangs?
+        cases += [("end-comma", "甲" + "中" * 18 + "，"), ("end-period", "甲" + "中" * 18 + "。")]
+        for name, first in cases:
+            line = first + "国" * 12
+            d = Document()
+            body = d.element.body
+            for child in list(body):
+                body.remove(child)
+            ps = []
+            for i in range(51):
+                right = text_w - round(em * (20 - 0.05 * i) * 20)
+                rpr = f'<w:rFonts w:ascii="{font}" w:hAnsi="{font}" w:eastAsia="{font}"/><w:sz w:val="{sz}"/>'
+                ps.append(f'<w:p><w:pPr><w:jc w:val="{jc}"/><w:ind w:left="0" w:right="{right}"/></w:pPr><w:r><w:rPr>{rpr}</w:rPr><w:t>{line}</w:t></w:r></w:p>')
+            sect = '<w:sectPr><w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="0" w:footer="0" w:gutter="0"/>' + grid + '</w:sectPr>'
+            for child in etree.fromstring(f'<w:body xmlns:w="{W}">{"".join(ps)}{sect}</w:body>'):
+                body.append(child)
+            st = d.settings.element
+            for e in st.findall(f"{{{W}}}characterSpacingControl"):
+                st.remove(e)
+            st.append(etree.fromstring(f'<w:characterSpacingControl xmlns:w="{W}" w:val="compressPunctuation"/>'))
+            for e in st.iter(f"{{{W}}}compatSetting"):
+                if e.get(f"{{{W}}}name") == "compatibilityMode":
+                    e.set(f"{{{W}}}val", str(mode))
+            d.save(out / f"sweepk-m{mode}-{name}{'' if jc == 'left' else '-' + jc}{'-grid' if grid else ''}.docx")
+
+
+def sweep_k_read(d):
+    import fitz
+
+    for pdf in sorted((Path(d) / "pdf").glob("sweepk-*.pdf")):
+        firsts = []
+        with fitz.open(pdf) as doc:
+            for page in doc:
+                for b in page.get_text("rawdict")["blocks"]:
+                    for l in b.get("lines", []):
+                        cs = [c for s in l["spans"] for c in s["chars"]]
+                        t = "".join(c["c"] for c in cs)
+                        if t.startswith("甲"):
+                            firsts.append((len(cs), round(cs[-1]["bbox"][2] - cs[0]["origin"][0], 2), t.count("，") + t.count("。")))
+        keep = [i for i, f in enumerate(firsts) if f[0] >= 20]
+        last = max(keep) if keep else -1
+        print(f"{pdf.stem}: 20 units kept down to {20 - 0.05 * last:.2f} em ({len(firsts)} lines read); at that width {firsts[last] if last >= 0 else None}")
+
+
 if __name__ == "__main__":
     cmd, arg = sys.argv[1], sys.argv[2]
     if cmd == "sweep-off":
         sweep(arg, "doNotCompress")
     else:
-        {"make": make, "measure": measure, "sweep": sweep, "sweep-read": sweep_read}[cmd](arg)
+        {"make": make, "measure": measure, "sweep": sweep, "sweep-read": sweep_read, "sweep-k": sweep_k, "sweep-k-both": lambda a: sweep_k(a, "both"), "sweep-k-grid": lambda a: sweep_k(a, "left", '<w:docGrid w:type="lines" w:linePitch="312"/>'), "sweep-k-chargrid": lambda a: sweep_k(a, "left", '<w:docGrid w:type="linesAndChars" w:linePitch="579" w:charSpace="-842"/>'), "sweep-k-read": sweep_k_read}[cmd](arg)
