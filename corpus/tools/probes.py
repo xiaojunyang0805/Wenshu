@@ -351,6 +351,23 @@ def _():
     return Probe().add(p(r("正文", FS), r("大字", big), r("小字", small), r("正文继续。", FS), ppr='<w:ind w:firstLineChars="200"/>'), body_par("下一行正文。"))
 
 
+EXACT_FONTS = [("宋体", 21), ("仿宋_GB2312", 32), ("黑体", 44), ("Times New Roman", 24), ("方正小标宋简体", 44), ("宋体", 72)]
+
+
+def exact_par(font, size, height_pt, extra=""):
+    rpr = f'<w:rFonts w:ascii="{font}" w:hAnsi="{font}" w:eastAsia="{font}"/><w:sz w:val="{size}"/><w:szCs w:val="{size}"/>'
+    ppr = f'<w:spacing w:before="0" w:after="0" w:line="{height_pt * 20}" w:lineRule="exact"/><w:ind w:left="0" w:firstLine="0"/>'
+    return p(r(f"{font}{size / 2:g}/{height_pt}汉字Abg", rpr), extra, ppr=ppr)
+
+
+@probe("31-exact-baseline", "Exact line spacing: where does the baseline sit in the line (heights 12/20/30/40 pt, six fonts)?")
+def _():
+    pars = [exact_par(f, s, h) for h in (12, 20, 30, 40) for f, s in EXACT_FONTS]
+    big = '<w:rFonts w:ascii="黑体" w:hAnsi="黑体" w:eastAsia="黑体"/><w:sz w:val="44"/><w:szCs w:val="44"/>'
+    pars.append(exact_par("仿宋_GB2312", 32, 30, r("大字", big)))
+    return Probe(sect=PLAIN_SECT).add(*pars)
+
+
 def main(out):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)

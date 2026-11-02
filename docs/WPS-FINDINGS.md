@@ -112,10 +112,22 @@ Covered by F1: with compression on, a closing mark at a line's end doesn't need 
 half (measured with `，`). `w:topLinePunct` (probe 07) changes the squeeze slightly (about 1.0 pt
 instead of 1.4 pt for `）` in 10.5 pt 宋体). Not yet modelled.
 
+## F6. Exact line spacing puts the baseline at 0.8 of the line
+
+Probe 31 (`gen-probe-31-exact-baseline`): one-line paragraphs with exact spacing of 12, 20, 30 and
+40 pt in 宋体 10.5, 仿宋_GB2312 16, 黑体 22, Times New Roman 12, 方正小标宋简体 22 and 宋体 36 pt,
+plus a 30 pt line mixing 16 and 22 pt. In every case WPS puts the baseline 0.80 × the line height
+below the line's top (±0.1 pt). The font's ascent and descent don't move it; 36 pt text in a 12 pt
+line also sits at 9.6 pt and overflows upwards. Wenshu used the line height minus the font's
+descent, 1–6.5 pt lower. That was the 3.7 pt offset in `dc-correspondence-195b80f877` (16 pt 仿宋
+in 30 pt lines). Patch 0008 makes it 0.8; the letter's baselines now match within 0.07 pt.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).
 - How the squeeze interacts with justification (`jc=both`) and kinsoku.
 - `w:topLinePunct` (F5).
+- Where at-least spacing puts the baseline when the minimum is larger than the text (F6 covers
+  exact only).
 - Word's behaviour for each finding. Upstream targets Word, so changes to #5003/#5006 need
   either Word references or an argument from the spec. F2 has one; F1 does not yet.

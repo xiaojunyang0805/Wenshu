@@ -1,0 +1,81 @@
+Upstream: (not opened; WPS measurement, Word unmeasured: exact-spaced lines put the baseline at 0.8 of the line, probe 31)
+diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
+index 62c36e5..000db66 100644
+--- a/crates/layout/src/para/lines.rs
++++ b/crates/layout/src/para/lines.rs
+@@ -568,12 +568,14 @@ impl<'e> Breaker<'e> {
+             (LineSpacing::AtLeast(v), None) => natural.max(v),
+             (LineSpacing::Exactly(v), _) => v,
+         };
++        let exact = matches!(rp.line_spacing, LineSpacing::Exactly(_));
++        let baseline = if grid.is_some() && !exact { h - desc } else { baseline_offset(rp.line_spacing, asc, h, desc) };
+         let (width, x0) = (self.width, rp.indent_left);
+         let (x0, left, right) = if self.rtl_para { (width - x0, width - self.base_right, width - x0) } else { (x0, x0, self.base_right) };
+         self.lines.push(Line {
+             top: self.top,
+             height: h,
+-            baseline: self.top + if grid.is_some() { h - desc } else { baseline_offset(rp.line_spacing, asc, h, desc) },
++            baseline: self.top + baseline,
+             text_asc: asc,
+             text_desc: desc,
+             c0: self.n,
+@@ -1002,15 +1004,23 @@ const MIN_SPAN: f32 = 20.0;
+ /// How far below a line's top its baseline sits. Multiple spacing at or above single keeps the
+ /// text at the top of the line and puts the extra leading below the baseline; below single it
+ /// shrinks the whole box, ascent included (Word's output for docxide-pdf's fixtures: 1.15-spaced
+-/// Times New Roman 12pt sits one ascent below the line top, not 1.8pt lower). Exact and at-least
+-/// spacing keep the descent below the baseline and the rest above it.
++/// Times New Roman 12pt sits one ascent below the line top, not 1.8pt lower). At-least spacing
++/// keeps the descent below the baseline and the rest above it. Exact spacing puts the baseline at
++/// a fixed share of the line, whatever the fonts ([`EXACT_BASELINE`]).
+ fn baseline_offset(spacing: LineSpacing, asc: f32, height: f32, desc: f32) -> f32 {
+     match spacing {
+         LineSpacing::Multiple(m) => asc * m.min(1.0),
+-        LineSpacing::AtLeast(_) | LineSpacing::Exactly(_) => height - desc,
++        LineSpacing::AtLeast(_) => height - desc,
++        LineSpacing::Exactly(_) => height * EXACT_BASELINE,
+     }
+ }
+ 
++/// Where an exactly spaced line's baseline sits, as a share of the line height from its top.
++/// WPS Office puts it at 0.8 for every font and size (±0.1pt: 宋体, 仿宋, 黑体, 方正小标宋 and
++/// Times New Roman at 10.5–36pt in 12, 20, 30 and 40pt lines, also with sizes mixed on a line);
++/// a font's own descent doesn't move it.
++const EXACT_BASELINE: f32 = 0.8;
++
+ /// The spans of a row at `top` (about `h` tall) between `lo` and `hi` that text can use around
+ /// the exclusions, left to right (Square wrapping uses both sides of an object). `Err(y)`: none
+ /// here, try again at `y` (below what's in the way).
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+index a5d9374..ca0a257 100644
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -4845,15 +4845,20 @@ fn multiple_line_spacing_adds_its_leading_below_the_text() {
+             );
+         }
+     }
+-    // Exact spacing still keeps the descent below the baseline.
+-    let mut d = Document::from_text("Exact");
+-    if let Some(wordcraft_doc::Block::Para(p)) = d.body.get_mut(0).map(std::sync::Arc::make_mut) {
+-        p.props.line_spacing = Some(LineSpacing::Exactly(30.0));
++    // Exact spacing puts the baseline at 0.8 of the line, whatever the font size.
++    for size in [10.5, 16.0, 36.0] {
++        let mut d = Document::from_text("Exact");
++        if let Some(wordcraft_doc::Block::Para(p)) = d.body.get_mut(0).map(std::sync::Arc::make_mut) {
++            p.props.line_spacing = Some(LineSpacing::Exactly(30.0));
++            for r in &mut p.runs {
++                r.props.size = Some(size);
++            }
++        }
++        let l = lay(&d);
++        let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
++        let line = &para.lines[0];
++        assert!((line.baseline - line.top - 24.0).abs() < 0.01, "{size}pt: baseline {} below the top", line.baseline - line.top);
+     }
+-    let l = lay(&d);
+-    let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
+-    let line = &para.lines[0];
+-    assert!((line.top + line.height - line.baseline - para.styles[0].descent).abs() < 0.01);
+ }
+ 
+ #[test]

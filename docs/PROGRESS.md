@@ -2,6 +2,28 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-02 (3): v0.1.0 draft release; the 3.7 pt offset found
+
+**v0.1.0** tagged at `b76cb32` (the user's call). The release workflow built and smoke-tested all
+seven packages and made a draft release (run 41417997944). Publishing is the user's call; tick
+"pre-release", since the version carries no `-alpha` suffix.
+
+**Exact line spacing (F6, patch 0008).** The 3.7 pt vertical offset in `dc-correspondence-195b80f877`
+(deferred list) comes from where an exact line puts its baseline. Probe 31, rendered in WPS: always
+0.8 × the line height below the top, whatever the font, size or mix (24 combinations, ±0.1 pt).
+WordCraft used height minus the font's descent. Patch 0008 changes `baseline_offset` for
+`Exactly` (and the empty last line on a grid). The letter's baselines now match WPS within
+0.07 pt; they were 3.7 pt low.
+
+Re-scored against WPS: mean page score 0.9042 → 0.9056; page matches unchanged at 122/200 (line
+heights don't change); 30 documents better (up to +0.027), 4 worse (the worst,
+`dc-correspondence-31310a47c6`, −0.009, is already ~60 pt off for another reason: its title
+公告招租 breaks one character per line where WPS keeps it on one line). Layout 578 tests, fmt and
+clippy clean; the queue 0001–0008 applies on the pin. Not opened upstream: Word is unmeasured.
+
+**Next:** the 公告招租 title breaking per character (`dc-correspondence-31310a47c6`); the 60
+documents still longer than WPS; at-least spacing's baseline.
+
 ## 2026-11-02 (2): LoongArch packages
 
 `packaging/linux/package.sh --arch loongarch64` cross-builds on x86_64 with cargo-zigbuild 0.20.1
@@ -183,8 +205,8 @@ with its five templates.
 
 Set aside on 2026-10-31 to move on to M2, at the user's request:
 
-- **The 60 documents still longer than WPS** (mostly on line and character grids), and the 3.7 pt
-  vertical offset from the first body paragraph in `dc-correspondence-195b80f877`. Start from
+- **The 60 documents still longer than WPS** (mostly on line and character grids). (The 3.7 pt
+  vertical offset in `dc-correspondence-195b80f877` is done: F6, patch 0008.) Start from
   `out/sumref.py`-style tag statistics and the `ycmp.py` line comparison.
 - `w:topLinePunct` (F5) and kana compression.
 - #5005: Latin Extended-A to a GB2312/Big5 East Asian font (F4).

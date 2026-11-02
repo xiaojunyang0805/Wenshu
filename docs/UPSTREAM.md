@@ -39,6 +39,7 @@ longer applies, and running the fidelity corpus before and after.
 
 | 0006-app-embedding | app, ui-egui, control-key | The desktop app as a library: `wordcraft::run(AppConfig)` (name/version/About via `ui_egui::brand::Brand`, executable name, settings folder, app id, icon, start-up hook, update check on/off, app tools); `main.rs` runs it with WordCraft's defaults. Also: `engine::set_blank_document_hook` (an app's Normal defaults by region), `Brand::{community, updates}` (hide the ArtCraft Discord links and WordCraft's update check), `services::AppTool` (app tools in a Review group named after the brand, reporting in a dialog), `control_key::set_folder_name`. Tests | not yet opened (M2) |
 | 0007-fonts-app-font-dirs | wordcraft-fonts | `FontDb::add_font_dirs`: an app adds font folders (fonts shipped beside its executable) to the system font scan. They are cataloged like installed fonts and loaded only when a document uses them; adding a folder after the first scan rescans and clears remembered fallback misses. Test | not yet opened (M2) |
+| 0008-layout-exact-baseline | wordcraft-layout | Exactly spaced lines put the baseline at 0.8 of the line height, whatever the fonts (WPS, measured with probe 31; was height minus the font descent). Test | not opened: measured in WPS only; Word needs references first |
 
 All six apply in order on `3b7f7ed`; the `wordcraft-layout` (577), `-fonts` (102), `-doc` (242),
 `-docx` (500) and `-engine` (1094) suites pass with them, and fmt and clippy are clean.
