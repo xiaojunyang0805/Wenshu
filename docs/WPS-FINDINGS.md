@@ -134,7 +134,9 @@ in WPS (half an em of 26 pt each), 126 pt in Wenshu (Calibri's spaces). Variants
 dropping its `w:compat` did. Probe 33 sets only this switch: in WPS a U+0020 space is then
 **0.5 em of its size**, whatever the font (Calibri, Times New Roman) or hint; letters, digits and
 punctuation (`iiiii 11111 WWWWW ,.;()`) keep their widths. Without the switch spaces keep their
-font's width (probe 32). Patch 0009 reads, writes and lays it out.
+font's width (probe 32). Patch 0009 reads, writes and lays it out. A list label's suffix space
+(`w:suff="space"`) is half an em too: `dc-policies-730d6a61a9`'s `11.` is followed by 8 pt before
+16 pt text (patch 0017).
 
 ## F8. `*Chars` indents on a line grid: side indents count the default size
 
@@ -219,6 +221,53 @@ nothing itself). It reproduces every sweep so far, F1's ten-comma line and line-
 the closing-opening line (its last unit was `“中`) and the bracket-heavy corpus lines. On
 justified mode-15 lines the same shape fits with 1 − 1/(2k) em plus ½ em per last-unit mark
 (three commas and `。`: 1.33 em measured, 1.3). Patch 0014.
+
+## F13. Automatic spaces beside digits are squeezed with the marks
+
+WPS's automatic space between Asian text and digits is 0.25 em on a line that fits (a median of
+0.25 em over the corpus refs, every size). On an overflowing line it gives some up:
+`gov-mct-keji`'s `我部于2020年10月…关` keeps its last ideograph by narrowing four automatic spaces
+from 4.0 to about 3.8 pt. Sweeps (`sweep_lines.py … autospace`, mode 14, left aligned, no grid):
+
+| Line | Squeeze |
+|---|---|
+| one digit run (2 spaces) | 0.24 em |
+| two runs (4 spaces) | 0.49 em |
+| four runs (8) / two runs and 3 commas | 0.50 em |
+| two runs, last unit `《瑞` | 0.99 em |
+| digits ending the line (1 space before them) | 0.12 em |
+
+**Rule (mode 14 and older):** each automatic space shares F12's pool with the marks, giving up at
+most half itself (0.125 em); it adds nothing to the pool from the last unit. Patch 0015.
+**Open:** justified mode-15 lines fit no rule yet: spaces alone squeeze 0.24, 0.27, 0.30 em for
+2, 4, 8 spaces, and two runs with three commas only 0.60 em (three commas alone: 0.8). Mode 15 is
+left as it was.
+
+## F14. On a character grid the text width is whole cells
+
+`gov-nmpa-1`, `-5`, `-6` (`linesAndChars` grids) fitted a character more per line than WPS. Cut to
+one paragraph, `gov-nmpa-6`'s line changed in WPS only when its `w:docGrid` was removed (not with
+`overflowPunct`, exact spacing, `w:compat` or the colour). WPS lays text in whole character
+pitches: its 442.2 pt text width on a 16 pt pitch holds 27 pitches, so lines end at 432 pt
+(508.5, not 518.8). A 10 pt right indent comes off that (lines end at 498.6) and `snapToGrid=0`
+paragraphs are narrowed too, so it is the section's width that is rounded. The 公文 grid (28 ×
+15.79 pt = 442.2) is unchanged. `gov-sh-sheitc` (pitch 16.3 pt, 27 pitches, 519.3) and
+`dc-correspondence-6ce199cdd6` (529.2) match the same rule.
+
+What's left past the last pitch isn't wasted: in `gov-nmpa-1` (29 pitches of 14.83 pt) a line
+holds 29 ideographs and then a `，` hanging entirely in that strip, ending at 522.6. Off the grid
+a closing mark ending a line frees only its blank half (sweeps of plain lines ending `。` `，` `”`:
+0.49 em, with or without `overflowPunct`), so the strip is grid-specific. **Rule:** a single
+column on a character grid is as wide as the whole pitches it holds (within 0.01 pitch); a closing
+mark ending a line may reach into the rest. Patch 0018. Several columns aren't measured.
+
+**Open:** `gov-sh-sheitc`'s `一、申报书封面…推荐单位为区` fits 26 characters in WPS, one more than
+F12 allows by about 0.5 pt (compression off: 25). A justified line, so its advances say nothing
+about the natural width; to measure on a left-aligned copy.
+
+Also found here, not a WPS rule: `dc-administrative-82eb70e86d` has a custom style with the id
+`Normal` (named `[Normal]`, 12 pt) beside its default paragraph style `a` (Normal, 10.5 pt);
+WordCraft took the custom style for unstyled paragraphs and the grid's default size. Patch 0016.
 
 ## Still to measure
 

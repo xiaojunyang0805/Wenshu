@@ -1,0 +1,119 @@
+Upstream: (not opened; fold into #5006 with 0005/0012/0014: in compatibility mode 14 and older an automatic space beside digits or Latin text shares the line's squeeze pool, giving up at most half itself; F13)
+diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
+--- a/crates/layout/src/para.rs
++++ b/crates/layout/src/para.rs
+@@ -110,7 +110,8 @@ pub struct ParaLayout {
+ /// marks in the last unit and without). The line has a pool: the base below, plus an amount for
+ /// each compressible mark in its last unit (what can't be broken off the line's end, `《瑞` or
+ /// `中。`): a closing mark's free blank half at the line end comes out of the pool, and the marks
+-/// share the rest equally, each at most its blank half.
++/// share the rest equally, each at most its blank half. In mode 14 and older an automatic space
++/// between Asian text and digits or Latin text shares the pool too, giving up at most half itself.
+ #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+ pub enum SqueezeRule {
+     /// Compatibility mode 14 and older (any alignment): half an em, however many marks, and a
+@@ -132,6 +133,12 @@ pub struct Squeeze {
+     /// The blank is on the mark's left (an opening mark): the mark itself moves left. Else the
+     /// clusters after it do.
+     pub left: bool,
++    /// The size the line's pool is measured in: the mark's font size, or for an automatic space
++    /// the Asian text's.
++    pub em: f32,
++    /// An automatic space between Asian text and Latin text or digits ([`auto_space`]), not a
++    /// mark: it shares the pool but adds nothing to it in the last unit.
++    pub gap: bool,
+ }
+ 
+ impl ParaLayout {
+@@ -169,7 +176,8 @@ impl ParaLayout {
+     fn squeeze_marks(&self, c0: usize, c1: usize) -> &[Squeeze] {
+         let from = self.squeeze.partition_point(|s| s.k < c0);
+         let mut to = self.squeeze.partition_point(|s| s.k < c1).max(from);
+-        if to > from && self.squeeze.get(to - 1).is_some_and(|s| c1 > 0 && s.k == c1 - 1 && !s.left) {
++        // (nor the automatic space after it, which the line doesn't take).
++        while to > from && self.squeeze.get(to - 1).is_some_and(|s| c1 > 0 && s.k == c1 - 1 && !s.left) {
+             to -= 1;
+         }
+         self.squeeze.get(from..to).unwrap_or_default()
+@@ -183,15 +191,14 @@ impl ParaLayout {
+         }
+         let k = marks.len() as f32;
+         let rooms: f32 = marks.iter().map(|s| s.room).sum();
+-        // A mark's room is half its size, so the marks' mean size is rooms × 2 / k.
+-        let em = rooms * 2.0 / k;
++        let em = marks.iter().map(|s| s.em).sum::<f32>() / k;
+         let (base, per_mark) = match self.squeeze_rule {
+             SqueezeRule::HalfEm => (0.5, 1.0),
+             SqueezeRule::Justified => (1.0 - 0.5 / k, 0.5),
+         };
+         // The last unit: the clusters after the line's last break opportunity before its end.
+         let unit = (c0..c1.saturating_sub(1)).rev().find(|&j| self.clusters.get(j).is_some_and(|c| c.break_after)).map_or(c0, |j| j + 1);
+-        let in_unit = self.squeeze.iter().filter(|s| s.k >= unit && s.k < c1).count() as f32;
++        let in_unit = self.squeeze.iter().filter(|s| !s.gap && s.k >= unit && s.k < c1).count() as f32;
+         // A closing mark ending the line takes its blank half out of the pool.
+         let free = if self.ends_in_free_mark(c0, c1) { 0.5 } else { 0.0 };
+         ((base + per_mark * in_unit - free).max(0.0) * em).min(rooms)
+diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
+--- a/crates/layout/src/para/grid.rs
++++ b/crates/layout/src/para/grid.rs
+@@ -160,7 +169,7 @@ pub(super) fn compress_punct(b: &Builder, text: &str) -> (Vec<Squeeze>, Vec<(usi
+             continue;
+         }
+         if let Some(side) = crate::kinsoku::squeeze_side(ch) {
+-            squeeze.push(Squeeze { k, room: (size / 2.0).min(200.0), left: side == crate::kinsoku::Side::Left });
++            squeeze.push(Squeeze { k, room: (size / 2.0).min(200.0), left: side == crate::kinsoku::Side::Left, em: size.min(400.0), gap: false });
+         }
+         if crate::kinsoku::end_blank(ch) {
+             end.push((k, (size / 2.0).min(200.0)));
+diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
+--- a/crates/layout/src/para/paragraph.rs
++++ b/crates/layout/src/para/paragraph.rs
+@@ -596,7 +596,17 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+     let compresses = doc.settings.char_spacing.compresses_punctuation() && (justified || squeeze_rule == super::SqueezeRule::HalfEm);
+     let mut end_marks = Vec::new();
+     let squeeze = if compresses {
+-        let (squeeze, end_blank) = compress_punct(&sh.b, &p.text);
++        let (mut squeeze, end_blank) = compress_punct(&sh.b, &p.text);
++        // Mode 14 and older squeeze an automatic space by up to half on an overflowing line, in
++        // the same pool as the marks (WPS, F13).
++        if squeeze_rule == super::SqueezeRule::HalfEm {
++            for &(k, gap) in &auto_space {
++                if gap > 0.0 {
++                    squeeze.push(super::Squeeze { k, room: gap / 2.0, left: false, em: gap * 4.0, gap: true });
++                }
++            }
++            squeeze.sort_by_key(|s| s.k);
++        }
+         end_marks = end_blank.iter().map(|e| e.0).collect();
+         for (k, room) in end_blank {
+             match auto_space.binary_search_by_key(&k, |a| a.0) {
+diff --git a/crates/layout/src/tests/compress.rs b/crates/layout/src/tests/compress.rs
+--- a/crates/layout/src/tests/compress.rs
++++ b/crates/layout/src/tests/compress.rs
+@@ -260,3 +260,26 @@ fn marks_in_the_last_unit_enlarge_the_lines_squeeze() {
+     assert_eq!(first_line_chars(&alone, CharSpacing::CompressPunctuation, 19.5).0, 20);
+     assert_eq!(first_line_chars(&alone, CharSpacing::CompressPunctuation, 19.4).0, 18);
+ }
++
++#[test]
++fn automatic_spaces_beside_digits_share_the_pool_giving_up_half_themselves() {
++    if !full_width_marks() {
++        return;
++    }
++    // WPS (mode 14): the quarter-em automatic space on each side of a digit run gives up at most
++    // half itself on an overflowing line, in the line's pool with the marks: one run (two spaces)
++    // squeezes a quarter em, two runs (four) the pool's half em.
++    for (text, squeeze) in [("甲中中中中12中中中中中中中中中中中中中瑞国国国", 0.25), ("甲中中中12中中中中中中34中中中中中中中瑞国国国", 0.5)]
++    {
++        let n = text.chars().count() - 3;
++        let g = first_para(&lay(&doc(text, CharSpacing::CompressPunctuation, None)));
++        if g.auto_space.is_empty() {
++            return;
++        }
++        // Where the first 国 starts with no squeeze: the case's natural width.
++        let natural = (g.lines[0].xs[n] - g.lines[0].xs[0]) / SIZE;
++        assert_eq!(first_line_chars(text, CharSpacing::CompressPunctuation, natural - squeeze + 0.01).0, n, "{text}");
++        assert!(first_line_chars(text, CharSpacing::CompressPunctuation, natural - squeeze - 0.05).0 < n, "{text}");
++        assert!(first_line_chars(text, CharSpacing::DoNotCompress, natural - 0.05).0 < n, "{text}");
++    }
++}

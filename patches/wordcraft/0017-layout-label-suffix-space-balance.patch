@@ -1,0 +1,68 @@
+Upstream: (not opened; fold into the F7 change with 0009: under balanceSingleByteDoubleByteWidth a list label's suffix space is half an em; F7)
+diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
+--- a/crates/layout/src/para/lines.rs
++++ b/crates/layout/src/para/lines.rs
+@@ -27,6 +27,12 @@ struct Breaker<'e> {
+     shrink_spaces: bool,
+     /// Word stretches a justified line ending in a manual line break unless the document says not to.
+     expand_break: bool,
++    /// The list label's suffix space, in ems of the label: a quarter, or half under
++    /// `balanceSingleByteDoubleByteWidth`, where every space is half an em (WPS, F7).
++    label_space: f32,
++    /// Room past the column's last whole character pitch a closing mark ending a line may take
++    /// ([`Grid::hang`]).
++    grid_hang: f32,
+     /// Hyphenation Options: the zone, and how many lines in a row may end with a hyphen.
+     zone: f32,
+     hyph_limit: usize,
+@@ -188,6 +194,8 @@ impl<'e> Breaker<'e> {
+             hanging_at: if rp.indent_first < 0.0 { Some(rp.indent_left) } else { None },
+             shrink_spaces: rp.align == Align::Justify && settings.compat_mode >= wordcraft_doc::COMPAT_MODE_CURRENT,
+             expand_break: !settings.do_not_expand_shift_return,
++            label_space: if settings.balance_sbcs_dbcs { 0.5 } else { 0.25 },
++            grid_hang: if env.grid.hang.is_finite() { env.grid.hang.clamp(0.0, 1e4) } else { 0.0 },
+             zone: Some(settings.hyphenation_zone).filter(|z| z.is_finite() && *z >= 0.0).unwrap_or(HYPHENATION_ZONE).min(1584.0),
+             hyph_limit: settings.consecutive_hyphen_limit as usize,
+             widths: word_widths(&pl.clusters, &pl.hyph_after),
+@@ -302,7 +310,7 @@ impl<'e> Breaker<'e> {
+                     _ => t,
+                 }
+             }
+-            LevelSuffix::Space => end + pl.styles.get(lab.style as usize).map(|s| s.size * 0.25).unwrap_or(3.0),
++            LevelSuffix::Space => end + pl.styles.get(lab.style as usize).map(|s| s.size * self.label_space).unwrap_or(3.0),
+             LevelSuffix::Nothing => end,
+         }
+     }
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -12080,3 +12080,29 @@ fn balanced_single_byte_width_makes_spaces_half_an_em() {
+     assert!(plain_spaces < 60.0, "without the setting a space keeps its font's width: {plain_spaces}");
+     assert!((letters - plain_letters).abs() < 0.01, "letters keep their widths");
+ }
++
++/// A list label's suffix space follows `w:balanceSingleByteDoubleByteWidth` too: half an em of
++/// the label's size, where it is a quarter otherwise (WPS Office, `dc-policies-730d6a61a9`: `11.`
++/// then 8 pt before 16 pt text).
++#[test]
++fn balanced_single_byte_width_makes_a_label_s_suffix_space_half_an_em() {
++    let text_x = |balance: bool| {
++        let mut d = Document::new();
++        let mut items = numbered(&mut d, &["text"], ParaProps::default());
++        items[0].props.indent_left = Some(0.0);
++        items[0].props.indent_first = Some(0.0);
++        let id = d.numbering.abstract_of(d.numbering.nums[0].id).map(|a| a.id).unwrap();
++        let a = d.numbering.abstracts.iter_mut().find(|a| a.id == id).unwrap();
++        a.levels[0].suffix = wordcraft_doc::numbering::LevelSuffix::Space;
++        a.levels[0].chr.size = Some(16.0);
++        items[0].runs[0].props.size = Some(16.0);
++        d.body = items.into_iter().map(wordcraft_doc::para_block).collect();
++        d.settings.balance_sbcs_dbcs = balance;
++        let l = lay(&d);
++        let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
++        let lab = para.label.as_ref().unwrap();
++        para.lines[0].xs[0] - (lab.x + lab.width)
++    };
++    assert!((text_x(true) - 8.0).abs() < 0.01, "half an em: {}", text_x(true));
++    assert!((text_x(false) - 4.0).abs() < 0.01, "a quarter: {}", text_x(false));
++}

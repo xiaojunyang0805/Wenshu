@@ -2,6 +2,38 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-03: autospace squeeze, whole grid cells (F13, F14); three smaller fixes
+
+Next-step 1 from the last entry: line-break diffs over the 65 documents whose page count
+differs (`out/breakall.py`, with `breakdiff.py` now skipping TOC leaders and page-number lines).
+Groups found and fixed, each measured in WPS first:
+
+- **F13, patch 0015:** an automatic space beside digits shares the squeeze pool, giving up at
+  most half itself (mode 14; `sweep_lines.py … autospace`). `gov-mct-keji` now matches (3 → 2
+  pages). Mode 15 measured but left open (no consistent rule yet).
+- **F14, patch 0018:** on a character grid the section's text width is whole pitches, and a
+  closing mark ending a line may reach into the rest (`gov-nmpa-*`: one paragraph cut out and
+  bisected in WPS; only removing the grid changed it). Line ends now match WPS in `gov-nmpa-1`,
+  `gov-nmpa-6`, `gov-sh-sheitc` and `dc-correspondence-6ce199cdd6`. The score is flat (5
+  documents −0.001 to −0.003, 2 better): those documents still differ elsewhere.
+- **Patch 0016:** a custom style with the id `Normal` no longer replaces the default paragraph
+  style (`dc-administrative-82eb70e86d`: 12 pt instead of 10.5 pt for unstyled text and the grid).
+- **Patch 0017:** under `balanceSingleByteDoubleByteWidth` a list label's suffix space is half
+  an em (F7; `dc-policies-730d6a61a9`).
+
+Re-scored (0014 → 0018): page-count matches **135 → 136 / 200**, mean page score 0.9082 →
+**0.9083**. Layout 589 tests, docx 368 + 134; fmt and clippy clean on the touched crates; the
+queue 0001–0018 applies on the pin and reproduces the tested tree.
+
+**Next:**
+1. `gov-sh-sheitc`'s 26-character line (F14 open): measure it left-aligned.
+2. The remaining one-character-short group (`af80`, `2e6f`, `39de`, `a5be`, `493a`, `377b`,
+   `6562`, `8f34`, `f7d3`): most are justified mode-15 lines with digits or Latin text, so F13's
+   mode-15 question first.
+3. The one-longer group (`gov-nmpa-1/5/6`, `730d`, `896c`, `efac`, `7f0a`, `gov-bj-jtw`,
+   `gov-yn-kjt`), with `out/breakall.py` against the 0018 build.
+4. Still open from before: folding into #5003/#5004/#5006, v0.1.0 publishing, v0.1.1 tag.
+
 ## 2026-11-02 (8): the squeeze pool and the last unit (F12); end of day
 
 F11's open question answered: a line's squeeze pool grows by an em for each compressible mark in

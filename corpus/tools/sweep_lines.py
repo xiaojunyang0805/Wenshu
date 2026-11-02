@@ -6,12 +6,14 @@ on the first line, and so the squeeze WPS allowed. 16 pt 仿宋, no grid, left a
     python corpus/tools/wps_render.py --files out/sweepline --out out/sweepline --no-png
     python corpus/tools/sweep_lines.py read out/sweepline
 
-Edit CASES for the lines to test; the 2026-11-02 cases (F12) are the last set used.
+A third argument picks the case set (default: the last one in SETS):
+    python corpus/tools/sweep_lines.py make out/sweepas autospace
 """
 import sys, json
 from pathlib import Path
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-CASES = {
+SETS = {}
+SETS["f12"] = {
     "end-open-k3": "甲中，中中中，中中中中，中中中中中中《瑞",
     "end-open-k5": "甲，中中，中中，中中，中中，中中中中中《瑞",
     "end-open-k8": "甲，中，中，中，中，中，中，中，中中中《瑞",
@@ -20,10 +22,40 @@ CASES = {
     "end-closequote-k3": "甲中，中中中，中中中中，中中中中中中瑞”",
     "end-open2-k5": "甲，中中，中中，中中，中中，中中中中《「瑞",
 }
+# F13: CJK-digit autospace (0.25 em each side of a digit run) on overflowing lines
+SETS["autospace"] = {
+    "as-r1": "甲中中中中12中中中中中中中中中中中中中瑞",
+    "as-r2": "甲中中中12中中中中中中34中中中中中中中瑞",
+    "as-r4": "甲中12中中中34中中中56中中中78中中中中瑞",
+    "as-r2-k3": "甲中，中12中中中，中中34中中，中中中中中瑞",
+    "as-r2-open": "甲中中中12中中中中中中34中中中中中中《瑞",
+    "as-end": "甲中中中中中中中中中中中中中中中中中中12",
+    "as-long": "甲中中中中2020中中中中中中中中中中中中中瑞",
+}
+# Hanging punctuation: does a closing mark ending a line hang a whole em (overflowPunct)?
+SETS["hang"] = {
+    "plain-end-period": "甲中中中中中中中中中中中中中中中中中瑞。",
+    "plain-end-comma": "甲中中中中中中中中中中中中中中中中中瑞，",
+    "plain-end-quote": "甲中中中中中中中中中中中中中中中中中瑞”",
+    "k1-end-period": "甲中中中中中中中，中中中中中中中中中瑞。",
+    "k3-end-period": "甲中，中中中，中中中中，中中中中中中瑞。",
+    "plain-end-open": "甲中中中中中中中中中中中中中中中中中《瑞",
+}
+CASES = SETS[sys.argv[3]] if len(sys.argv) > 3 else list(SETS.values())[-1]
 SZ, FONT, EM = 32, "仿宋", 16.0
+import os
+# SWEEP_MODE=15 SWEEP_JC=both for justified mode-15 lines
+MODE, JC = os.environ.get("SWEEP_MODE", "14"), os.environ.get("SWEEP_JC", "left")
+# SWEEP_PPR: extra paragraph properties, e.g. '<w:overflowPunct w:val="0"/>'
+PPR = os.environ.get("SWEEP_PPR", "")
+# SWEEP_COMPAT: extra w:compat children, e.g. "<w:balanceSingleByteDoubleByteWidth/>"
+COMPAT = os.environ.get("SWEEP_COMPAT", "")
+# SWEEP_GRID: a w:docGrid for the section, e.g. '<w:docGrid w:type="linesAndChars" w:linePitch="312"/>'
+GRID = os.environ.get("SWEEP_GRID", "")
 def width_em(text):
-    # natural width estimate in em: ASCII digits 0.5 em, the rest 1 em
-    return sum(0.5 if c.isascii() else 1.0 for c in text)
+    # width estimate in em: ASCII digits 0.5 em, the rest 1 em, autospace 0.25 em
+    w = sum(0.5 if c.isascii() else 1.0 for c in text)
+    return w + 0.25 * sum(a.isascii() != b.isascii() for a, b in zip(text, text[1:]))
 def make(out):
     from docx import Document
     from lxml import etree
@@ -38,14 +70,18 @@ def make(out):
             w = nat + 0.1 - 0.02 * i
             right = text_w - round(EM * w * 20)
             rpr = f'<w:rFonts w:ascii="{FONT}" w:hAnsi="{FONT}" w:eastAsia="{FONT}" w:hint="eastAsia"/><w:sz w:val="{SZ}"/>'
-            ps.append(f'<w:p><w:pPr><w:jc w:val="left"/><w:ind w:left="0" w:right="{right}"/></w:pPr><w:r><w:rPr>{rpr}</w:rPr><w:t xml:space="preserve">{t}国国国国国国国国</w:t></w:r></w:p>')
-        sect = '<w:sectPr><w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr>'
+            ps.append(f'<w:p><w:pPr>{PPR}<w:jc w:val="{JC}"/><w:ind w:left="0" w:right="{right}"/></w:pPr><w:r><w:rPr>{rpr}</w:rPr><w:t xml:space="preserve">{t}国国国国国国国国</w:t></w:r></w:p>')
+        sect = f'<w:sectPr><w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="0" w:footer="0" w:gutter="0"/>{GRID}</w:sectPr>'
         for c in etree.fromstring(f'<w:body xmlns:w="{W}">{"".join(ps)}{sect}</w:body>'): body.append(c)
         st = d.settings.element
         for e in st.findall(f"{{{W}}}characterSpacingControl"): st.remove(e)
         st.append(etree.fromstring(f'<w:characterSpacingControl xmlns:w="{W}" w:val="compressPunctuation"/>'))
+        if COMPAT:
+            comp = st.find(f"{{{W}}}compat")
+            for c in etree.fromstring(f'<x xmlns:w="{W}">{COMPAT}</x>'):
+                comp.insert(0, c)
         for e in st.iter(f"{{{W}}}compatSetting"):
-            if e.get(f"{{{W}}}name") == "compatibilityMode": e.set(f"{{{W}}}val", "14")
+            if e.get(f"{{{W}}}name") == "compatibilityMode": e.set(f"{{{W}}}val", MODE)
         d.save(out / f"line-{name}.docx")
     (out / "cases.json").write_text(json.dumps(CASES, ensure_ascii=False), encoding="utf-8")
 def read(out):
