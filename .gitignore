@@ -20,3 +20,4 @@
 /corpus/files/dc-*
 # Release packages (packaging/windows/package.ps1)
 /dist/
+__pycache__/
