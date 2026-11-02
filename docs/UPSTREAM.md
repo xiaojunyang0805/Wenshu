@@ -42,6 +42,7 @@ longer applies, and running the fidelity corpus before and after.
 | 0008-layout-exact-baseline | wordcraft-layout | Exactly spaced lines put the baseline at 0.8 of the line height, whatever the fonts (WPS, measured with probe 31; was height minus the font descent). Test | not opened: measured in WPS only; Word needs references first |
 | 0009-balance-sbcs-dbcs-spaces | wordcraft-doc, -docx, -layout | `w:balanceSingleByteDoubleByteWidth` is read into `Settings::balance_sbcs_dbcs`, written back, and makes every U+0020 space half an em of its size (WPS, probe 33). Tests | not opened: measured in WPS only |
 | 0010-layout-line-grid-char-indents | wordcraft-doc, -layout | On a line grid without a character pitch, `leftChars`/`rightChars` count the Normal style's size and `firstLineChars` the mark's (`ResolvedPara::set_char_units`; WPS, probe 34). Test | not opened: builds on 0002 (#5003); measured in WPS only |
+| 0011-layout-grid-scale-spacing | wordcraft-layout | On a character grid an East Asian character advances its `w:w`-scaled size plus the grid adjustment plus its `w:spacing` (WPS, probe 35); 0002 used the unscaled size and dropped the spacing. Test | not opened: fold into #5003 (0002) with the next push |
 
 All six apply in order on `3b7f7ed`; the `wordcraft-layout` (577), `-fonts` (102), `-doc` (242),
 `-docx` (500) and `-engine` (1094) suites pass with them, and fmt and clippy are clean.

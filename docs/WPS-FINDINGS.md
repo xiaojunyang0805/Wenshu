@@ -142,6 +142,15 @@ Probe 34, a lines-only grid (no character pitch) and a 16 pt paragraph mark: `le
 all three count the pitch (F3). Patch 0010. Found through `dc-correspondence-195b80f877`, whose
 signature line only fits with F7's wider spaces when its `leftChars=100` is 10.5 pt, not 16.
 
+## F9. On a character grid, `w:w` and `w:spacing` still count
+
+Probe 35, the 公文 grid (pitch 15.79 pt for 16 pt, adjustment −0.21 pt): 16 pt 宋体 at `w:w` 50%
+advances 7.80 pt, at 90% 14.16, at 200% 31.80; with 2 pt `w:spacing` 17.78; 54 pt at 90% 48.31;
+22 pt at 90% with 2 pt spacing 21.55. So an East Asian character advances its **scaled size plus
+the grid adjustment plus its spacing**. 0002 used the unscaled size and dropped the spacing, so
+red-header titles (瑞安市教育局文件: 54 pt at 90%, `jc=distribute` in a 411 pt cell) took 53.8 pt
+a character and lost their last one to a second line. Patch 0011.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

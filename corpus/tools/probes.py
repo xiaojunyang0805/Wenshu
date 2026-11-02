@@ -418,6 +418,14 @@ def _():
     )
 
 
+@probe("35-grid-scale-spacing", "Character grid: how do w:w (scale) and w:spacing combine with the grid advance?")
+def _():
+    def run(extra, size=32):
+        return r("汉字测试文字", f'<w:rFonts w:ascii="宋体" w:hAnsi="宋体" w:eastAsia="宋体"/>{extra}<w:sz w:val="{size}"/><w:szCs w:val="{size}"/>')
+    pars = [p(run(e, sz), ppr='<w:ind w:firstLine="0"/>') for e, sz in [("", 32), ('<w:w w:val="50"/>', 32), ('<w:w w:val="90"/>', 32), ('<w:w w:val="200"/>', 32), ('<w:spacing w:val="40"/>', 32), ('<w:w w:val="90"/>', 108), ('<w:w w:val="90"/><w:spacing w:val="40"/>', 44)]]
+    return Probe().add(*pars)
+
+
 def main(out):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)

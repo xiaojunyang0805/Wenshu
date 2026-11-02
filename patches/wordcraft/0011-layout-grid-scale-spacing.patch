@@ -1,0 +1,60 @@
+Upstream: (not opened; fold into #5003 with 0002: on a character grid, w:w scales the size the grid adjustment is added to and w:spacing adds on top, as WPS measures, probe 35)
+diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
+index 845816e..e3e3554 100644
+--- a/crates/layout/src/para/grid.rs
++++ b/crates/layout/src/para/grid.rs
+@@ -58,8 +58,9 @@ pub fn is_east_asian(c: char) -> bool {
+         | 0xFE30..=0xFE4F | 0xFF01..=0xFF60 | 0xFFE0..=0xFFE6 | 0x20000..=0x3FFFF)
+ }
+ 
+-/// Character grid: East Asian characters advance by their size plus the grid's adjustment
+-/// ([`Grid::advance`]: one pitch at the default size), the glyph centred in its advance. Latin
++/// Character grid: East Asian characters advance by their size (scaled by `w:w`) plus the grid's
++/// adjustment ([`Grid::advance`]: one pitch at the default size) plus their character spacing,
++/// the glyph centred in its advance. Latin
+ /// text stays proportional unless everything snaps (`snapToChars`), when it takes whole cells.
+ pub(super) fn snap_chars(b: &mut Builder, text: &str, grid: &Grid) {
+     let Some(pitch) = grid.chars else { return };
+@@ -73,8 +74,15 @@ pub(super) fn snap_chars(b: &mut Builder, text: &str, grid: &Grid) {
+         if !(east_asian || (grid.snap_all && c.kind == ClKind::Text)) {
+             continue;
+         }
+-        let size = b.styles.get(c.style as usize).map_or(base, |st| st.size);
+-        let adv = if east_asian { grid.advance(size).unwrap_or(pitch) } else { (c.adv / pitch - 0.01).ceil().clamp(1.0, 64.0) * pitch };
++        // Character scaling (`w:w`) scales the size the grid adds its adjustment to, and character
++        // spacing (`w:spacing`) comes on top (WPS: 16 pt at 50% advances 7.8 pt on a 15.79 pt
++        // grid, 16 pt with 2 pt spacing 17.78 pt).
++        let (size, spacing) = b.styles.get(c.style as usize).map_or((base, 0.0), |st| (st.size * st.rc.scale / 100.0, st.rc.spacing));
++        let adv = if east_asian {
++            grid.advance(size).map_or(pitch, |a| (a + spacing).max(0.0))
++        } else {
++            (c.adv / pitch - 0.01).ceil().clamp(1.0, 64.0) * pitch
++        };
+         let shift = (adv - c.adv) / 2.0;
+         for g in b.glyphs.get_mut(c.g0 as usize..c.g1 as usize).into_iter().flatten() {
+             g.dx += shift;
+diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
+index 0fbc414..9901f38 100644
+--- a/crates/layout/src/tests/grid.rs
++++ b/crates/layout/src/tests/grid.rs
+@@ -271,3 +271,20 @@ fn character_indents_on_a_line_grid_count_the_default_size_at_the_sides() {
+     let indent = first.lines[0].xs[0] - first.lines[1].xs[0];
+     assert!((indent - 2.0 * mark).abs() < 0.01, "first-line indent {indent} for a {mark} pt mark");
+ }
++
++#[test]
++fn grid_advance_follows_character_scaling_and_spacing() {
++    // `w:w` scales the size the grid adjustment is added to, and `w:spacing` comes on top: a red
++    // header title at 90% must not take its full size per character and lose its last one.
++    for (scale, spacing) in [(50.0, 0.0), (90.0, 0.0), (200.0, 0.0), (100.0, 2.0), (90.0, 2.0)] {
++        let (mut d, size, pitch) = tight_grid("关于通知");
++        if let Some(Block::Para(p)) = d.body.first_mut().map(std::sync::Arc::make_mut) {
++            p.runs[0].props.scale = Some(scale);
++            p.runs[0].props.spacing = Some(spacing);
++        }
++        let want = size * scale / 100.0 + pitch - size + spacing;
++        for c in &first_para(&lay(&d)).clusters {
++            assert!((c.adv - want).abs() < 0.01, "advance {} at {scale}% with {spacing} pt spacing, want {want}", c.adv);
++        }
++    }
++}

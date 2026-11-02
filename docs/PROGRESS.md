@@ -2,6 +2,23 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-02 (5): grid advances keep scale and spacing (F9)
+
+A first-divergence pass over the 57 documents longer than WPS (`out/firstdiv.py`: first line
+whose text differs from WPS's, per document) showed one clear group: red-header titles losing
+their last character (瑞安市教育局文件 ×5, 济宁市人民政府, 台州市住房和城乡建设局文件, …). On
+a character grid, 0002's advance ignored `w:w` and `w:spacing`; probe 35 measured WPS adding the
+grid adjustment to the scaled size, spacing on top (F9, patch 0011). Most other first divergences
+are text-extraction order (tables, text boxes) or TOC leaders, not line breaks.
+
+Re-scored: page-count matches **125 → 128 / 200**, mean 0.9060 → 0.9061, 7 documents better, one
+worse (`dc-policies-af80f1c025`, −0.016, whose red header now matches but whose page count moved
+from 19 to 18 against WPS's 17, shifting the page pairing). Layout 581 tests; fmt and clippy
+clean; the queue 0001–0011 applies on the pin and reproduces the tested tree.
+
+**Next:** the remaining first-divergence groups (`dc-administrative-82eb70e86d`-style body lines
+one character short; TOC pages); 0011 into #5003.
+
 ## 2026-11-02 (4): half-em spaces (F7) and line-grid indents (F8)
 
 Following up the worst document from (3), `dc-correspondence-31310a47c6`: its title wasn't breaking
