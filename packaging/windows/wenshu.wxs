@@ -4,8 +4,9 @@
   Version, Stage (the staged files) and Icon. Names are ASCII ("Wenshu") because MSI tables use
   a single code page.
 
-  Status: written 2026-10-31 without WiX on the dev machine; not yet built. The portable zip is
-  the tested package until it is.
+  Per-user rules (ICE38/ICE64): every component keys on an HKCU value, so component GUIDs are
+  fixed rather than generated, and each folder under the profile has a RemoveFolder. The notice
+  files are listed by name; package.ps1 fails when the staged notices folder holds other files.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="Wenshu" Manufacturer="The Wenshu authors" Version="$(var.Version)"
@@ -26,25 +27,37 @@
     <StandardDirectory Id="ProgramMenuFolder" />
 
     <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
-      <Component Id="App">
+      <Component Id="App" Guid="3f9a1c6e-2b4d-4e8a-9f51-6c0d7e2a8b14">
         <File Id="WenshuDesktop" Source="$(var.Stage)\wenshu-desktop.exe" />
         <Shortcut Id="StartMenu" Directory="ProgramMenuFolder" Name="Wenshu" Target="[#WenshuDesktop]"
                   WorkingDirectory="INSTALLFOLDER" Icon="wenshu.ico" />
         <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
+        <RemoveFolder Id="RemoveProgramsFolder" Directory="ProgramsFolder" On="uninstall" />
         <RegistryValue Root="HKCU" Key="Software\Wenshu" Name="installed" Type="integer" Value="1" KeyPath="yes" />
       </Component>
-      <Component Id="Cli">
+      <Component Id="Cli" Guid="a4e2b7d1-8c3f-4a6e-b195-0d7f3c9e2a58">
         <File Source="$(var.Stage)\wenshu.exe" />
         <RegistryValue Root="HKCU" Key="Software\Wenshu" Name="cli" Type="integer" Value="1" KeyPath="yes" />
       </Component>
-      <Component Id="Licences">
+      <Component Id="Licences" Guid="c71d5e93-4f2a-4b8c-a6e0-9b3d1f7c4e26">
         <File Source="$(var.Stage)\LICENSE-MIT" />
         <File Source="$(var.Stage)\LICENSE-APACHE" />
         <RegistryValue Root="HKCU" Key="Software\Wenshu" Name="licences" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </ComponentGroup>
     <ComponentGroup Id="NoticeFiles" Directory="NoticesFolder">
-      <Files Include="$(var.Stage)\notices\*" />
+      <Component Id="Notices" Guid="5b8e2d47-9a1c-4f3e-8d62-e4a7c0b9f135">
+        <File Source="$(var.Stage)\notices\WordCraft-NOTICE" />
+        <File Source="$(var.Stage)\notices\WordCraft-ATTRIBUTION.md" />
+        <File Source="$(var.Stage)\notices\WordCraft-LICENSE-MIT" />
+        <File Source="$(var.Stage)\notices\WordCraft-LICENSE-APACHE" />
+        <File Source="$(var.Stage)\notices\OFL-Inter.txt" />
+        <File Source="$(var.Stage)\notices\OFL-JetBrainsMono.txt" />
+        <File Source="$(var.Stage)\notices\OFL-SourceSans3.txt" />
+        <File Source="$(var.Stage)\notices\OFL-SourceSerif4.txt" />
+        <RemoveFolder Id="RemoveNoticesFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\Wenshu" Name="notices" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
     </ComponentGroup>
 
     <Feature Id="Main">

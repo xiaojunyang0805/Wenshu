@@ -2,6 +2,49 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-01: the MSI builds and installs; Linux packaging written
+
+**MSI** (`packaging/windows/wenshu.wxs`). With the user's go-ahead, the .NET 8 SDK (8.0.427, winget)
+and WiX 5.0.2 (`dotnet tool install --global wix`) are now on this PC. The first build failed:
+per-user components key on HKCU values, and WiX generates no GUID for a component that holds
+files plus a registry keypath (WIX0230). ICE64 also wanted `RemoveFolder` for `Programs` and
+`notices`. Fixed with fixed component GUIDs, `RemoveFolder` entries, and one component for the
+notices, each file listed by name. `package.ps1` now fails if the staged notices differ from that
+list, so a new upstream font licence can't silently miss the MSI. `wix msi validate` passes; the
+only warnings are ICE91, which is expected for a per-user-only package.
+
+Tested `wenshu-0.1.0-windows-x64.msi` (39 MB): a silent per-user install into
+`%LOCALAPPDATA%\Programs\Wenshu` with a Start menu shortcut and HKCU keys, no admin prompt. The
+installed app, driven through the control channel, seeds the 公文 templates, and 检查公文格式
+passes 通知 (8/8). The silent uninstall removes the folder, the shortcut and the keys. Not tested:
+a major upgrade from an older MSI (there is none yet).
+
+**Linux** (`packaging/linux/package.sh`, desktop entry, AppStream metainfo, postinst). It follows
+WordCraft's script, and builds tar.gz, .deb (with `dpkg-deb`, so nfpm isn't needed) and an AppImage
+(appimagetool and the runtime at WordCraft's pinned SHA-256s). The app id is
+`io.github.xiaojunyang0805.wenshu`, and names are in Chinese and English.
+
+Built in WSL Ubuntu 22.04 (glibc 2.35; rustup and the build packages installed with the user's
+go-ahead; a clone in `~/wenshu`, release build 9m21s): tar.gz 47 MB, .deb 31 MB, AppImage 44 MB.
+desktop-file-validate is clean. appstreamcli passes with one note: 0.15 doesn't know `<developer>`,
+and WordCraft's metainfo uses it too. The binaries link only libc, libm and libgcc_s.
+
+**Found:** the first install panicked at start on X11 with `libxkbcommon-x11.so could not be loaded`.
+WordCraft's dependency list lacks it too. The .deb now depends on `libxkbcommon-x11-0`. The
+AppImage doesn't bundle it, so it needs the host's copy, as WordCraft's does.
+
+Tested under WSLg through the control channel: the .deb in `zh_CN` (Chinese interface, 文档1,
+Times New Roman 10.5 justified) and in `en_US` (English interface, Document1, Aptos 12: WordCraft's
+defaults), and the AppImage in `zh_CN`. Each run seeds the five 公文 templates, and 检查公文格式
+passes 通知 8/8.
+
+**Next**
+
+1. A GitHub Actions release workflow (Windows zip + MSI, Linux tar/deb/AppImage) once there's a
+   first release to make (the user's call).
+2. Open the embedding hook upstream as a PR (the user's call).
+3. The deferred WPS work.
+
 ## 2026-10-31 (9): M2 next steps done; a Windows package
 
 The user's note: **English is also a basic function of the MVP.** The interface follows the system

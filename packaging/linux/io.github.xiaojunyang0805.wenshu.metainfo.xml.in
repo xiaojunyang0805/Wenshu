@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata (software centres). package.sh substitutes @VERSION@ and @DATE@. -->
+<component type="desktop-application">
+  <id>io.github.xiaojunyang0805.wenshu</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0 OR MIT</project_license>
+  <name>Wenshu</name>
+  <name xml:lang="zh-CN">文枢</name>
+  <summary>Chinese-first word processor with official-document tools</summary>
+  <summary xml:lang="zh-CN">中文优先的开源文字处理软件</summary>
+  <developer id="io.github.xiaojunyang0805">
+    <name>The Wenshu authors</name>
+  </developer>
+  <description>
+    <p>
+      Wenshu is an open-source word processor built on WordCraft, with Chinese layout (character
+      grid, kinsoku, punctuation compression), Chinese blank-document defaults, GB/T 9704
+      official-document (公文) templates and a format checker. English documents and an English
+      interface work as well.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.xiaojunyang0805.wenshu.desktop</launchable>
+  <icon type="stock">io.github.xiaojunyang0805.wenshu</icon>
+  <url type="homepage">https://github.com/xiaojunyang0805/Wenshu</url>
+  <url type="bugtracker">https://github.com/xiaojunyang0805/Wenshu/issues</url>
+  <categories>
+    <category>Office</category>
+    <category>WordProcessor</category>
+  </categories>
+  <provides>
+    <binary>wenshu-desktop</binary>
+    <binary>wenshu</binary>
+    <mediatype>application/vnd.openxmlformats-officedocument.wordprocessingml.document</mediatype>
+    <mediatype>application/vnd.openxmlformats-officedocument.wordprocessingml.template</mediatype>
+    <mediatype>application/msword</mediatype>
+    <mediatype>application/vnd.oasis.opendocument.text</mediatype>
+    <mediatype>application/rtf</mediatype>
+  </provides>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="@VERSION@" date="@DATE@"/>
+  </releases>
+</component>

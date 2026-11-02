@@ -1,0 +1,19 @@
+[Desktop Entry]
+Type=Application
+Name=Wenshu
+Name[zh_CN]=文枢
+Name[zh_TW]=文樞
+GenericName=Word Processor
+GenericName[zh_CN]=文字处理
+GenericName[zh_TW]=文書處理
+Comment=Chinese-first word processor with GB/T 9704 official-document tools
+Comment[zh_CN]=中文优先的开源文字处理软件，支持 GB/T 9704 公文格式
+Exec=wenshu-desktop %F
+TryExec=wenshu-desktop
+Icon=io.github.xiaojunyang0805.wenshu
+Terminal=false
+StartupNotify=true
+StartupWMClass=io.github.xiaojunyang0805.wenshu
+Categories=Office;WordProcessor;
+Keywords=word;processor;document;docx;writer;gongwen;文档;公文;文字处理;
+MimeType=application/vnd.openxmlformats-officedocument.wordprocessingml.document;application/vnd.ms-word.document.macroEnabled.12;application/vnd.openxmlformats-officedocument.wordprocessingml.template;application/vnd.ms-word.template.macroEnabled.12;application/msword;application/msword-template;application/vnd.oasis.opendocument.text;application/rtf;text/rtf;text/markdown;text/html;

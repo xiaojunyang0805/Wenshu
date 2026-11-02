@@ -89,6 +89,14 @@ Invoke-Native 'zip' { & (Join-Path $env:SystemRoot 'System32\tar.exe') -a -c -f 
 Write-Output "wrote $Zip"
 
 if (Get-Command wix -ErrorAction SilentlyContinue) {
+  # wenshu.wxs names each notice file (a per-user component can't harvest a folder): the staged
+  # notices must be exactly those, or an upstream font licence would silently miss the MSI.
+  $Wxs = Get-Content -Raw -Encoding UTF8 (Join-Path $PSScriptRoot 'wenshu.wxs')
+  $Listed = [regex]::Matches($Wxs, '\\notices\\([^"]+)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object
+  $Staged = Get-ChildItem -Name $Notices | Sort-Object
+  if (Compare-Object @($Listed) @($Staged)) {
+    throw "wenshu.wxs lists notices [$($Listed -join ', ')] but the package has [$($Staged -join ', ')]"
+  }
   $Msi = Join-Path $Dist "wenshu-$Version-windows-$Arch.msi"
   $MsiVersion = ($Version -split '-')[0]
   Invoke-Native "wix build" {
