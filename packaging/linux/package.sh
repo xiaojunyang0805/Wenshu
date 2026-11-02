@@ -9,8 +9,9 @@
 #
 # Needs: Rust (rustup; see rust-version in Cargo.toml), WordCraft's Linux build packages
 # (pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev
-# libgtk-3-dev libfontconfig1-dev), dpkg-deb for the .deb, and `scripts/sync-upstream.sh` run
-# first. The AppImage downloads appimagetool and its runtime at pinned versions, checked by SHA-256
+# libgtk-3-dev libfontconfig1-dev), curl, unzip, dpkg-deb for the .deb, and
+# `scripts/sync-upstream.sh` run first. Every package carries two open 公文 fonts (朱雀仿宋,
+# 霞鹜文楷 GB), downloaded once at pinned versions and checked by SHA-256. The AppImage downloads appimagetool and its runtime at pinned versions, checked by SHA-256
 # (the same pins as WordCraft's packaging/linux/package.sh). Build on an old distro (Ubuntu 22.04,
 # glibc 2.35) so the binaries run on newer ones. Optional: desktop-file-validate, appstreamcli.
 #
@@ -81,6 +82,40 @@ cp "$UP/ATTRIBUTION.md" "$DOC/notices/WordCraft-ATTRIBUTION.md"
 cp "$UP/LICENSE-MIT" "$DOC/notices/WordCraft-LICENSE-MIT"
 cp "$UP/LICENSE-APACHE" "$DOC/notices/WordCraft-LICENSE-APACHE"
 cp "$UP"/assets/fonts/OFL-*.txt "$DOC/notices/"
+
+# ---- open 公文 fonts ------------------------------------------------------------------------------
+# Linux systems rarely have a FangSong or Kai design, so 仿宋_GB2312 and 楷体_GB2312 text would
+# fall back to Song (wenshu-cjk's substitute lists). Ship two OFL-1.1 families, unmodified, in
+# /usr/share/wenshu/fonts: wenshu-core catalogs that folder and loads a font only when a document
+# uses it. Windows has FangSong and KaiTi, so its packages don't carry them.
+FONT_CACHE="$CARGO_TARGET_DIR/wenshu-fonts"
+mkdir -p "$FONT_CACHE"
+# Downloads $1 to $FONT_CACHE/$3 once and checks it against SHA-256 $2 on every run.
+fetch_font_file() {
+  local url="$1" sha="$2" target="$FONT_CACHE/$3"
+  if [[ ! -f "$target" ]]; then
+    curl --proto '=https' -fsSL -o "$target.download" "$url"
+    printf '%s  %s\n' "$sha" "$target.download" | sha256sum -c - >/dev/null
+    mv "$target.download" "$target"
+  fi
+  printf '%s  %s\n' "$sha" "$target" | sha256sum -c - >/dev/null
+}
+# 朱雀仿宋 Zhuque Fangsong v0.212 (TrionesType)
+fetch_font_file https://github.com/TrionesType/zhuque/releases/download/v0.212/ZhuqueFangsong-v0.212.zip \
+  bb8b661a7643d2296a72d9d10530a00949419c4e527fb61783f73c2ba1a8c062 ZhuqueFangsong-v0.212.zip
+fetch_font_file https://raw.githubusercontent.com/TrionesType/zhuque/v0.212/LICENSE.txt \
+  66cc01ad4df62fca6936431a426104cb32a52ce8da49de9a7d643e02d7659043 OFL-ZhuqueFangsong.txt
+# 霞鹜文楷 GB LXGW WenKai GB v1.530 (GB 18030 glyph forms)
+fetch_font_file https://github.com/lxgw/LxgwWenkaiGB/releases/download/v1.530/LXGWWenKaiGB-Regular.ttf \
+  5561d48097d92e5ab99fe7b1459d381bbcdff533bfc479207b089c6860c3990e LXGWWenKaiGB-Regular.ttf
+fetch_font_file https://raw.githubusercontent.com/lxgw/LxgwWenkaiGB/v1.530/OFL.txt \
+  a8aa32c38a3402ba4e40fb6d39c913300dd4a0336290dce5c14e3a2f9308d092 OFL-LXGWWenKaiGB.txt
+FONTS="$STAGE/usr/share/wenshu/fonts"
+mkdir -p "$FONTS"
+unzip -q -o -j "$FONT_CACHE/ZhuqueFangsong-v0.212.zip" 'ZhuqueFangsong-Regular.ttf' -d "$FONTS"
+install -m644 "$FONT_CACHE/LXGWWenKaiGB-Regular.ttf" "$FONTS/"
+install -m644 "$FONT_CACHE/OFL-ZhuqueFangsong.txt" "$FONT_CACHE/OFL-LXGWWenKaiGB.txt" "$DOC/notices/"
+chmod 644 "$FONTS"/*
 
 if command -v desktop-file-validate >/dev/null; then
   desktop-file-validate "$STAGE/usr/share/applications/$APP_ID.desktop"

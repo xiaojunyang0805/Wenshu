@@ -4,8 +4,9 @@
 //! commercial packs: 仿宋_GB2312 and 楷体_GB2312 (Windows XP era), 方正小标宋简体 (Founder), 华文
 //! (STXihei…, macOS Office). When one is missing, the substitute must keep its *design class*
 //! (FangSong, Kai, Song, Hei): drawing a 公文 body in a sans face is the most visible defect a
-//! Chinese reader sees. Each list goes Windows names, macOS names, then open fonts (Fandol,
-//! LXGW WenKai, Noto/Source Han), and the engine takes the first installed one.
+//! Chinese reader sees. Each list goes Windows names, macOS names, then open fonts (Zhuque
+//! Fangsong and LXGW WenKai GB, which Wenshu's Linux packages ship; Fandol; Noto/Source Han), and
+//! the engine takes the first installed one.
 
 /// FangSong (仿宋) designs: the 公文 body font.
 pub const FANGSONG: &[&str] = &[
@@ -13,6 +14,8 @@ pub const FANGSONG: &[&str] = &[
     "仿宋",
     "STFangsong",
     "华文仿宋",
+    // 朱雀仿宋 (OFL), shipped with Wenshu's Linux packages; the name is the font's own.
+    "Zhuque Fangsong (technical preview)",
     "FandolFang",
     "Noto Serif CJK SC",
     "Source Han Serif SC",
@@ -26,6 +29,8 @@ pub const KAITI: &[&str] = &[
     "STKaiti",
     "华文楷体",
     "Kaiti SC",
+    // 霞鹜文楷 GB (OFL), GB 18030 glyph forms; shipped with Wenshu's Linux packages.
+    "LXGW WenKai GB",
     "LXGW WenKai",
     "FandolKai",
     "Noto Serif CJK SC",

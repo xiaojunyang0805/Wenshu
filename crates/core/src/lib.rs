@@ -25,7 +25,29 @@ pub fn init() {
     INIT.call_once(|| {
         let _ = wordcraft_fonts::word::set_substitute_provider(wenshu_cjk::fonts::substitutes);
         let _ = wordcraft_engine::set_blank_document_hook(blank_defaults);
+        wordcraft_fonts::FontDb::global().add_font_dirs(app_font_dirs());
     });
+}
+
+/// The folders of fonts shipped with Wenshu (open FangSong and Kai designs for 公文 on systems
+/// without them), cataloged like installed fonts and loaded only when a document uses them:
+/// `WENSHU_FONTS_DIR` if set, then `fonts` beside the executable (Windows, portable) and
+/// `../share/wenshu/fonts` from it (the Linux packages: `/usr/bin` → `/usr/share/wenshu/fonts`,
+/// and the same inside the AppImage and the tar tree). Only folders that exist.
+pub fn app_font_dirs() -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = std::env::var_os("WENSHU_FONTS_DIR")
+        .map(PathBuf::from)
+        .into_iter()
+        .collect();
+    if let Some(bin) = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(Path::to_path_buf))
+    {
+        dirs.push(bin.join("fonts"));
+        dirs.push(bin.join("../share/wenshu/fonts"));
+    }
+    dirs.retain(|d| d.is_dir());
+    dirs
 }
 
 /// A new blank document's defaults when the region is Chinese (`zh-*`), as a clerk expects them

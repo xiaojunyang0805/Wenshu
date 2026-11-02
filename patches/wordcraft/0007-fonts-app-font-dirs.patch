@@ -1,0 +1,105 @@
+Upstream: (not yet opened; app-bundled font folders for Wenshu's open 公文 fonts)
+diff --git a/crates/fonts/src/fontdb.rs b/crates/fonts/src/fontdb.rs
+index 44898b8..425ffa0 100644
+--- a/crates/fonts/src/fontdb.rs
++++ b/crates/fonts/src/fontdb.rs
+@@ -55,9 +55,10 @@ pub struct FontDb {
+     user: RwLock<user::UserFonts>,
+     /// Bumped whenever user fonts are added or removed ([`FontDb::generation`]).
+     generation: AtomicU64,
+-    /// The folders the system font scan reads (the platform's font folders for [`FontDb::global`]).
++    /// The folders the system font scan reads (the platform's font folders for [`FontDb::global`],
++    /// plus any an app adds with [`FontDb::add_font_dirs`]).
+     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+-    font_dirs: Vec<std::path::PathBuf>,
++    font_dirs: RwLock<Vec<std::path::PathBuf>>,
+     /// Set once the font folders have been scanned. Lookups by family name wait for the first
+     /// scan, so what they find doesn't depend on what ran before them.
+     #[cfg(not(target_arch = "wasm32"))]
+@@ -110,7 +111,7 @@ impl FontDb {
+             catalog: RwLock::new(Vec::new()),
+             user: RwLock::new(user::UserFonts::default()),
+             generation: AtomicU64::new(0),
+-            font_dirs,
++            font_dirs: RwLock::new(font_dirs),
+             #[cfg(not(target_arch = "wasm32"))]
+             cataloged: std::sync::OnceLock::new(),
+             #[cfg(not(target_arch = "wasm32"))]
+@@ -140,6 +141,35 @@ impl FontDb {
+         let _ = on;
+     }
+ 
++    /// Add folders for the system font scan to read, such as fonts an app ships beside its
++    /// executable. Their fonts are cataloged like installed ones and load only when a document
++    /// uses them, so a large CJK family costs nothing until then. Folders already listed are
++    /// skipped. Once the folders have been scanned, adding one rescans them (native only; a no-op
++    /// on wasm).
++    pub fn add_font_dirs(&self, dirs: impl IntoIterator<Item = std::path::PathBuf>) {
++        #[cfg(not(target_arch = "wasm32"))]
++        {
++            let added = {
++                let mut list = self.font_dirs.write().unwrap_or_else(std::sync::PoisonError::into_inner);
++                let before = list.len();
++                for d in dirs {
++                    if !list.contains(&d) {
++                        list.push(d);
++                    }
++                }
++                list.len() > before
++            };
++            if added && self.cataloged.get().is_some() {
++                self.load_system_fonts();
++                // Misses remembered before the rescan may be found now.
++                self.fallbacks.write().unwrap_or_else(std::sync::PoisonError::into_inner).map.clear();
++                *self.run_fallbacks.write().unwrap_or_else(std::sync::PoisonError::into_inner) = RunFallbackCache::default();
++            }
++        }
++        #[cfg(target_arch = "wasm32")]
++        let _ = dirs;
++    }
++
+     /// Process-wide database: the bundled fonts, then the installed system fonts, cataloged the
+     /// first time a lookup by family name needs them (or ahead of time by
+     /// [`FontDb::scan_in_background`]).
+diff --git a/crates/fonts/src/fontdb/catalog.rs b/crates/fonts/src/fontdb/catalog.rs
+index 5cd84c5..f749e53 100644
+--- a/crates/fonts/src/fontdb/catalog.rs
++++ b/crates/fonts/src/fontdb/catalog.rs
+@@ -188,7 +188,7 @@ impl FontDb {
+     #[cfg(not(target_arch = "wasm32"))]
+     fn scan_font_dirs(&self) -> usize {
+         let mut found = Vec::new();
+-        let mut stack = self.font_dirs.clone();
++        let mut stack = self.font_dirs.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
+         // Each folder once, however links lead back to it.
+         let mut visited = std::collections::HashSet::new();
+         while let Some(d) = stack.pop() {
+diff --git a/crates/fonts/src/fontdb/tests/sysfonts.rs b/crates/fonts/src/fontdb/tests/sysfonts.rs
+index c95adb6..3ddfd68 100644
+--- a/crates/fonts/src/fontdb/tests/sysfonts.rs
++++ b/crates/fonts/src/fontdb/tests/sysfonts.rs
+@@ -135,6 +135,24 @@ fn rescanning_finds_fonts_installed_since() {
+     assert!(db.has_family(FAMILY) && has(&db.families(), FAMILY));
+ }
+ 
++#[test]
++fn added_font_dirs_are_cataloged_before_and_after_the_first_scan() {
++    let dir = font_dir("added");
++    // Before the first scan: the added folder is part of it, and its fonts load only when used.
++    let db = FontDb::with_font_dirs(Vec::new());
++    db.add_font_dirs([dir.clone(), dir.clone()]);
++    assert_eq!(db.styles(FAMILY), ["Regular", "Bold"]);
++    assert!(!db.is_loaded(FAMILY));
++    assert_eq!(db.load_system_fonts(), 2, "a folder added twice is read once");
++    // After it: adding a folder rescans, and a miss remembered before is found.
++    let db = FontDb::with_font_dirs(Vec::new());
++    assert!(!db.has_family(FAMILY));
++    assert_eq!(db.face(FAMILY, "Regular").family, FALLBACK_FAMILY);
++    db.add_font_dirs([dir]);
++    assert!(db.has_family(FAMILY));
++    assert_eq!(db.face(FAMILY, "Regular").family, FAMILY);
++}
++
+ #[test]
+ fn a_background_scan_serves_the_first_lookup() {
+     let dir = font_dir("background");

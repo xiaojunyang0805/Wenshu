@@ -2,6 +2,33 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-02: release workflow; open 公文 fonts in the Linux packages
+
+**Release workflow** (`.github/workflows/release.yml`). A `v*` tag builds every package (Windows
+zip + MSI on windows-2022, Linux tar.gz/.deb/AppImage on ubuntu-22.04), runs smoke tests and
+attaches the packages and `SHA256SUMS` to a **draft** release. A maintainer publishes it by hand.
+Running it by hand gives workflow artifacts only. The tag must match the Cargo version. The
+binaries are not code-signed.
+
+**Fonts.** Linux systems rarely have a FangSong or Kai design, so 公文 bodies in 仿宋_GB2312 fell back
+to Noto Serif CJK (a Song). The Linux packages now ship two OFL-1.1 families, unmodified, in
+`/usr/share/wenshu/fonts`: 朱雀仿宋 Zhuque Fangsong v0.212 (8.8 MB) and 霞鹜文楷 GB
+LXGW WenKai GB v1.530 (26 MB). Both cover all 6,763 GB2312 hanzi. `package.sh` downloads them at
+pinned SHA-256s, with their licences into `notices/`. Patch 0007 (`FontDb::add_font_dirs`) lets
+`wenshu-core::init` add `fonts` and `../share/wenshu/fonts` beside the executable (and
+`WENSHU_FONTS_DIR`) to the system font scan, so a font loads only when a document uses it.
+`wenshu-cjk` lists the two before Fandol and Noto, after the Windows and macOS designs, so Windows
+keeps FangSong and KaiTi. Windows packages don't carry the fonts.
+
+Seen in WSL (no FangSong or Kai installed): the 通知 template's body, rendered by `wenshu render`
+and in the AppImage, is now in 朱雀仿宋; before, it was Song. **Difference:** Windows FangSong
+draws `× · ° ± — … “ ” ‘ ’` full-width; Zhuque draws `×` at 0.506 em and the curly quotes at
+0.331 em, so the `××××` placeholders look small and lines holding them can break differently
+from WPS on Windows. Fixing that would mean a modified build of the font (OFL allows it).
+
+Package sizes grow: .deb 31 → 45 MB, AppImage 44 → 62 MB, tar.gz 47 → 66 MB. Font tests 103,
+wenshu-core and -cjk pass; fmt and clippy clean; the queue (0001–0007) applies on the pin.
+
 ## 2026-11-01: the MSI builds and installs; Linux packaging written
 
 **MSI** (`packaging/windows/wenshu.wxs`). With the user's go-ahead, the .NET 8 SDK (8.0.427, winget)

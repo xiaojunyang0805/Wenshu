@@ -42,8 +42,11 @@ beyond what upstream offers.
    (2026-10-30) with COM automation, so renders can be made locally. Still open: a Word reference,
    and whether WPS renders may be shared publicly (until then `corpus/ref/` stays local, per
    `.gitignore`).
-2. **Fonts:** bundle open FangSong/Kai designs (Fandol is GPL with a font exception; LXGW WenKai is
-   OFL) in the installer, or rely on the system fonts?
+2. **Fonts:** ~~bundle open FangSong/Kai designs, or rely on the system fonts?~~ Both (2026-11-02): the
+   Linux packages ship 朱雀仿宋 Zhuque Fangsong and 霞鹜文楷 GB (OFL-1.1, unmodified,
+   `/usr/share/wenshu/fonts`); Windows uses its own FangSong and KaiTi. Still open: no open 小标宋
+   (titles fall back to Noto Serif CJK), and Zhuque's `×` and curly quotes are narrower than
+   Windows FangSong's full-width ones.
 3. **Governance:** work as a CJK working group inside the storytold/ArtCraft community, or as a
    separate organisation? This affects branding and CLA.
 4. **Engine risk:** WordCraft is 3 weeks old. If upstream stalls, the patch queue becomes a fork.
