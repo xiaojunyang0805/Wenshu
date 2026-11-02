@@ -2,6 +2,29 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-02 (8): the squeeze pool and the last unit (F12); end of day
+
+F11's open question answered: a line's squeeze pool grows by an em for each compressible mark in
+its last unit (`《瑞`, `中。`, `“中`), half an em otherwise (F12, patch 0014, replacing 0012's
+two additions). Found with `corpus/tools/sweep_lines.py`, which sweeps any line: the real
+`2e6f27b909` line, then variants removing one ingredient at a time.
+
+Re-scored (0013 → 0014): page-count matches **133 → 135 / 200**, mean page score 0.9080 →
+**0.9082** (the day's best; it was 0.9042 this morning, with 122 matches). Layout 586 tests; fmt
+and clippy clean; the queue 0001–0014 applies on the pin and reproduces the tested tree.
+
+**Where things stand (end of 2026-11-02):** v0.1.0 is a draft release, built before 0008–0014
+(publishing it, as a pre-release, is the user's call; a v0.1.1 would carry this work). Patches
+0008–0014 are measured in WPS only and not opened upstream; 0011, 0012 and 0014 change code that
+is in the open PRs #5003/#5006 and should be folded in with their next push (the user's call).
+
+**Next:**
+1. The 65 documents still differing in page count: `out/breakdiff.py` over all of them, then the
+   largest group.
+2. F12 on justified mode-15 lines (only the line-end cases measured).
+3. Fold 0011/0012/0014 into #5003/#5006 and 0013's quote breaks into #5004, once the user agrees.
+4. A v0.1.1 tag with the fidelity work, after publishing v0.1.0.
+
 ## 2026-11-02 (7): character-grid indents, curly-quote breaks (F11)
 
 A new first-divergence pass (`out/breakdiff.py`: compares line-break offsets in each document's

@@ -1,0 +1,95 @@
+Upstream: (not opened; fold into #5006 with 0005/0012: the line's squeeze pool is half an em plus an em per compressible mark in its last unit (mode 15 justified: 1 - 1/(2k) plus half an em per mark); a closing mark's free line-end half comes out of it; replaces 0012's line-end and closing-opening bonuses; F12)
+diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
+index 484bc2d..f6dd278 100644
+--- a/crates/layout/src/para.rs
++++ b/crates/layout/src/para.rs
+@@ -106,17 +106,19 @@ pub struct ParaLayout {
+ }
+ 
+ /// How much one line may take from its compressible marks in all, measured in WPS Office on
+-/// 20-character lines (sweeps of 1–8 marks, isolated, mixed, in pairs, with and without a closing
+-/// mark at the line end). Each mark gives up the same share, at most its blank half. On top of
+-/// the base below, a line ending in a closing mark may take another half em, and every two
+-/// places where a closing mark meets an opening one (`：“` `”（` `、《`) another half em.
++/// 20-character lines (sweeps of 1–8 marks, isolated, mixed, in pairs, opening and closing, with
++/// marks in the last unit and without). The line has a pool: the base below, plus an amount for
++/// each compressible mark in its last unit (what can't be broken off the line's end, `《瑞` or
++/// `中。`): a closing mark's free blank half at the line end comes out of the pool, and the marks
++/// share the rest equally, each at most its blank half.
+ #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+ pub enum SqueezeRule {
+-    /// Compatibility mode 14 and older (any alignment): half an em, however many marks.
++    /// Compatibility mode 14 and older (any alignment): half an em, however many marks, and a
++    /// whole em more for each mark in the last unit.
+     #[default]
+     HalfEm,
+     /// Mode 15, justified lines only: 1 − 1/(2k) em for k marks (½ em for one mark, ¾ for two,
+-    /// approaching a whole em).
++    /// approaching a whole em), and half an em more for each mark in the last unit.
+     Justified,
+ }
+ 
+@@ -183,14 +185,16 @@ impl ParaLayout {
+         let rooms: f32 = marks.iter().map(|s| s.room).sum();
+         // A mark's room is half its size, so the marks' mean size is rooms × 2 / k.
+         let em = rooms * 2.0 / k;
+-        let base = match self.squeeze_rule {
+-            SqueezeRule::HalfEm => 0.5,
+-            SqueezeRule::Justified => 1.0 - 0.5 / k,
++        let (base, per_mark) = match self.squeeze_rule {
++            SqueezeRule::HalfEm => (0.5, 1.0),
++            SqueezeRule::Justified => (1.0 - 0.5 / k, 0.5),
+         };
+-        // A closing mark's side next to an opening mark's.
+-        let meets = marks.windows(2).filter(|w| matches!(w, [a, b] if !a.left && b.left && b.k == a.k + 1)).count();
+-        let bonus = 0.5 * (f32::from(u8::from(self.ends_in_free_mark(c0, c1))) + (meets / 2) as f32);
+-        ((base + bonus) * em).min(rooms)
++        // The last unit: the clusters after the line's last break opportunity before its end.
++        let unit = (c0..c1.saturating_sub(1)).rev().find(|&j| self.clusters.get(j).is_some_and(|c| c.break_after)).map_or(c0, |j| j + 1);
++        let in_unit = self.squeeze.iter().filter(|s| s.k >= unit && s.k < c1).count() as f32;
++        // A closing mark ending the line takes its blank half out of the pool.
++        let free = if self.ends_in_free_mark(c0, c1) { 0.5 } else { 0.0 };
++        ((base + per_mark * in_unit - free).max(0.0) * em).min(rooms)
+     }
+     fn auto_space_after(&self, k: usize) -> f32 {
+         self.auto_space.binary_search_by_key(&k, |a| a.0).ok().and_then(|i| self.auto_space.get(i)).map_or(0.0, |a| a.1)
+diff --git a/crates/layout/src/tests/compress.rs b/crates/layout/src/tests/compress.rs
+index afc575e..f268954 100644
+--- a/crates/layout/src/tests/compress.rs
++++ b/crates/layout/src/tests/compress.rs
+@@ -1,8 +1,9 @@
+ //! Punctuation compression (`w:characterSpacingControl`) as WPS lays it out: a line that would
+-//! overflow squeezes its full-width marks, each the same share, by half an em in all in
++//! overflow squeezes its full-width marks, each the same share, from a pool: half an em in
+ //! compatibility mode 14 and older (1 − 1/(2k) em for k marks on justified lines in mode 15,
+-//! nothing on other mode-15 lines); a closing mark ending a line needs no room for its blank half
+-//! (not on unjustified mode-15 lines); a line that fits is left alone. Assertions compare
++//! nothing on other mode-15 lines), plus an em (mode 15: half an em) for each mark in the line's
++//! last unit; a closing mark ending a line needs no room for its blank half, which comes out of
++//! the pool (not on unjustified mode-15 lines); a line that fits is left alone. Assertions compare
+ //! layouts with compression on and off and are relative to the font size, never font metrics; a
+ //! machine without a CJK font draws the marks proportionally, and then nothing is compressed.
+ 
+@@ -240,3 +241,22 @@ fn a_line_may_break_before_an_opening_curly_quote_between_ideographs() {
+         assert!(!matches!(first, Some('”' | '，')), "a line starts with {first:?}");
+     }
+ }
++
++#[test]
++fn marks_in_the_last_unit_enlarge_the_lines_squeeze() {
++    if !full_width_marks() {
++        return;
++    }
++    // WPS: three commas and a last unit 《瑞 (an opening mark can't end a line) squeeze 1.5 em in
++    // all, 18.5 em for 20 units; the same marks with 《 in mid-line only half an em; 《瑞 alone,
++    // just the 《's own blank half.
++    let end = "甲中，中中中，中中中中，中中中中中中《瑞国国国";
++    assert_eq!(first_line_chars(end, CharSpacing::CompressPunctuation, 18.5).0, 20);
++    assert_eq!(first_line_chars(end, CharSpacing::CompressPunctuation, 18.4).0, 18);
++    let mid = "甲中，中中中，中中中中《中中中中，中中中瑞国国国";
++    assert_eq!(first_line_chars(mid, CharSpacing::CompressPunctuation, 20.5).0, 21);
++    assert_eq!(first_line_chars(mid, CharSpacing::CompressPunctuation, 20.4).0, 20);
++    let alone = format!("{}《瑞国国国", "中".repeat(18));
++    assert_eq!(first_line_chars(&alone, CharSpacing::CompressPunctuation, 19.5).0, 20);
++    assert_eq!(first_line_chars(&alone, CharSpacing::CompressPunctuation, 19.4).0, 18);
++}

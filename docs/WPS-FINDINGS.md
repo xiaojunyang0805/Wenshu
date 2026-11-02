@@ -190,11 +190,35 @@ legacy mode, as WordCraft already reads them.
   so such lines lost a character (0004 had assumed the breaks existed).
 - **The mark ending a line isn't squeezed**, whether its blank half is free (`。`) or not (`”`).
 
-Patch 0013. **Open:** some bracket-heavy lines squeeze more than F10 allows: about 0.11 em off
+Patch 0013. **Open (resolved by F12):** some bracket-heavy lines squeeze more than F10 allows: about 0.11 em off
 each of seven sides in `dc-policies-2e6f27b909` (0.78 em in all; `〔2020〕22号` with autospace
 beside the digits), 0.52 em in `dc-policies-af80f1c025`, and probes 01/02. Comma sweeps, eight
 mixed closing marks and an opening bracket among commas all stay at exactly 0.5 em (a 0.005 em
 sweep: 19.500 em fits, 19.495 doesn't). The variable that separates them isn't found yet.
+
+## F12. The squeeze pool grows with the marks in the line's last unit
+
+Resolves F11's open question and replaces F10's two additions. `corpus/tools/sweep_lines.py` sweeps
+arbitrary first lines (0.02 em steps). The real line from `dc-policies-2e6f27b909` squeezes 1.2 em;
+taking out its brackets drops that to ½ em, and so does replacing only its final `《` (the line
+ends `…定《瑞`). Lines whose last unit (what can't be broken off the end: `《瑞`, `中。`, `“中`)
+holds a compressible mark:
+
+| Line | Squeeze |
+|---|---|
+| ideographs, last unit `《瑞` | 0.49 em (the `《`'s own half) |
+| 1 comma, last unit `《瑞` | 0.99 em |
+| 3, 5 or 8 commas, last unit `《瑞` / `瑞。` / `瑞”` | 1.49–1.50 em |
+| 5 commas, last unit `《「瑞` | 2.50 em |
+| the same commas with `《` mid-line, plain last unit | 0.50 em |
+
+**Rule (mode 14 and older):** the line has a pool of ½ em plus 1 em per compressible mark in its
+last unit. A closing mark's free blank half at the line end comes out of the pool; the marks
+share the rest equally, each at most its blank half (a closing quote ending the line gives
+nothing itself). It reproduces every sweep so far, F1's ten-comma line and line-end `”` case,
+the closing-opening line (its last unit was `“中`) and the bracket-heavy corpus lines. On
+justified mode-15 lines the same shape fits with 1 − 1/(2k) em plus ½ em per last-unit mark
+(three commas and `。`: 1.33 em measured, 1.3). Patch 0014.
 
 ## Still to measure
 
@@ -202,8 +226,8 @@ sweep: 19.500 em fits, 19.495 doesn't). The variable that separates them isn't f
 - How the squeeze interacts with justification (`jc=both`) and kinsoku.
 - `w:topLinePunct` (F5).
 - `*Chars` indents with no document grid at all (F8 covers line grids).
-- F10's additions on justified mode-15 lines (measured roughly: 1.33 em for three commas and an
-  end mark, 1.8 em for four closing-opening meetings), and marks of mixed sizes on one line.
+- F12 on justified mode-15 lines beyond the line-end cases (the closing-opening line measured
+  1.8 em there), and marks of mixed sizes on one line.
 - Where at-least spacing puts the baseline when the minimum is larger than the text (F6 covers
   exact only).
 - Word's behaviour for each finding. Upstream targets Word, so changes to #5003/#5006 need
