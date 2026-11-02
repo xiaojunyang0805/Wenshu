@@ -173,7 +173,7 @@ def sweep_read(d):
             k += 1
 
 
-def sweep_k(out, jc="left", grid=""):
+def sweep_k(out, jc="left", grid="", start=20.0, step=0.05):
     """Lines of 20 units holding K commas (K = 1, 2, 3, 5) and ending in an ideograph, narrowed from
     20 em to 17.5 em in 0.05 em steps, in compatibility modes 14 and 15 (16 pt 仿宋).
 
@@ -214,6 +214,9 @@ def sweep_k(out, jc="left", grid=""):
         cases.append(("k3-endp", "甲中中中，中中中中，中中中中，中中中中。"))
         cases.append(("openclose", "甲中：“中中中”（中中中、《中中中》“中"))
         cases.append(("openclose1", "甲中中中中中中中”（中中中中中中中中中中"))
+        cases.append(("open1", "甲中中中中中中中（中中中中中中中中中中中"))
+        cases.append(("open1k1", "甲中中中（中中中中中中中，中中中中中中中"))
+        cases.append(("open1k3", "甲中，中中（中中中，中中中中中，中中中中"))
         # A closing mark at the line end, no other mark: its blank half, or the whole mark, hangs?
         cases += [("end-comma", "甲" + "中" * 18 + "，"), ("end-period", "甲" + "中" * 18 + "。")]
         for name, first in cases:
@@ -224,7 +227,7 @@ def sweep_k(out, jc="left", grid=""):
                 body.remove(child)
             ps = []
             for i in range(51):
-                right = text_w - round(em * (20 - 0.05 * i) * 20)
+                right = text_w - round(em * (start - step * i) * 20)
                 rpr = f'<w:rFonts w:ascii="{font}" w:hAnsi="{font}" w:eastAsia="{font}"/><w:sz w:val="{sz}"/>'
                 ps.append(f'<w:p><w:pPr><w:jc w:val="{jc}"/><w:ind w:left="0" w:right="{right}"/></w:pPr><w:r><w:rPr>{rpr}</w:rPr><w:t>{line}</w:t></w:r></w:p>')
             sect = '<w:sectPr><w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="0" w:footer="0" w:gutter="0"/>' + grid + '</w:sectPr>'
@@ -263,4 +266,4 @@ if __name__ == "__main__":
     if cmd == "sweep-off":
         sweep(arg, "doNotCompress")
     else:
-        {"make": make, "measure": measure, "sweep": sweep, "sweep-read": sweep_read, "sweep-k": sweep_k, "sweep-k-both": lambda a: sweep_k(a, "both"), "sweep-k-grid": lambda a: sweep_k(a, "left", '<w:docGrid w:type="lines" w:linePitch="312"/>'), "sweep-k-chargrid": lambda a: sweep_k(a, "left", '<w:docGrid w:type="linesAndChars" w:linePitch="579" w:charSpace="-842"/>'), "sweep-k-read": sweep_k_read}[cmd](arg)
+        {"make": make, "measure": measure, "sweep": sweep, "sweep-read": sweep_read, "sweep-k": sweep_k, "sweep-k-both": lambda a: sweep_k(a, "both"), "sweep-k-grid": lambda a: sweep_k(a, "left", '<w:docGrid w:type="lines" w:linePitch="312"/>'), "sweep-k-fine": lambda a: sweep_k(a, start=19.6, step=0.005), "sweep-k-chargrid": lambda a: sweep_k(a, "left", '<w:docGrid w:type="linesAndChars" w:linePitch="579" w:charSpace="-842"/>'), "sweep-k-read": sweep_k_read}[cmd](arg)

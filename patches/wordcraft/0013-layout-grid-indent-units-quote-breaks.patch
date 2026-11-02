@@ -1,0 +1,180 @@
+Upstream: (not opened; WPS measurements: on a character grid *Chars indents count the text's advance, first line the first run's size, sides the larger of it and the mark's (probe 36); Unicode 15.1 LB19a breaks beside curly quotes between East Asian characters, which unicode-linebreak 0.1.5 lacks (fold into #5004); the mark ending a line is never squeezed (F10 sweeps))
+diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
+index 089b41e..c46755b 100644
+--- a/crates/layout/src/para/paragraph.rs
++++ b/crates/layout/src/para/paragraph.rs
+@@ -95,16 +95,23 @@ fn paragraph_props(p: &Paragraph, env: &ParaEnv) -> ResolvedPara {
+     if let Some(spacing) = env.read_line_spacing.filter(|s| s.is_finite() && (1.0..=2.0).contains(s)) {
+         rp.line_spacing = wordcraft_doc::props::LineSpacing::Multiple(spacing);
+     }
+-    // Indents in characters are measured in the paragraph mark's font size, or in the character
+-    // pitch when the paragraph sits on a character grid (two characters of indent are two cells,
+-    // so a 28-character grid line holds 26 after a two-character first-line indent, whatever the
+-    // mark's size). On a line grid without a character pitch, the left and right indents count
+-    // the grid's default font size (the Normal style's) and the first line the mark's size (WPS
+-    // Office: `leftChars=100` is 10.5 pt and `firstLineChars=200` 32 pt beside a 16 pt mark).
++    // Indents in characters are measured in the paragraph mark's font size off the grid. On a
++    // character grid a character of indent is what the text's characters advance there: the
++    // first line counts the first run's size, the left and right indents the larger of that and
++    // the mark's, each plus the grid's adjustment (WPS Office: with a 10.5 pt Normal style and
++    // 16 pt text, `firstLineChars=200` is 2 × 15.54 pt, not two 10.05 pt cells). On a line grid
++    // without a character pitch, the left and right indents count the grid's default font size
++    // (the Normal style's) and the first line the mark's size (`leftChars=100` is 10.5 pt and
++    // `firstLineChars=200` 32 pt beside a 16 pt mark).
+     if rp.indent_chars.iter().any(|c| *c != 0.0) {
+-        let size = doc.styles.resolve_char_in(p.props.style.as_deref(), env.table.map(|t| &t.chr), &p.mark).size;
++        let resolve = |props| doc.styles.resolve_char_in(p.props.style.as_deref(), env.table.map(|t| &t.chr), props).size;
++        let size = resolve(&p.mark);
++        let text = p.runs.iter().find(|r| r.len > 0).map_or(size, |r| resolve(&r.props));
+         match (rp.snap_to_grid, env.grid.chars, env.grid.line) {
+-            (true, Some(pitch), _) => rp.set_char_unit(pitch),
++            (true, Some(pitch), _) => {
++                let cell = |size: f32| env.grid.advance(size).filter(|a| *a > 0.0).unwrap_or(pitch);
++                rp.set_char_units(cell(text.max(size)), cell(text));
++            }
+             (true, None, Some(_)) => rp.set_char_units(env.grid.font_size, size),
+             _ => rp.set_char_unit(size),
+         }
+@@ -784,7 +791,34 @@ fn break_positions(text: &str, rp: &wordcraft_doc::resolve::ResolvedPara) -> Vec
+         found.sort_unstable();
+         found.dedup();
+     }
++    // Unicode 15.1 (LB19a) lets a line break before an opening curly quote and after a closing
++    // one between East Asian characters ("确保|“双减”|工作"); unicode-linebreak follows 15.0, which
++    // never breaks beside them, so a Chinese line ending before “ lost its last character.
++    let quote_breaks = curly_quote_breaks(text);
++    if !quote_breaks.is_empty() {
++        found.extend(quote_breaks);
++        found.sort_unstable();
++        found.dedup();
++    }
+     // Asian typography: kinsoku and breaking Latin words anywhere.
+     crate::kinsoku::apply(text, &mut found, rp.kinsoku, rp.word_wrap);
+     found
+ }
++
++/// LB19a's break opportunities beside curly quotes with East Asian characters on both sides:
++/// before an opening quote (“ ‘) and after a closing one (” ’). Kinsoku then removes those a line
++/// may not take (a closing mark starting the next line).
++fn curly_quote_breaks(text: &str) -> Vec<usize> {
++    let chars: Vec<(usize, char)> = text.char_indices().collect();
++    let east_asian = |k: Option<&(usize, char)>| k.is_some_and(|(_, c)| super::grid::is_east_asian(*c));
++    let mut out = Vec::new();
++    for (k, &(i, c)) in chars.iter().enumerate() {
++        let (before, after) = (k.checked_sub(1).and_then(|j| chars.get(j)), chars.get(k + 1));
++        match c {
++            '“' | '‘' if k > 0 && east_asian(before) && east_asian(after) => out.push(i),
++            '”' | '’' if east_asian(before) && east_asian(after) => out.push(i + c.len_utf8()),
++            _ => {}
++        }
++    }
++    out
++}
+diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
+index 1b58795..484bc2d 100644
+--- a/crates/layout/src/para.rs
++++ b/crates/layout/src/para.rs
+@@ -161,12 +161,15 @@ impl ParaLayout {
+     fn ends_in_free_mark(&self, c0: usize, c1: usize) -> bool {
+         c1 > c0 && self.end_marks.binary_search(&(c1 - 1)).is_ok()
+     }
+-    /// The marks of the clusters `c0..c1` that may give up room: not a closing mark ending the
+-    /// line, whose blank half is free already.
++    /// The marks of the clusters `c0..c1` that may give up room: not the right side of the mark
++    /// ending the line (WPS squeezes neither a closing mark whose blank half is free there nor a
++    /// closing quote, whose isn't).
+     fn squeeze_marks(&self, c0: usize, c1: usize) -> &[Squeeze] {
+         let from = self.squeeze.partition_point(|s| s.k < c0);
+-        let end = if self.ends_in_free_mark(c0, c1) { c1 - 1 } else { c1 };
+-        let to = self.squeeze.partition_point(|s| s.k < end).max(from);
++        let mut to = self.squeeze.partition_point(|s| s.k < c1).max(from);
++        if to > from && self.squeeze.get(to - 1).is_some_and(|s| c1 > 0 && s.k == c1 - 1 && !s.left) {
++            to -= 1;
++        }
+         self.squeeze.get(from..to).unwrap_or_default()
+     }
+     /// How much the clusters `c0..c1` may squeeze in all: each mark at most its blank half
+diff --git a/crates/layout/src/tests/compress.rs b/crates/layout/src/tests/compress.rs
+index 564babe..afc575e 100644
+--- a/crates/layout/src/tests/compress.rs
++++ b/crates/layout/src/tests/compress.rs
+@@ -168,7 +168,17 @@ fn a_closing_mark_ending_a_line_needs_no_room_for_its_blank_half() {
+         assert_eq!(first_line_chars(&text(m), CharSpacing::CompressPunctuation, 19.6).0, 20, "{m}");
+         assert_eq!(first_line_chars(&text(m), CharSpacing::DoNotCompress, 19.6).0, 18, "{m}");
+     }
+-    assert_eq!(first_line_chars(&text('”'), CharSpacing::CompressPunctuation, 19.6).0, 18);
++    // A full-width closing quote (the East Asian hint) ending the line: no free blank half and
++    // no squeeze, so it goes down with the ideograph before it.
++    let mut d = doc(&text('”'), CharSpacing::CompressPunctuation, Some(19.6));
++    if let Some(Block::Para(p)) = d.body.first_mut().map(Arc::make_mut) {
++        p.runs[0].props.hint_ea = Some(true);
++    }
++    let g = first_para(&lay(&d));
++    // (Only where a font draws the quote full-width; else it is a narrow Latin quote that fits.)
++    if g.clusters.get(19).is_some_and(|c| c.adv >= 0.9 * SIZE) {
++        assert_eq!(g.lines[0].c1 - g.lines[0].c0, 18);
++    }
+ }
+ 
+ #[test]
+@@ -212,3 +222,21 @@ fn compression_applies_on_a_character_grid() {
+         assert!(g.squeeze.iter().any(|s| s.k == 3), "。 on a grid is compressible: {:?}", g.squeeze);
+     }
+ }
++
++#[test]
++fn a_line_may_break_before_an_opening_curly_quote_between_ideographs() {
++    // Unicode 15.1 LB19a: "确保|“双减”" breaks before the quote, as WPS does; Unicode 15.0
++    // never broke beside a curly quote, so the line lost 保 as well. Kinsoku still keeps the
++    // closing quote off the next line's start.
++    let text = format!("{}确保“双减”，工作平稳有序", "中".repeat(18));
++    let mut d = doc(&text, CharSpacing::DoNotCompress, Some(20.2));
++    if let Some(Block::Para(p)) = d.body.first_mut().map(Arc::make_mut) {
++        p.runs[0].props.hint_ea = Some(true);
++    }
++    let g = first_para(&lay(&d));
++    assert_eq!(g.lines[0].c1 - g.lines[0].c0, 20, "the first line ends after 保");
++    for l in &g.lines {
++        let first = g.clusters.get(l.c0).and_then(|c| text.get(c.start..)).and_then(|t| t.chars().next());
++        assert!(!matches!(first, Some('”' | '，')), "a line starts with {first:?}");
++    }
++}
+diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
+index 9901f38..9c71bdc 100644
+--- a/crates/layout/src/tests/grid.rs
++++ b/crates/layout/src/tests/grid.rs
+@@ -288,3 +288,34 @@ fn grid_advance_follows_character_scaling_and_spacing() {
+         }
+     }
+ }
++
++#[test]
++fn character_indents_on_a_character_grid_count_the_texts_advance() {
++    // Text larger than the grid's default size: a character of indent is what the text advances
++    // (its size plus the grid adjustment), not one cell: WPS indents 16 pt text by 2 × 15.54 pt on
++    // a grid made for 10.5 pt. The left indent counts the larger of the text's and the mark's.
++    let (mut d, size, pitch) = tight_grid(&"中".repeat(200));
++    let text = size * 1.5;
++    if let Some(Block::Para(p)) = d.body.first_mut().map(std::sync::Arc::make_mut) {
++        p.runs[0].props.size = Some(text);
++        p.mark.size = Some(text);
++    }
++    let with = |f: &dyn Fn(&mut wordcraft_doc::Paragraph)| {
++        let mut d = d.clone();
++        if let Some(Block::Para(p)) = d.body.first_mut().map(std::sync::Arc::make_mut) {
++            f(p);
++        }
++        first_para(&lay(&d))
++    };
++    let cell = text + pitch - size;
++    let first = with(&|p| p.props.indent_first_chars = Some(2.0));
++    let indent = first.lines[0].xs[0] - first.lines[1].xs[0];
++    assert!((indent - 2.0 * cell).abs() < 0.01, "first-line indent {indent}, want {}", 2.0 * cell);
++    let base = with(&|_| {});
++    let left = with(&|p| {
++        p.props.indent_left_chars = Some(2.0);
++        p.mark.size = Some(text * 1.5);
++    });
++    let want = 2.0 * (text * 1.5 + pitch - size);
++    assert!((left.lines[1].left - base.lines[1].left - want).abs() < 0.01, "left {}, want {want}", left.lines[1].left - base.lines[1].left);
++}

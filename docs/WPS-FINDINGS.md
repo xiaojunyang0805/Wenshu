@@ -178,6 +178,24 @@ WPS squeezes a lone `，` by half an em to keep `来。` on the line. Patch 0012
 (`SqueezeRule`, `ParaLayout::squeeze_room`). The documents without `w:compat` (16 of 200) are
 legacy mode, as WordCraft already reads them.
 
+## F11. Character-grid indents count the text; quotes break; the last mark keeps its blank
+
+- **`*Chars` indents on a character grid** (probe 36: Normal 10.5 pt, `charSpace=-1839`, pitch
+  10.05 pt): `firstLineChars=200` is 2 × 15.54 pt beside 16 pt text whatever the mark's size
+  (20.04 pt for 10.5 pt text, 43.08 for 22 pt), so it counts the first run's size plus the grid
+  adjustment; `leftChars=200` gave 31.08 pt for text/mark sizes 16/16, 16/10.5 and 10.5/16, the
+  larger of the two. F3's probe had a 16 pt Normal style, where pitch and text agree.
+- **Curly quotes:** WPS breaks `确保|“双减”` before the opening quote. That is Unicode 15.1 LB19a;
+  WordCraft's `unicode-linebreak` 0.1.5 implements 15.0, which never breaks beside a curly quote,
+  so such lines lost a character (0004 had assumed the breaks existed).
+- **The mark ending a line isn't squeezed**, whether its blank half is free (`。`) or not (`”`).
+
+Patch 0013. **Open:** some bracket-heavy lines squeeze more than F10 allows: about 0.11 em off
+each of seven sides in `dc-policies-2e6f27b909` (0.78 em in all; `〔2020〕22号` with autospace
+beside the digits), 0.52 em in `dc-policies-af80f1c025`, and probes 01/02. Comma sweeps, eight
+mixed closing marks and an opening bracket among commas all stay at exactly 0.5 em (a 0.005 em
+sweep: 19.500 em fits, 19.495 doesn't). The variable that separates them isn't found yet.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

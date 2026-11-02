@@ -2,6 +2,25 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-02 (7): character-grid indents, curly-quote breaks (F11)
+
+A new first-divergence pass (`out/breakdiff.py`: compares line-break offsets in each document's
+whole text stream, so span splits and block order don't matter) found 瑞安/台州 documents whose
+lines held a character more than WPS's: their first-line indent was one 10.05 pt grid cell where
+WPS indents by the 16 pt text's advance (probe 36, F11). With that fixed, lines ending before an
+opening curly quote came out a character short: `unicode-linebreak` has no Unicode 15.1 LB19a
+breaks beside curly quotes. Both fixed in patch 0013, with the rule that the mark ending a line
+keeps its blank (seen in the sweeps).
+
+Re-scored (0012 → 0013): mean page score 0.9077 → 0.9080, 7 documents better, 2 slightly worse;
+page-count matches **135 → 133**: four documents lengthened by a page (two had matched). Their
+first divergences are now later in the text, at bracket-heavy lines where WPS squeezes more than
+F10's half em (open question in F11). Kept, because each change is measured; the half-em limit
+is the next thing to revisit. Layout 585 tests; fmt and clippy clean; the queue 0001–0013 applies
+on the pin and reproduces the tested tree.
+
+**Next:** what lets bracket-heavy lines squeeze ~0.1 em per side (F11 open question).
+
 ## 2026-11-02 (6): the punctuation squeeze limit is per line (F10)
 
 Our generated 函 (`gen-gongwen-04-han`) lost `来。` to a second line: WPS squeezed its one `，` by half

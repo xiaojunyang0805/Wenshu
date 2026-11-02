@@ -426,6 +426,25 @@ def _():
     return Probe().add(*pars)
 
 
+@probe("36-chars-indent-char-grid-small-normal", "*Chars indents on a character grid whose Normal size (10.5 pt) is smaller than the text: grid pitch, run size or mark size?")
+def _():
+    long = "试验文字" * 16
+    def par(ind, run=32, mark=32):
+        rr = f'<w:rFonts w:ascii="仿宋_GB2312" w:hAnsi="仿宋_GB2312" w:eastAsia="仿宋_GB2312"/><w:sz w:val="{run}"/><w:szCs w:val="{run}"/>'
+        mr = f'<w:rFonts w:ascii="仿宋_GB2312" w:hAnsi="仿宋_GB2312" w:eastAsia="仿宋_GB2312"/><w:sz w:val="{mark}"/><w:szCs w:val="{mark}"/>'
+        return p(r(long, rr), ppr=f'<w:ind {ind}/><w:rPr>{mr}</w:rPr>')
+    sect = PLAIN_SECT.replace('<w:docGrid w:type="lines" w:linePitch="312"/>', '<w:docGrid w:type="linesAndChars" w:linePitch="289" w:charSpace="-1839"/>')
+    return Probe(sect=sect).add(
+        par('w:firstLineChars="200"'),
+        par('w:firstLineChars="200"', mark=21),
+        par('w:firstLineChars="200"', run=21),
+        par('w:firstLineChars="200"', run=44, mark=44),
+        par('w:leftChars="200"'),
+        par('w:leftChars="200"', mark=21),
+        par('w:leftChars="200"', run=21),
+    )
+
+
 def main(out):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
