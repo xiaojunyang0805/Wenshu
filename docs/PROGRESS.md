@@ -2,6 +2,37 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-02 (2): LoongArch packages
+
+`packaging/linux/package.sh --arch loongarch64` cross-builds on x86_64 with cargo-zigbuild 0.20.1
+and Zig 0.14.1 (0.13 fails the final link without a message), against glibc 2.36, and writes
+`wenshu-<v>-linux-loongarch64.tar.gz` and `.deb` (Architecture `loong64`, `libc6 (>= 2.36)`).
+That is the new-world ABI (loader `/lib64/ld-linux-loongarch-lp64d.so.1`): deepin 23+,
+openKylin 2, Loongnix 25, Debian loong64, AOSC, openEuler, Anolis 23. Old-world systems (UOS 20,
+Kylin V10, Loongnix 20) need libLoL. No AppImage: AppImage publishes no LoongArch runtime. Only
+two crates need a C compiler (`ring` for the update check's TLS, `wayland-backend`), and Zig
+covers both. A cross build strips through the linker; `file` checks the binaries' machine.
+`WENSHU_STAGE_DIR` moves staging off NTFS (dpkg-deb rejects mode 777 under `/mnt/d`).
+
+Tested under qemu-user 10.0.13 with Debian sid loong64 libraries, on 2026-11-02:
+
+- **CLI:** `gongwen new`, `check` (8/8), `render` and `convert` to PDF. The .docx and the page
+  PNG are byte-identical to the x86_64 build's.
+- **Desktop:** started from the .deb on WSLg (X11, Mesa lavapipe Vulkan, a minimal debootstrap
+  root as the qemu prefix). wgpu picked llvmpipe, the Chinese interface came up as on x86_64
+  (`out/linux-shots/la64-zh-1-blank.png`), and the 通知 template opened and checked 8/8 through
+  the control channel. The screenshot after the check timed out (emulated software rendering).
+
+Not tested on LoongArch hardware. Sizes: .deb 42 MB, tar.gz 64 MB. The full cross build takes
+14 minutes in WSL.
+
+`release.yml` gains a `linux-loongarch64` job (ubuntu-22.04): the same cross build, then the CLI
+writes, checks and renders a 公文 under qemu (qemu-user and the loong64 glibc fetched from
+snapshot.debian.org by hash, SHA-256-checked).
+
+**Next:** a run on real LoongArch hardware (a 3A5000/3A6000 machine on deepin 23 or Loongnix 25),
+and libLoL on an old-world system.
+
 ## 2026-11-02: release workflow; open 公文 fonts in the Linux packages
 
 **Release workflow** (`.github/workflows/release.yml`). A `v*` tag builds every package (Windows

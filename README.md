@@ -11,7 +11,8 @@ made in WPS Office and Microsoft Word.
 patches are in draft PRs upstream, reworked to WPS measurements across a 200-document corpus
 ([corpus/README.md](corpus/README.md), [docs/WPS-FINDINGS.md](docs/WPS-FINDINGS.md)). The desktop
 app 文枢 has a Chinese or English interface, 公文 templates and a 公文 format check, and builds
-into a Windows zip and MSI and Linux tar.gz, .deb and AppImage packages. See [docs/PROGRESS.md](docs/PROGRESS.md), [docs/MVP.md](docs/MVP.md) and
+into a Windows zip and MSI, Linux tar.gz, .deb and AppImage packages (x86_64), and LoongArch
+tar.gz and .deb packages. See [docs/PROGRESS.md](docs/PROGRESS.md), [docs/MVP.md](docs/MVP.md) and
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Build
@@ -31,6 +32,9 @@ Packages go to `dist/`:
   (`dotnet tool install --global wix --version 5.0.2`, which needs the .NET SDK).
 - `packaging/linux/package.sh`: tar.gz, .deb (`dpkg-deb`) and AppImage. Build on Ubuntu 22.04
   (or WSL) with WordCraft's Linux build packages; the script's header lists them.
+  `--arch loongarch64` cross-builds tar.gz and .deb for LoongArch (glibc ≥ 2.36, new-world ABI)
+  with [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild) and Zig 0.14.
+- `.github/workflows/release.yml`: all of the above on a `v*` tag, attached to a draft release.
 
 Needs Rust ≥ 1.95 (tested on 1.99.1; on Windows use the MSVC toolchain), Git and about 10 GB of disk for the build.
 

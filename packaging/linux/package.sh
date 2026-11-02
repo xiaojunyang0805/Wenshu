@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
-# Build and package Wenshu (文枢) for Linux. <arch> is x86_64 or aarch64.
+# Build and package Wenshu (文枢) for Linux. <arch> is x86_64, aarch64 or loongarch64.
 #
 #   $DIST/wenshu-<version>-linux-<arch>.tar.gz    plain FHS-style tree (bin/, share/)
 #   $DIST/wenshu-<version>-linux-<arch>.deb       Debian, Ubuntu, Deepin, UOS, Kylin, ...
 #   $DIST/wenshu-<version>-linux-<arch>.AppImage  any distro with glibc >= the build host's
 #
-# Usage: packaging/linux/package.sh [--skip-build] [--formats "tar deb appimage"]
+# Usage: packaging/linux/package.sh [--skip-build] [--formats "tar deb appimage"] [--arch loongarch64]
+#
+# --arch loongarch64 cross-builds on an x86_64 host with cargo-zigbuild (Zig as the C compiler and
+# linker), against glibc 2.36, the first with LoongArch support. That is the "new world" ABI
+# (deepin 23+, openKylin 2, Loongnix 25, Debian loong64, AOSC, openEuler, Anolis 23); old-world
+# systems (UOS 20, Kylin V10, Loongnix 20) need libLoL. Needs `rustup target add
+# loongarch64-unknown-linux-gnu`, Zig 0.13 and cargo-zigbuild. No AppImage: AppImage publishes no
+# LoongArch runtime. Set CROSS_RUNNER (e.g. "qemu-loongarch64 -L <loong64 sysroot>") to run the
+# smoke test; without it the smoke test is skipped.
 #
 # Needs: Rust (rustup; see rust-version in Cargo.toml), WordCraft's Linux build packages
 # (pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev
@@ -29,7 +37,8 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --skip-build) SKIP_BUILD=1; shift ;;
     --formats) FORMATS="$2"; shift 2 ;;
-    -h | --help) sed -n '2,19p' "$0"; exit 0 ;;
+    --arch) ARCH="$2"; shift 2 ;;
+    -h | --help) sed -n '2,27p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -47,27 +56,50 @@ mkdir -p "$DIST"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/eval/target/wordcraft}"
 [[ -d "$UP" ]] || { echo "error: $UP missing; run scripts/sync-upstream.sh first" >&2; exit 1; }
 
-ARCH="$(uname -m)"
+HOST_ARCH="$(uname -m)"
+ARCH="${ARCH:-$HOST_ARCH}"
+GLIBC_MIN=2.35 # the build host's (Ubuntu 22.04)
 case "$ARCH" in
   x86_64) DEB_ARCH=amd64 ;;
   aarch64 | arm64) ARCH=aarch64; DEB_ARCH=arm64 ;;
+  loongarch64 | loong64)
+    ARCH=loongarch64; DEB_ARCH=loong64; GLIBC_MIN=2.36
+    [[ "$HOST_ARCH" = loongarch64 ]] || CROSS_TARGET=loongarch64-unknown-linux-gnu
+    FORMATS="${FORMATS/appimage/}"
+    ;;
   *) echo "unsupported architecture $ARCH" >&2; exit 2 ;;
 esac
+CROSS_TARGET="${CROSS_TARGET:-}"
 BASENAME="wenshu-$VERSION-linux-$ARCH"
 echo "==> Wenshu $VERSION for Linux $ARCH ($FORMATS)"
 
-if [[ "$SKIP_BUILD" = 0 ]]; then
-  (cd "$ROOT" && cargo build --release --locked -p wenshu-desktop -p wenshu-cli)
+if [[ -n "$CROSS_TARGET" ]]; then
+  # The glibc suffix makes Zig link against that glibc's symbol versions.
+  if [[ "$SKIP_BUILD" = 0 ]]; then
+    (cd "$ROOT" && CARGO_PROFILE_RELEASE_STRIP=symbols cargo zigbuild --release --locked \
+      -p wenshu-desktop -p wenshu-cli --target "$CROSS_TARGET.$GLIBC_MIN")
+  fi
+  BIN="$CARGO_TARGET_DIR/$CROSS_TARGET/release"
+else
+  if [[ "$SKIP_BUILD" = 0 ]]; then
+    (cd "$ROOT" && cargo build --release --locked -p wenshu-desktop -p wenshu-cli)
+  fi
+  BIN="$CARGO_TARGET_DIR/release"
 fi
-BIN="$CARGO_TARGET_DIR/release"
-WORK="$CARGO_TARGET_DIR/wenshu-linux-package"
+# Refuse binaries for another machine (a stale or wrong --skip-build).
+case "$ARCH" in x86_64) MACHINE=x86-64 ;; aarch64) MACHINE=aarch64 ;; loongarch64) MACHINE=LoongArch ;; esac
+for b in wenshu-desktop wenshu; do
+  file -b "$BIN/$b" | grep -q "$MACHINE" || { echo "error: $BIN/$b is not a $ARCH binary" >&2; exit 1; }
+done
+# Staging (WENSHU_STAGE_DIR): must be a Unix filesystem, or dpkg-deb rejects the permissions.
+WORK="${WENSHU_STAGE_DIR:-$CARGO_TARGET_DIR/wenshu-linux-package}"
 STAGE="$WORK/root"
 rm -rf "$WORK"
 
 # ---- stage an FHS tree (shared by every format) -------------------------------------------------
 install -Dm755 "$BIN/wenshu-desktop" "$STAGE/usr/bin/wenshu-desktop"
 install -Dm755 "$BIN/wenshu" "$STAGE/usr/bin/wenshu"
-strip "$STAGE/usr/bin/wenshu-desktop" "$STAGE/usr/bin/wenshu" 2>/dev/null || true
+[[ -n "$CROSS_TARGET" ]] || strip "$STAGE/usr/bin/wenshu-desktop" "$STAGE/usr/bin/wenshu" 2>/dev/null || true
 install -Dm644 "$HERE/$APP_ID.desktop" "$STAGE/usr/share/applications/$APP_ID.desktop"
 mkdir -p "$STAGE/usr/share/metainfo"
 sed -e "s/@VERSION@/$VERSION/g" -e "s/@DATE@/$BUILD_DATE/g" \
@@ -152,7 +184,7 @@ Version: $DEB_VERSION
 Architecture: $DEB_ARCH
 Maintainer: ${WENSHU_MAINTAINER:-The Wenshu authors <https://github.com/xiaojunyang0805/Wenshu>}
 Installed-Size: $(du -sk "$STAGE" | cut -f1)
-Depends: libc6 (>= 2.35), libgcc-s1, libxkbcommon0, libxkbcommon-x11-0, libvulkan1 | libegl1
+Depends: libc6 (>= $GLIBC_MIN), libgcc-s1, libxkbcommon0, libxkbcommon-x11-0, libvulkan1 | libegl1
 Recommends: libwayland-client0, libx11-6, libx11-xcb1, libxcursor1, libxi6, libxrandr2, mesa-vulkan-drivers, xdg-desktop-portal, fonts-noto-cjk
 Section: editors
 Priority: optional
@@ -217,6 +249,12 @@ if has appimage; then
 fi
 
 # A smoke run: with no arguments the CLI prints its usage and exits 0.
-"$STAGE/usr/bin/wenshu" >/dev/null && echo "ok wenshu runs"
+if [[ -z "$CROSS_TARGET" ]]; then
+  "$STAGE/usr/bin/wenshu" >/dev/null && echo "ok wenshu runs"
+elif [[ -n "${CROSS_RUNNER:-}" ]]; then
+  $CROSS_RUNNER "$STAGE/usr/bin/wenshu" >/dev/null && echo "ok wenshu runs ($CROSS_RUNNER)"
+else
+  echo "skipped the smoke run (cross build; set CROSS_RUNNER)"
+fi
 echo "==> done"
 ls -lh "$DIST" | grep -F "wenshu-$VERSION-linux" || true

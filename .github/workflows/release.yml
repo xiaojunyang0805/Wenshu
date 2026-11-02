@@ -5,7 +5,8 @@
 #   Actions › Release › Run  build every package as workflow artifacts only (a test run)
 #
 # Packages: Windows x64 portable zip + per-user MSI (packaging/windows/package.ps1), Linux x86_64
-# tar.gz + .deb + AppImage (packaging/linux/package.sh, built on Ubuntu 22.04 for glibc 2.35).
+# tar.gz + .deb + AppImage (packaging/linux/package.sh, built on Ubuntu 22.04 for glibc 2.35),
+# Linux loongarch64 tar.gz + .deb (cross-built, glibc 2.36; the CLI is smoke-tested under qemu).
 # The binaries are not code-signed yet: Windows SmartScreen warns on first start.
 name: Release
 
@@ -113,9 +114,57 @@ jobs:
             dist/*.AppImage
           if-no-files-found: error
 
+  # Cross-built on x86_64 with cargo-zigbuild against glibc 2.36 (new-world LoongArch ABI), then the
+  # CLI runs under qemu-user on a Debian loong64 glibc: it writes, checks and renders a 公文.
+  linux-loongarch64:
+    needs: version
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust, Zig and cargo-zigbuild
+        run: |
+          rustup toolchain install stable --profile minimal --target loongarch64-unknown-linux-gnu
+          rustup default stable
+          pip3 install --user "ziglang==0.14.1"
+          cargo install --locked cargo-zigbuild --version 0.20.1
+      - name: Fetch and patch WordCraft
+        run: sh scripts/sync-upstream.sh
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> eval/target/wordcraft"
+          key: linux-loongarch64
+      - name: qemu-user and a loong64 glibc (Debian, by snapshot hash)
+        run: |
+          fetch() { curl -fsSL -o "$3" "https://snapshot.debian.org/file/$1"; echo "$2  $3" | sha256sum -c -; }
+          mkdir -p ~/la64/sysroot/lib64 ~/la64/qemu && cd ~/la64
+          fetch dec1373851d29f91642c197f4a339d0d2ad25ed0 ca6ede739327a20ae5a3498230c8a3a9a072c586e131bc6bcc1201eb1725e336 qemu-user.deb
+          fetch 4da25b0a573cad72b6aa2bd873c18ef7296a06ad b6346725a3b73f4dde5c9ba15d7399b15b45076e923d8a91dedfafc22c649efb libc6.deb
+          fetch fd21dc50c6b06c7846827d1a07cce2594eaf4270 737ba3eaed19149116c1af0119369c121e01821faaf0aa78696a91b6dc491589 libgcc-s1.deb
+          dpkg-deb -x qemu-user.deb qemu
+          dpkg-deb -x libc6.deb sysroot && dpkg-deb -x libgcc-s1.deb sysroot
+          ln -s ../usr/lib/loongarch64-linux-gnu/ld-linux-loongarch-lp64d.so.1 sysroot/lib64/
+          echo "CROSS_RUNNER=$HOME/la64/qemu/usr/bin/qemu-loongarch64 -L $HOME/la64/sysroot" >> "$GITHUB_ENV"
+      - name: Build and package
+        run: bash packaging/linux/package.sh --arch loongarch64
+      - name: Smoke test (qemu)
+        run: |
+          mkdir smoke && tar -xzf dist/wenshu-*-linux-loongarch64.tar.gz -C smoke --strip-components=1
+          export WENSHU_FONTS_DIR=$PWD/smoke/share/wenshu/fonts
+          $CROSS_RUNNER smoke/bin/wenshu gongwen new examples/gongwen-sample.json smoke/t.docx
+          $CROSS_RUNNER smoke/bin/wenshu gongwen check smoke/t.docx
+          $CROSS_RUNNER smoke/bin/wenshu render smoke/t.docx smoke/p1.png
+          dpkg-deb -f dist/wenshu-*-linux-loongarch64.deb Architecture Depends
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-loongarch64
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
+          if-no-files-found: error
+
   release:
     if: github.ref_type == 'tag'
-    needs: [version, windows, linux]
+    needs: [version, windows, linux, linux-loongarch64]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -143,6 +192,8 @@ jobs:
           | \`wenshu-$VERSION-linux-x86_64.deb\` | Debian, Ubuntu, Deepin, UOS, Kylin |
           | \`wenshu-$VERSION-linux-x86_64.AppImage\` | other Linux distributions (glibc ≥ 2.35) |
           | \`wenshu-$VERSION-linux-x86_64.tar.gz\` | a plain file tree |
+          | \`wenshu-$VERSION-linux-loongarch64.deb\` | LoongArch, new-world (deepin 23+, openKylin 2, Loongnix 25, Debian loong64; glibc ≥ 2.36) |
+          | \`wenshu-$VERSION-linux-loongarch64.tar.gz\` | LoongArch, a plain file tree |
 
           The binaries are not code-signed yet, so Windows SmartScreen asks before the first start
           ("More info" › "Run anyway"). Check downloads against \`SHA256SUMS\`.
