@@ -122,11 +122,32 @@ line also sits at 9.6 pt and overflows upwards. Wenshu used the line height minu
 descent, 1–6.5 pt lower. That was the 3.7 pt offset in `dc-correspondence-195b80f877` (16 pt 仿宋
 in 30 pt lines). Patch 0008 makes it 0.8; the letter's baselines now match within 0.07 pt.
 
+## F7. `balanceSingleByteDoubleByteWidth` makes a space half an em
+
+123 of the 200 corpus documents carry `w:balanceSingleByteDoubleByteWidth` in `w:compat`.
+`dc-correspondence-31310a47c6` showed it: its header's run of spaces before 招 租 公 告 spans 280 pt
+in WPS (half an em of 26 pt each), 126 pt in Wenshu (Calibri's spaces). Variants of that document
+(hint off, explicit fonts, no `w:lang`, left-aligned, no header style, no indent) changed nothing;
+dropping its `w:compat` did. Probe 33 sets only this switch: in WPS a U+0020 space is then
+**0.5 em of its size**, whatever the font (Calibri, Times New Roman) or hint; letters, digits and
+punctuation (`iiiii 11111 WWWWW ,.;()`) keep their widths. Without the switch spaces keep their
+font's width (probe 32). Patch 0009 reads, writes and lays it out.
+
+## F8. `*Chars` indents on a line grid: side indents count the default size
+
+Probe 34, a lines-only grid (no character pitch) and a 16 pt paragraph mark: `leftChars=100` indents
+10.44 pt, whatever `w:left` says (210 or 1000 twips); `leftChars=200` beside a 22 pt mark 21.0 pt;
+`firstLineChars=200` 32.04 pt. So the left and right indents count the grid's default font size
+(the Normal style's, 10.5 pt here) and the first line counts the mark's size. On a character grid
+all three count the pitch (F3). Patch 0010. Found through `dc-correspondence-195b80f877`, whose
+signature line only fits with F7's wider spaces when its `leftChars=100` is 10.5 pt, not 16.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).
 - How the squeeze interacts with justification (`jc=both`) and kinsoku.
 - `w:topLinePunct` (F5).
+- `*Chars` indents with no document grid at all (F8 covers line grids).
 - Where at-least spacing puts the baseline when the minimum is larger than the text (F6 covers
   exact only).
 - Word's behaviour for each finding. Upstream targets Word, so changes to #5003/#5006 need

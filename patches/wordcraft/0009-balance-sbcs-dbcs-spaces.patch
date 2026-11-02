@@ -1,0 +1,122 @@
+Upstream: (not opened; WPS measurement: w:balanceSingleByteDoubleByteWidth makes U+0020 half an em, probe 33; read, written back, laid out)
+diff --git a/crates/doc/src/settings.rs b/crates/doc/src/settings.rs
+index d1321ca..db9845c 100644
+--- a/crates/doc/src/settings.rs
++++ b/crates/doc/src/settings.rs
+@@ -130,6 +130,11 @@ pub struct Settings {
+     /// natural spacing; by default Word stretches it to the margin like a wrapped line.
+     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+     pub do_not_expand_shift_return: bool,
++    /// `w:balanceSingleByteDoubleByteWidth`: a space (U+0020) is half as wide as a full-width
++    /// character, half an em of its size, whatever its font. Measured in WPS Office; letters,
++    /// digits and punctuation keep their own widths.
++    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
++    pub balance_sbcs_dbcs: bool,
+     /// Keep contextual paragraph spacing inside legacy table cells (`allowSpaceOfSameStyleInTable`).
+     /// Word ignores the layout override in compatibility mode 15, but the flag still round-trips.
+     pub allow_space_of_same_style_in_table: bool,
+@@ -339,6 +344,7 @@ impl Default for Settings {
+             roman_fonts: Vec::new(),
+             sum_paragraph_spacing: false,
+             do_not_expand_shift_return: false,
++            balance_sbcs_dbcs: false,
+             allow_space_of_same_style_in_table: false,
+             grid_h: DEFAULT_GRID,
+             grid_v: DEFAULT_GRID,
+diff --git a/crates/docx/src/read/meta.rs b/crates/docx/src/read/meta.rs
+index d89e811..7685889 100644
+--- a/crates/docx/src/read/meta.rs
++++ b/crates/docx/src/read/meta.rs
+@@ -39,6 +39,7 @@ impl Reader<'_> {
+                     }
+                     s.sum_paragraph_spacing = k.children("w:doNotUseHTMLParagraphAutoSpacing").any(on_off);
+                     s.do_not_expand_shift_return = k.children("w:doNotExpandShiftReturn").any(on_off);
++                    s.balance_sbcs_dbcs = k.children("w:balanceSingleByteDoubleByteWidth").any(on_off);
+                 }
+                 "w:trackRevisions" => s.track_changes = on_off(k),
+                 "w:doNotTrackMoves" => s.track_moves = !on_off(k),
+diff --git a/crates/docx/src/write/settings.rs b/crates/docx/src/write/settings.rs
+index 23d9c63..39a3f43 100644
+--- a/crates/docx/src/write/settings.rs
++++ b/crates/docx/src/write/settings.rs
+@@ -139,6 +139,9 @@ fn write_note_settings(
+ fn write_compatibility_settings(w: &mut W, doc: &Document) {
+     w.open("w:compat", &[]);
+     // CT_Compat: the older switches come before the `w:compatSetting`s.
++    if doc.settings.balance_sbcs_dbcs {
++        w.empty("w:balanceSingleByteDoubleByteWidth", &[]);
++    }
+     if doc.settings.do_not_expand_shift_return {
+         w.empty("w:doNotExpandShiftReturn", &[]);
+     }
+diff --git a/crates/docx/tests/it/fixtures.rs b/crates/docx/tests/it/fixtures.rs
+index 0495ca2..82ce4b5 100644
+--- a/crates/docx/tests/it/fixtures.rs
++++ b/crates/docx/tests/it/fixtures.rs
+@@ -3725,6 +3725,22 @@ fn do_not_expand_shift_return_is_read_and_kept() {
+     assert_eq!(settings(""), (false, false));
+ }
+ 
++/// `w:balanceSingleByteDoubleByteWidth` in the settings' `w:compat` (123 of Wenshu's 200 Chinese
++/// corpus documents set it) is read and written back.
++#[test]
++fn balance_single_byte_double_byte_width_is_read_and_kept() {
++    let settings = |compat: &str| {
++        let s = format!(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings {W_NS}><w:compat>{compat}</w:compat></w:settings>"#);
++        let rels = [("rId9", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings", "settings.xml")];
++        let d = wordcraft_docx::read(&docx("<w:p/>", &rels, &[("word/settings.xml", &s)])).unwrap();
++        let again = wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap();
++        (d.settings.balance_sbcs_dbcs, again.settings.balance_sbcs_dbcs)
++    };
++    assert_eq!(settings("<w:spaceForUL/><w:balanceSingleByteDoubleByteWidth/><w:doNotExpandShiftReturn/>"), (true, true));
++    assert_eq!(settings(r#"<w:balanceSingleByteDoubleByteWidth w:val="0"/>"#), (false, false));
++    assert_eq!(settings(""), (false, false));
++}
++
+ /// A right triangle (`rtTriangle`) has its right angle at the bottom left: a cover page's white
+ /// corner cut-outs drawn as isosceles triangles pointed the wrong way.
+ #[test]
+diff --git a/crates/layout/src/para/builder.rs b/crates/layout/src/para/builder.rs
+index e5f73e3..af7df5d 100644
+--- a/crates/layout/src/para/builder.rs
++++ b/crates/layout/src/para/builder.rs
+@@ -338,6 +338,8 @@ impl<'a> Builder<'a> {
+                 } else {
+                     ClKind::Text
+                 });
++                // `balanceSingleByteDoubleByteWidth`: a space is half an em, whatever its font.
++                let adv = if s == " " && self.env.doc.settings.balance_sbcs_dbcs { st.size * 0.5 * hscale } else { adv };
+                 let adv = if kind == ClKind::Marker { 0.0 } else { adv + rc.spacing };
+                 // Clusters index the document text, never the displayed text.
+                 let (cs, ce) = if substituted { remap_range(&map_starts, &orig_of, sub.len(), gs, ge) } else { (gs, ge) };
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+index ca0a257..4494fa1 100644
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -12057,3 +12057,26 @@ fn an_empty_bulleted_mark_after_a_bulleted_section_closer_draws_no_bullet() {
+         assert!(text, "{filler} lines above: the text closer keeps its bullet");
+     }
+ }
++
++/// `w:balanceSingleByteDoubleByteWidth`: each space is half an em of its size, whatever its font;
++/// letters keep their own widths (WPS Office, probe 33 of Wenshu's corpus).
++#[test]
++fn balanced_single_byte_width_makes_spaces_half_an_em() {
++    use wordcraft_doc::props::CharProps;
++    let props = CharProps { size: Some(20.0), font: Some("Times New Roman".into()), ..Default::default() };
++    let widths = |balance: bool| {
++        let mut d = Document::new();
++        let p = wordcraft_doc::Paragraph::with_text("ab          cd", props.clone());
++        d.body = vec![wordcraft_doc::para_block(p)];
++        d.settings.balance_sbcs_dbcs = balance;
++        let l = lay(&d);
++        let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
++        let of = |kind: crate::para::ClKind| para.clusters.iter().filter(|c| c.kind == kind).map(|c| c.adv).sum::<f32>();
++        (of(crate::para::ClKind::Space), of(crate::para::ClKind::Text))
++    };
++    let (spaces, letters) = widths(true);
++    assert!((spaces - 100.0).abs() < 0.01, "ten 20 pt spaces take 100 pt: {spaces}");
++    let (plain_spaces, plain_letters) = widths(false);
++    assert!(plain_spaces < 60.0, "without the setting a space keeps its font's width: {plain_spaces}");
++    assert!((letters - plain_letters).abs() < 0.01, "letters keep their widths");
++}

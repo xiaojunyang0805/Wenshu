@@ -368,6 +368,56 @@ def _():
     return Probe(sect=PLAIN_SECT).add(*pars)
 
 
+@probe("32-hint-spaces", "Which font sets U+0020 spaces: hint on/off, between Chinese or Latin, in their own run?")
+def _():
+    def rpr(hint):
+        h = ' w:hint="eastAsia"' if hint else ""
+        return f'<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia="宋体"{h}/><w:sz w:val="40"/><w:szCs w:val="40"/>'
+    sp = " " * 10
+    cases = []
+    for hint in (True, False):
+        cases.append(p(r(f"汉字{sp}汉字", rpr(hint))))
+        cases.append(p(r(f"abc{sp}abc", rpr(hint))))
+        cases.append(p(r("汉字", rpr(hint)), r(sp, rpr(hint)), r("汉字", rpr(hint))))
+        cases.append(p(r(f"abc{sp}汉字", rpr(hint))))
+    return Probe(sect=PLAIN_SECT).add(*cases)
+
+
+@probe("33-balance-sbcs-dbcs", "w:balanceSingleByteDoubleByteWidth: which single-byte characters get half an em (spaces, letters, digits, punctuation)?")
+def _():
+    def rpr(font, hint=True):
+        h = ' w:hint="eastAsia"' if hint else ""
+        return f'<w:rFonts w:ascii="{font}" w:hAnsi="{font}" w:eastAsia="宋体"{h}/><w:sz w:val="40"/><w:szCs w:val="40"/>'
+    sp = " " * 10
+    pars = []
+    for font in ("Calibri", "Times New Roman"):
+        pars.append(p(r(f"汉字{sp}汉字", rpr(font))))
+        pars.append(p(r(f"abc{sp}abc", rpr(font))))
+        pars.append(p(r(f"abc{sp}abc", rpr(font, hint=False))))
+        pars.append(p(r("汉字", rpr(font)), r("iiiii", rpr(font)), r("汉字", rpr(font))))
+        pars.append(p(r("汉字", rpr(font)), r("11111", rpr(font)), r("汉字", rpr(font))))
+        pars.append(p(r("汉字", rpr(font)), r("WWWWW", rpr(font)), r("汉字", rpr(font))))
+        pars.append(p(r("汉字", rpr(font)), r(",.;()", rpr(font)), r("汉字", rpr(font))))
+    return Probe(sect=PLAIN_SECT, settings_extra='<w:compat><w:balanceSingleByteDoubleByteWidth/></w:compat>').add(*pars)
+
+
+@probe("34-chars-indent-line-grid", "*Chars indents on a lines-only grid (no character pitch): mark size, default size, or the twips value?")
+def _():
+    long = "试验文字" * 14
+    def par(ind, size=32):
+        rpr = f'<w:rFonts w:ascii="仿宋_GB2312" w:hAnsi="仿宋_GB2312" w:eastAsia="仿宋_GB2312"/><w:sz w:val="{size}"/><w:szCs w:val="{size}"/>'
+        return p(r(long, rpr), ppr=f'<w:ind {ind}/><w:rPr>{rpr}</w:rPr>')
+    return Probe(sect=PLAIN_SECT).add(
+        par('w:leftChars="100"'),
+        par('w:leftChars="100" w:left="210"'),
+        par('w:leftChars="100" w:left="1000"'),
+        par('w:firstLineChars="200"'),
+        par('w:firstLineChars="200" w:firstLine="200"'),
+        par('w:leftChars="200"', size=44),
+        par('w:left="400"'),
+    )
+
+
 def main(out):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)

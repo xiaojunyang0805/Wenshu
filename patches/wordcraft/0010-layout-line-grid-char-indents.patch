@@ -1,0 +1,81 @@
+Upstream: (not opened; WPS measurement: on a line grid without a character pitch, leftChars/rightChars count the Normal style's size, firstLineChars the mark's; probe 34)
+diff --git a/crates/doc/src/resolve.rs b/crates/doc/src/resolve.rs
+index fd51066..aaa9401 100644
+--- a/crates/doc/src/resolve.rs
++++ b/crates/doc/src/resolve.rs
+@@ -228,9 +228,16 @@ impl ResolvedPara {
+     /// Turn the indents given in characters into points, one character being `size` points: the
+     /// size of the paragraph mark's font (as Word measures `w:firstLineChars` and friends).
+     pub fn set_char_unit(&mut self, size: f32) {
+-        let size = if size.is_finite() { size.clamp(1.0, 1638.0) } else { 12.0 };
++        self.set_char_units(size, size);
++    }
++
++    /// Like [`ResolvedPara::set_char_unit`], with one unit for the left and right indents and
++    /// another for the first-line indent.
++    pub fn set_char_units(&mut self, sides: f32, first: f32) {
++        let unit = |size: f32| if size.is_finite() { size.clamp(1.0, 1638.0) } else { 12.0 };
++        let (sides, first) = (unit(sides), unit(first));
+         let [l, r, f] = self.indent_chars;
+-        for (chars, pts) in [(l, &mut self.indent_left), (r, &mut self.indent_right), (f, &mut self.indent_first)] {
++        for (chars, size, pts) in [(l, sides, &mut self.indent_left), (r, sides, &mut self.indent_right), (f, first, &mut self.indent_first)] {
+             if chars != 0.0 {
+                 *pts = (chars * size).clamp(-MAX_INDENT, MAX_INDENT);
+             }
+diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
+index 8788881..1f0c9aa 100644
+--- a/crates/layout/src/para/paragraph.rs
++++ b/crates/layout/src/para/paragraph.rs
+@@ -98,11 +98,16 @@ fn paragraph_props(p: &Paragraph, env: &ParaEnv) -> ResolvedPara {
+     // Indents in characters are measured in the paragraph mark's font size, or in the character
+     // pitch when the paragraph sits on a character grid (two characters of indent are two cells,
+     // so a 28-character grid line holds 26 after a two-character first-line indent, whatever the
+-    // mark's size).
++    // mark's size). On a line grid without a character pitch, the left and right indents count
++    // the grid's default font size (the Normal style's) and the first line the mark's size (WPS
++    // Office: `leftChars=100` is 10.5 pt and `firstLineChars=200` 32 pt beside a 16 pt mark).
+     if rp.indent_chars.iter().any(|c| *c != 0.0) {
+         let size = doc.styles.resolve_char_in(p.props.style.as_deref(), env.table.map(|t| &t.chr), &p.mark).size;
+-        let unit = if rp.snap_to_grid { env.grid.chars } else { None };
+-        rp.set_char_unit(unit.unwrap_or(size));
++        match (rp.snap_to_grid, env.grid.chars, env.grid.line) {
++            (true, Some(pitch), _) => rp.set_char_unit(pitch),
++            (true, None, Some(_)) => rp.set_char_units(env.grid.font_size, size),
++            _ => rp.set_char_unit(size),
++        }
+     }
+     list_indents(&mut rp, p, env);
+     rp
+diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
+index d858556..0fbc414 100644
+--- a/crates/layout/src/tests/grid.rs
++++ b/crates/layout/src/tests/grid.rs
+@@ -246,3 +246,28 @@ fn character_grid_places_east_asian_text_on_the_pitch() {
+         }
+     }
+ }
++
++#[test]
++fn character_indents_on_a_line_grid_count_the_default_size_at_the_sides() {
++    // A line grid has no character pitch: the left and right indents count the Normal style's
++    // size (the grid's default), the first-line indent the paragraph mark's (WPS Office).
++    let d = with_grid(&"中".repeat(200), DocGridType::Lines, 0);
++    let normal = para::Grid::of(&d, &d.last_section).font_size;
++    let mark = normal + 6.0;
++    let with = |f: &dyn Fn(&mut wordcraft_doc::Paragraph)| {
++        let mut d = d.clone();
++        if let Some(Block::Para(p)) = d.body.first_mut().map(std::sync::Arc::make_mut) {
++            p.mark.size = Some(mark);
++            f(p);
++        }
++        first_para(&lay(&d))
++    };
++    let base = with(&|_| {});
++    let left = with(&|p| p.props.indent_left_chars = Some(2.0));
++    assert!((left.lines[1].left - base.lines[1].left - 2.0 * normal).abs() < 0.01, "left {}", left.lines[1].left);
++    let right = with(&|p| p.props.indent_right_chars = Some(2.0));
++    assert!((base.lines[1].right - right.lines[1].right - 2.0 * normal).abs() < 0.01, "right {}", right.lines[1].right);
++    let first = with(&|p| p.props.indent_first_chars = Some(2.0));
++    let indent = first.lines[0].xs[0] - first.lines[1].xs[0];
++    assert!((indent - 2.0 * mark).abs() < 0.01, "first-line indent {indent} for a {mark} pt mark");
++}

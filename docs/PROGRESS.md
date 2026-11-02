@@ -2,6 +2,28 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-02 (4): half-em spaces (F7) and line-grid indents (F8)
+
+Following up the worst document from (3), `dc-correspondence-31310a47c6`: its title wasn't breaking
+per character after all (`ycmp`-style pairing by sort order misled on a two-column landscape
+page). The header's spaces were too narrow. Variants of the document rendered in WPS pinned it on
+`w:balanceSingleByteDoubleByteWidth`, which 123 of the 200 corpus documents carry and WordCraft
+ignored. Probe 33: with it, a space is half an em, whatever the font or hint; nothing else
+changes width (F7, patch 0009: read, written back, laid out).
+
+That alone pushed the sample letter to 10 pages: its signature line (two spaces) no longer fit.
+Probe 34 found why: on a line grid with no character pitch, WPS counts `leftChars`/`rightChars`
+in the Normal style's size (10.5 pt) and `firstLineChars` in the mark's (16 pt); WordCraft used the
+mark's for all three (F8, patch 0010).
+
+Re-scored against WPS (0008 → 0008 + 0009 + 0010): page-count matches **122 → 125 / 200**, mean
+page score 0.9056 → 0.9060, 8 documents better, 2 slightly worse (at most −0.003). Probes 31–34
+are in `corpus/tools/probes.py` (not in the scored corpus). Layout 580, doc 242, docx 134 + 367
+tests; fmt and clippy clean; the queue 0001–0010 applies on the pin and reproduces the tested tree.
+
+**Next:** the 57 documents that still differ in page count; at-least spacing's baseline;
+`*Chars` indents with no grid.
+
 ## 2026-11-02 (3): v0.1.0 draft release; the 3.7 pt offset found
 
 **v0.1.0** tagged at `b76cb32` (the user's call). The release workflow built and smoke-tested all
