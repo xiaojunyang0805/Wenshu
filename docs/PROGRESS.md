@@ -47,6 +47,13 @@ in Segoe Print by WPS (three references).
   break-only paragraph after text ending at y 724, Wenshu (725) sends it over (empty page). Probe:
   on a 312-twip grid WPS needs the full grid line for that paragraph (Wenshu fits 13.6 pt in 14),
   so Wenshu must lose more than 2 pt of room above it, in its exact 30 pt lines: trace line boxes.
+  Traced (2026-11-04): every baseline on page 3 matches WPS within 0.05 pt; Wenshu's body ends at
+  the footer top (734.9: a footer of two empty 11 pt paragraphs runs above the 745.5 margin), its
+  break line is 31.2 pt (16 pt 仿宋 on the grid), so 7.9 pt of room. WPS keeps the line. Not
+  settings (minimal settings: same), not the header, the first-page footer or the page-number text
+  box; removing the table of contents before it changes the page boundaries altogether. Probes
+  with the same geometry, footer and room push the line over in WPS too, so the cause is still
+  unknown.
 - `8f343b7812` (−1), `9c189a35a9` (−1): floats with top-and-bottom wrap (in table cells; under a
   chart); WPS's offsets vary with how rows split / where the float sits, non-monotonically.
 - `cd82c17bf5`, `228229e95c`, `82eb70e86d`: the empty page is a symptom of earlier line-height or
