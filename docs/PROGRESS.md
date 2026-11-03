@@ -25,7 +25,11 @@ cells with distributed text filled a page (`efacf8571b` now matches). WPS moves 
 only a page break that doesn't fit at the page bottom (and leaves a blank page); Wenshu now does
 too, with no corpus gain yet. Tests: layout 607; the queue 0001-0044 reproduces the tested tree.
 
-**Next:** the 25 left: more empty pages (`493a360281`, `cd82c17bf5`, `228229e95c`, `ea10dc7972`,
+**Then (F29, patch 0045): 176 / 200.** With kinsoku off WPS breaks after `《 ` (`ea10dc7972`).
+On the way, a space-width "rule" measured with probes lacking a settings part turned out to be
+WPS's handling of such files only; the change was reverted, and probes now always carry one.
+
+**Next:** the 24 left: more empty pages (`493a360281`, `cd82c17bf5`, `228229e95c`, `ea10dc7972`,
 `82eb70e86d`: tables and trailing empty paragraphs), then line-height differences.
 
 ## 2026-11-03 (9): no empty page before a heading that opens with a page break (F25): 170 / 200

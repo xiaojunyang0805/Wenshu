@@ -514,6 +514,22 @@ closer.
   the whole probe, and gave the row the longest turned length allowed (a page). Its own length,
   and at least the row's height, now (patch 0044). `dc-policies-efacf8571b` matches.
 
+## F29. Kinsoku off: a line may end with an opening bracket and its space; probes need a settings part
+
+- With `w:kinsoku w:val="0"`, WPS breaks `根据《 山东` after `《 ` (the bracket ends the line, the
+  space hangs); with kinsoku on it doesn't, and neither does UAX #14 (LB14: no break after an
+  opening bracket, spaces or not). So in WPS that rule is part of kinsoku. Wenshu now adds the
+  break, with kinsoku off, between two East Asian characters with spaces between them (patch
+  0045). `dc-policies-ea10dc7972` (a table cell `…查实违法违规金额       元。根据《 山东省…`, Normal
+  style with kinsoku off) matches.
+- **Method:** WPS lays out a file with no settings part (`word/settings.xml` missing) differently
+  from any file that has one, even an empty one. Without it a space beside Chinese text is set in
+  the East Asian font (half an em), and a page break followed by an empty next-page section mark
+  leaves a blank page (F26). Real documents always carry the part, so probes must too: a space
+  measured without it looked like a WPS rule; with it WPS keeps the Latin space, as Wenshu does
+  (the change was made and reverted). The probes behind F25, F26 and F28 were checked against the
+  corpus documents they fixed.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

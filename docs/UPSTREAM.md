@@ -76,8 +76,9 @@ longer applies, and running the fidelity corpus before and after.
 | 0042-layout-section-mark-after-page-break | wordcraft-layout | An empty next-page section mark right after a paragraph ending with a page break takes no line on the break page; the section takes that page back (WPS with `w:compat`, F26). Test | not opened: WPS-measured, Word to check |
 | 0043-layout-break-only-paragraph-goes-over | wordcraft-layout | A paragraph of only a page break that doesn't fit goes over (its break leaves a blank page); a break opening a paragraph stays at the bottom (WPS, F28). Test | not opened: WPS behaviour, Word keeps both |
 | 0044-layout-turned-distributed-cell-length | wordcraft-layout | Turned cell text measured by its own length, not its justified one, and at least an at-least row's height (F28). Test | not opened: bug fix, a candidate upstream |
+| 0045-layout-kinsoku-off-break-after-spaced-bracket | wordcraft-layout | Kinsoku off: two East Asian characters with spaces between may break after the spaces (a line may end `根据《 `), WPS (F29). Test | not opened: WPS-measured, Word to check |
 
-All 44 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-03); the
+All 45 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-03); the
 `wordcraft-layout` (602), `-fonts` (109), `-doc` (242), `-docx` (373 + 134 integration) and
 `-engine` (1095) suites pass with them, and fmt and clippy are clean.
 
