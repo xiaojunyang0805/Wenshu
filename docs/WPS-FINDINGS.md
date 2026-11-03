@@ -542,6 +542,16 @@ others (16.8 pt at 13 pt), where Wenshu added the face's own East Asian line hei
 full, as before. `dc-educational-92262161df` matches; `dc-reports-2d6a9da333`, whose line breaks
 differ from WPS's elsewhere, lost the page count it had matched by those taller lines.
 
+## F31. A missing Arial Unicode MS keeps its own line box
+
+Measured 2026-11-04 (settings part included): text in Arial Unicode MS (not installed) is laid
+out by WPS on a 1.74 em line at 10, 12 and 16 pt, Latin, Chinese or mixed: the font's own win
+ascent and descent (2189 and 555 of 2048) times the East Asian 1.3 (its code pages are East
+Asian). The glyphs are drawn in substitutes (宋体 for Chinese, a font of WPS's own for Latin).
+Wenshu used its substitutes' boxes, about 1.3 em. Patch 0048, beside DFKai-SB (F19).
+`dc-creative-377b4bf861` matches; `f7d3afdfdb` is closer (its Latin text in WPS's own font keeps
+its line breaks apart).
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

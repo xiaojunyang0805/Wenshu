@@ -35,7 +35,10 @@ keeps the line height. `92262161df` matches; `2d6a9da333`, off elsewhere, lost i
 `9c189a35a9` (a chart with top-and-bottom wrap): WPS and Wenshu both respond non-monotonically as
 the chart moves; left for a study of floats and the line grid.
 
-**Next:** the 24 left: more empty pages (`493a360281`, `cd82c17bf5`, `228229e95c`, `ea10dc7972`,
+**2026-11-04 (F31, patch 0048): 177 / 200.** A missing Arial Unicode MS keeps its own 1.74 em
+line in WPS (`377b4bf861` matches).
+
+**Next:** the 23 left: more empty pages (`493a360281`, `cd82c17bf5`, `228229e95c`, `ea10dc7972`,
 `82eb70e86d`: tables and trailing empty paragraphs), then line-height differences.
 
 ## 2026-11-03 (9): no empty page before a heading that opens with a page break (F25): 170 / 200

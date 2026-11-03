@@ -79,8 +79,9 @@ longer applies, and running the fidelity corpus before and after.
 | 0045-layout-kinsoku-off-break-after-spaced-bracket | wordcraft-layout | Kinsoku off: two East Asian characters with spaces between may break after the spaces (a line may end `根据《 `), WPS (F29). Test | not opened: WPS-measured, Word to check |
 | 0046-fonts-cjk-compat-ideograph-fallback | wordcraft-fonts | A CJK compatibility ideograph the run's font lacks falls back to Microsoft JhengHei UI, then Microsoft JhengHei (Windows font linking, WPS, F30). Test | not opened: Windows-specific measurement |
 | 0047-layout-linked-face-keeps-line-height | wordcraft-layout | Compatibility ideographs in a stand-in face keep the run font's line height (WPS, F30). Test | not opened: WPS-measured |
+| 0048-fonts-missing-arial-unicode-ms-line | wordcraft-fonts | A missing Arial Unicode MS keeps a 1.74 em line box (WPS, F31). Test | not opened: WPS-measured |
 
-All 47 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-03); the
+All 48 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-03); the
 `wordcraft-layout` (602), `-fonts` (109), `-doc` (242), `-docx` (373 + 134 integration) and
 `-engine` (1095) suites pass with them, and fmt and clippy are clean.
 
