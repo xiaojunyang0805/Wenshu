@@ -50,6 +50,7 @@ longer applies, and running the fidelity corpus before and after.
 | 0016-docx-normal-style-id-clash | wordcraft-docx | A custom style whose id is `Normal` (named `[Normal]`) beside a default paragraph style with another id (`a`) takes a free id, so unstyled paragraphs keep the default style's formatting (ECMA-376 §17.7.4.17). Test | [#5327](https://github.com/storytold/wordcraft/pull/5327) (draft) |
 | 0017-layout-label-suffix-space-balance | wordcraft-layout | Under `balanceSingleByteDoubleByteWidth` a list label's suffix space is half an em, like every other space (WPS, F7). Test | not opened: belongs with 0009 |
 | 0018-layout-grid-whole-cells | wordcraft-layout | On a character grid a single-column section's text width is narrowed to whole pitches; a closing mark ending a line may reach into the rest (WPS, F14). Tests | not opened: WPS only so far; Word reference needed |
+| 0019-layout-balance-doubles-ea-spacing | wordcraft-layout | Under `balanceSingleByteDoubleByteWidth` an East Asian character counts `w:spacing` twice (per byte), a Latin letter once; on and off the character grid (WPS, F15). Test | not opened: belongs with 0009/0017 |
 
 All six apply in order on `3b7f7ed`; the `wordcraft-layout` (577), `-fonts` (102), `-doc` (242),
 `-docx` (500) and `-engine` (1094) suites pass with them, and fmt and clippy are clean.

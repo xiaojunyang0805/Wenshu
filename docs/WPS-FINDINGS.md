@@ -261,13 +261,22 @@ a closing mark ending a line frees only its blank half (sweeps of plain lines en
 column on a character grid is as wide as the whole pitches it holds (within 0.01 pitch); a closing
 mark ending a line may reach into the rest. Patch 0018. Several columns aren't measured.
 
-**Open:** `gov-sh-sheitc`'s `一、申报书封面…推荐单位为区` fits 26 characters in WPS, one more than
-F12 allows by about 0.5 pt (compression off: 25). A justified line, so its advances say nothing
-about the natural width; to measure on a left-aligned copy.
+`gov-sh-sheitc`'s 26-character line, left open here at first, is F15.
 
 Also found here, not a WPS rule: `dc-administrative-82eb70e86d` has a custom style with the id
 `Normal` (named `[Normal]`, 12 pt) beside its default paragraph style `a` (Normal, 10.5 pt);
 WordCraft took the custom style for unstyled paragraphs and the grid's default size. Patch 0016.
+
+## F15. `balanceSingleByteDoubleByteWidth` counts character spacing per byte
+
+`gov-sh-sheitc`'s Normal style has `w:spacing w:val="-6"` (−0.3 pt) on a 16.3 pt character grid.
+Cut to one paragraph and left-aligned, without compression, WPS advances its ideographs 15.72 pt:
+16 + 0.3 (grid) − **0.6**. Without `w:balanceSingleByteDoubleByteWidth` the same text advances
+16.0 pt. Probe (16 pt 仿宋 and Times New Roman `H`, spacing 0, −0.3, −1, +1 pt, with and
+without the switch, no grid and a +0.3 pt grid): with the switch an East Asian character gets its
+spacing **twice** (+1 pt → 18.0, −0.3 → 15.4; on the grid 18.306, 15.706), a Latin letter once;
+without it, once each. As if spacing were per byte, a GBK character being two. Patch 0019. With
+it, the line fits 26 characters as in WPS.
 
 ## Still to measure
 

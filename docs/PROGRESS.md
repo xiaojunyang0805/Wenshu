@@ -2,6 +2,27 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-03 (2): releases, upstream, spacing per byte (F15)
+
+- **v0.1.0** published as a pre-release. **v0.1.1** (Cargo 0.1.1, tag pushed): release.yml made
+  a draft with all 7 packages; the portable zip's checksum and `gov-mct-keji` → 2 pages checked
+  (so it carries 0015). Publishing the draft is the user's call.
+- **Upstream:** #5004 + LB19a quote breaks (`db13aa60`, new test); #5006 + 0012/0014/0015 and
+  0013's line-end mark (`0ac59db8`, stacked on #5004's commit; the full-width quote case waits
+  for #5005's hint); #5003 + 0011 (`902f8efe`); 0016 opened as draft #5327 on current main. Each
+  new test fails without its change; fmt, clippy and the crates' tests pass on each branch.
+  Comments on #5003/#5006 say the evidence is WPS only. 0018 and 0013's grid indents stay local.
+- **F15, patch 0019:** `gov-sh-sheitc`'s open line (F14) was character spacing: under
+  `balanceSingleByteDoubleByteWidth` WPS counts `w:spacing` twice on East Asian characters.
+
+Re-scored (0018 → 0019): page-count matches **136 → 137 / 200**, mean 0.9083 → **0.9084**, 10
+documents better, 2 slightly worse (−0.0015, −0.0005). `dc-reports-7f0a1221f0` now matches,
+`dc-policies-228229e95c` is a page closer. Layout 590 tests; fmt and clippy clean; the queue
+0001–0019 applies on the pin and reproduces the tested tree.
+
+**Next:** items 2–3 of the entry below (the one-character-short and one-longer groups), with
+`out/breakall.py` against the 0019 build.
+
 ## 2026-11-03: autospace squeeze, whole grid cells (F13, F14); three smaller fixes
 
 Next-step 1 from the last entry: line-break diffs over the 65 documents whose page count
@@ -26,7 +47,7 @@ Re-scored (0014 → 0018): page-count matches **135 → 136 / 200**, mean page s
 queue 0001–0018 applies on the pin and reproduces the tested tree.
 
 **Next:**
-1. `gov-sh-sheitc`'s 26-character line (F14 open): measure it left-aligned.
+1. ~~`gov-sh-sheitc`'s 26-character line~~ (F15, done).
 2. The remaining one-character-short group (`af80`, `2e6f`, `39de`, `a5be`, `493a`, `377b`,
    `6562`, `8f34`, `f7d3`): most are justified mode-15 lines with digits or Latin text, so F13's
    mode-15 question first.

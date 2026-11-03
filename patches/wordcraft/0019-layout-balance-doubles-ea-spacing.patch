@@ -1,0 +1,63 @@
+Upstream: (not opened; fold into the F7 change with 0009/0017: under balanceSingleByteDoubleByteWidth an East Asian character counts w:spacing twice, per byte; F15)
+diff --git a/crates/layout/src/para/builder.rs b/crates/layout/src/para/builder.rs
+--- a/crates/layout/src/para/builder.rs
++++ b/crates/layout/src/para/builder.rs
+@@ -340,7 +340,10 @@ impl<'a> Builder<'a> {
+                 });
+                 // `balanceSingleByteDoubleByteWidth`: a space is half an em, whatever its font.
+                 let adv = if s == " " && self.env.doc.settings.balance_sbcs_dbcs { st.size * 0.5 * hscale } else { adv };
+-                let adv = if kind == ClKind::Marker { 0.0 } else { adv + rc.spacing };
++                // It also counts character spacing (`w:spacing`) per byte: twice for an East
++                // Asian (double-byte) character, once for the rest (WPS Office, F15).
++                let doubled = self.env.doc.settings.balance_sbcs_dbcs && super::grid::is_east_asian(ch);
++                let adv = if kind == ClKind::Marker { 0.0 } else { adv + rc.spacing * if doubled { 2.0 } else { 1.0 } };
+                 // Clusters index the document text, never the displayed text.
+                 let (cs, ce) = if substituted { remap_range(&map_starts, &orig_of, sub.len(), gs, ge) } else { (gs, ge) };
+                 self.clusters.push(Cluster {
+diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
+--- a/crates/layout/src/para/grid.rs
++++ b/crates/layout/src/para/grid.rs
+@@ -85,8 +85,10 @@ pub(super) fn snap_chars(b: &mut Builder, text: &str, grid: &Grid) {
+         }
+         // Character scaling (`w:w`) scales the size the grid adds its adjustment to, and character
+         // spacing (`w:spacing`) comes on top (WPS: 16 pt at 50% advances 7.8 pt on a 15.79 pt
+-        // grid, 16 pt with 2 pt spacing 17.78 pt).
+-        let (size, spacing) = b.styles.get(c.style as usize).map_or((base, 0.0), |st| (st.size * st.rc.scale / 100.0, st.rc.spacing));
++        // grid, 16 pt with 2 pt spacing 17.78 pt); under `balanceSingleByteDoubleByteWidth` an East
++        // Asian character counts its spacing twice (F15).
++        let per_byte = if b.env.doc.settings.balance_sbcs_dbcs { 2.0 } else { 1.0 };
++        let (size, spacing) = b.styles.get(c.style as usize).map_or((base, 0.0), |st| (st.size * st.rc.scale / 100.0, st.rc.spacing * per_byte));
+         let adv = if east_asian {
+             grid.advance(size).map_or(pitch, |a| (a + spacing).max(0.0))
+         } else {
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -12106,3 +12106,27 @@ fn balanced_single_byte_width_makes_a_label_s_suffix_space_half_an_em() {
+     assert!((text_x(true) - 8.0).abs() < 0.01, "half an em: {}", text_x(true));
+     assert!((text_x(false) - 4.0).abs() < 0.01, "a quarter: {}", text_x(false));
+ }
++
++/// Under `w:balanceSingleByteDoubleByteWidth` character spacing counts per byte: an East Asian
++/// (double-byte) character gets `w:spacing` twice, a Latin letter once (WPS Office: 16 pt 仿宋
++/// with −0.3 pt advances 15.4 pt, `H` keeps a single −0.3 pt).
++#[test]
++fn balanced_single_byte_width_doubles_east_asian_character_spacing() {
++    use wordcraft_doc::props::CharProps;
++    let adv = |text: &str, spacing: f32, balance: bool| {
++        let props = CharProps { size: Some(16.0), spacing: Some(spacing), ..Default::default() };
++        let mut d = Document::new();
++        d.body = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text(text, props))];
++        d.settings.balance_sbcs_dbcs = balance;
++        let l = lay(&d);
++        let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
++        para.clusters[0].adv
++    };
++    for balance in [false, true] {
++        let cjk = adv("中", -0.3, balance) - adv("中", 0.0, balance);
++        let latin = adv("H", -0.3, balance) - adv("H", 0.0, balance);
++        let want = if balance { -0.6 } else { -0.3 };
++        assert!((cjk - want).abs() < 0.01, "balance {balance}: 中 changes by {cjk}");
++        assert!((latin + 0.3).abs() < 0.01, "balance {balance}: H changes by {latin}");
++    }
++}
