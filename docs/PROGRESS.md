@@ -38,6 +38,10 @@ the chart moves; left for a study of floats and the line grid.
 **2026-11-04 (F31, patch 0048): 177 / 200.** A missing Arial Unicode MS keeps its own 1.74 em
 line in WPS (`377b4bf861` matches).
 
+**Then (F32, patch 0049): 177 / 200, mean 0.9401.** Missing Founder faces keep WPS's line box
+(公文 titles in 方正小标宋简体); ten documents score higher. Open: Latin text in 新細明體 runs drawn
+in Segoe Print by WPS (three references).
+
 **Next:** the 23 left: more empty pages (`493a360281`, `cd82c17bf5`, `228229e95c`, `ea10dc7972`,
 `82eb70e86d`: tables and trailing empty paragraphs), then line-height differences.
 

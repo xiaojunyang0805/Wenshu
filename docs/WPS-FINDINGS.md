@@ -552,6 +552,22 @@ Wenshu used its substitutes' boxes, about 1.3 em. Patch 0048, beside DFKai-SB (F
 `dc-creative-377b4bf861` matches; `f7d3afdfdb` is closer (its Latin text in WPS's own font keeps
 its line breaks apart).
 
+## F32. Missing Founder (方正) faces: WPS's line box; 新細明體's Latin text in Segoe Print
+
+Measured 2026-11-04 at 16 pt (baseline below the top margin, line pitch; settings part included).
+Without the Founder fonts installed, WPS draws 方正小标宋简体 in 方正舒体 (FZSTK) and 方正仿宋_GBK /
+方正大标宋简体 in Microsoft YaHei or faces of its own, on boxes of its own: 方正小标宋简体 and
+方正小标宋_GBK 1.038 + 0.484 em (24.36 pt), 方正仿宋_GBK 1.031 + 0.416 (23.16), 方正大标宋简体
+1.046 + 0.439 (23.76). Wenshu used its substitutes' boxes (华文中宋, 23.65; 仿宋, 20.76). The boxes
+are now WPS's, also for text in the run's East Asian font (a 公文 title names 方正小标宋简体 only
+there), and only when the font is missing (patch 0049). No page count changed; ten documents
+score higher, `01_gongwen` 0.938 → 0.970, mean 0.9394 → 0.9401. FZSTK appears in 63 corpus
+references.
+
+Not done: in a run whose Latin font is 新細明體 or 細明體 (missing), WPS draws Latin text in Segoe
+Print, and its tall line box (28.2 pt at 16 pt, baseline 20.3) sets the line; Chinese-only lines
+are unaffected. Three references show it (`173ff7b3a5`, `ffe3dc89e6`, `aae80ea709`).
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

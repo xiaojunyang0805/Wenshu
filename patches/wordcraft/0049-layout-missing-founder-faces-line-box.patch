@@ -1,0 +1,49 @@
+Upstream: (not opened; WPS measurement: missing Founder faces (方正小标宋简体, 方正小标宋_GBK, 方正仿宋_GBK, 方正大标宋简体) keep the box WPS lays their lines in, measured at 16 pt; a missing font known by name keeps its box for text in the run East Asian font too, as a 公文 title names 方正小标宋简体 only there)
+diff --git a/crates/fonts/src/word.rs b/crates/fonts/src/word.rs
+index 005f65b1..39caaca1 100644
+--- a/crates/fonts/src/word.rs
++++ b/crates/fonts/src/word.rs
+@@ -209,6 +209,11 @@ pub fn missing_font_line(family: &str, resolved: &Resolved) -> Option<(f64, f64)
+         // its own win ascent and descent (2189 and 555 of 2048) with the East Asian 1.3, a 1.74 em
+         // line at 10, 12 and 16 pt, whatever the substitute the text is drawn in (measured).
+         "arial unicode ms" => Some((2189.0 / 2048.0 * 1.3, 555.0 / 2048.0 * 1.3)),
++        // Founder (方正) faces WPS knows but this system lacks: the box WPS lays their lines in
++        // when it draws them in a substitute (measured at 16 pt: baseline and line pitch).
++        "方正小标宋简体" | "方正小标宋_gbk" => Some((1.038, 0.484)),
++        "方正仿宋_gbk" => Some((1.031, 0.416)),
++        "方正大标宋简体" => Some((1.046, 0.439)),
+         _ => None,
+     }
+ }
+@@ -659,6 +664,8 @@ mod tests {
+             assert_eq!(missing_font_line(name, &r), Some((0.95, 0.35)), "{name}");
+         }
+         assert_eq!(missing_font_line("Arial", &r), None);
++        let (a, d) = missing_font_line("方正小标宋简体", &r).expect("a known Founder face");
++        assert!(((a + d) * 16.0 - 24.36).abs() < 0.05, "16 pt: {a} + {d}");
+         // Arial Unicode MS: a 1.74 em line in WPS at any size, measured.
+         let (a, d) = missing_font_line("Arial Unicode MS", &r).expect("a known missing font");
+         assert!(((a + d) - 1.74).abs() < 0.005, "{a} + {d}");
+diff --git a/crates/layout/src/para/builder.rs b/crates/layout/src/para/builder.rs
+index 40e2fdb9..3409e8da 100644
+--- a/crates/layout/src/para/builder.rs
++++ b/crates/layout/src/para/builder.rs
+@@ -134,7 +134,17 @@ impl<'a> Builder<'a> {
+         // A symbol font that isn't installed, or is installed one em tall (Apple's Symbol), takes
+         // the height Word gives it.
+         let metrics = line_face.unwrap_or(face);
+-        let (a, d) = match wordcraft_fonts::word::symbol_line(&rc.font, &r).or_else(|| wordcraft_fonts::word::missing_font_line(&rc.font, &r)) {
++        // A missing font WPS knows keeps its own box: the run's font, or for text in the run's East
++        // Asian font (a 公文 title naming 方正小标宋简体 only there) that font.
++        let ea_missing = || {
++            let ea = rc.font_ea.as_deref().filter(|_| face_override.is_some() && line_face.is_none())?;
++            let er = wordcraft_fonts::word::resolve(lookup_family(self.env.doc, ea), rc.bold, rc.italic);
++            (er.face.id() == face.id()).then(|| wordcraft_fonts::word::missing_font_line(ea, &er)).flatten()
++        };
++        let (a, d) = match wordcraft_fonts::word::symbol_line(&rc.font, &r)
++            .or_else(ea_missing)
++            .or_else(|| wordcraft_fonts::word::missing_font_line(&rc.font, &r))
++        {
+             Some((a, d)) => (a * metrics.upem, d * metrics.upem),
+             None => wordcraft_fonts::word::text_line_metrics(&metrics),
+         };
