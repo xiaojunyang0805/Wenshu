@@ -1,6 +1,6 @@
 # Wenshu MVP
 
-*v0.1 · 2026-10-30*
+*v0.2 · 2026-11-03* (v0.1 2026-10-30)
 
 ## Goal
 
@@ -10,21 +10,21 @@ Writer only. Slides and Sheets come after the MVP.
 
 ## Users and core jobs
 
-| # | Job | MVP acceptance |
-|---|---|---|
-| J1 | Open a .docx received from WPS/Word and read it correctly | ≥ 90% of corpus docs open without error; FangSong/Kai/Song/Hei never fall back to sans; page count matches the WPS reference on ≥ 80% |
-| J2 | Write a new 公文 from a template | `wenshu gongwen new` (CLI) and File › New › 公文 (desktop) produce a document that passes all 8 `gongwen check` rules |
-| J3 | Check a 公文 against the standard | `wenshu gongwen check` reports page, margins, type area, grid, body font and size |
-| J4 | Export PDF to send or print | PDF with embedded subset fonts, selectable Chinese text |
-| J5 | Save back to .docx that WPS opens unchanged | Text, tables, headers and East Asian font names survive a round-trip (100% on corpus) |
+| # | Job | MVP acceptance | Status (2026-11-03) |
+|---|---|---|---|
+| J1 | Open a .docx received from WPS/Word and read it correctly | ≥ 90% of corpus docs open without error; FangSong/Kai/Song/Hei never fall back to sans; page count matches the WPS reference on ≥ 80% | **Close.** 200 / 200 open without error; page count matches on **156 / 200 (78%)**, mean page score 0.933 (baseline 2026-10-31: 112 / 200, 0.903). Fonts: 仿宋/楷体/宋体/黑体 and the Traditional ones (標楷體, 新細明體) map to their designs; Chinese text with no font of its own falls back to 宋体, as in WPS |
+| J2 | Write a new 公文 from a template | `wenshu gongwen new` (CLI) and File › New › 公文 (desktop) produce a document that passes all 8 `gongwen check` rules | **Met.** Both paths; a test checks the five templates pass |
+| J3 | Check a 公文 against the standard | `wenshu gongwen check` reports page, margins, type area, grid, body font and size | **Met** (CLI and 检查公文格式 on the ribbon) |
+| J4 | Export PDF to send or print | PDF with embedded subset fonts, selectable Chinese text | Works (the fidelity work reads text and fonts back from Wenshu's PDFs); not yet measured across the corpus |
+| J5 | Save back to .docx that WPS opens unchanged | Text, tables, headers and East Asian font names survive a round-trip (100% on corpus) | Not yet measured on the corpus |
 
 ## Milestones
 
 | M | Content | Effort (agents + 1–2 engineers) | Status |
 |---|---|---|---|
 | **M0 Foundations** | Workspace, patch queue, `wenshu-core`, CJK font hook, 公文 generator and checker, fidelity harness, CLI | 1 day | ✅ **done 2026-10-30** |
-| **M1 Chinese layout** | Upstream PRs: grid fixes (28 chars/line) ✅, full-width quotes ✅, kinsoku ✅, punctuation compression ✅. Grow the corpus to 200 real documents with WPS reference renders ⏳ | 3–5 weeks | **in progress** (patches 0002–0005 done; upstream PRs #5002–#5006 through 4 bot review rounds, awaiting maintainers; corpus of 200 assembled 2026-10-31 (158 real, 42 generated); WPS references made, scored baseline 0.903 / page counts 112 of 200, see WPS-FINDINGS.md) |
-| **M2 Desktop alpha** | Wenshu desktop build (WordCraft UI with `init()`, zh-Hans default, branding), 公文 templates in File › New, "Check 公文" command, Windows/Linux (incl. LoongArch) installers | 3–4 weeks | **alpha 2026-10-31**: `wenshu-desktop` runs (zh-Hans or English UI, 文枢 brand, own settings folder, Chinese blank documents in a Chinese region, 公文 templates in File › New, 检查公文格式 on the ribbon), Windows portable zip and per-user MSI, Linux tar.gz/.deb/AppImage (x86_64), all install-tested 2026-11-02; LoongArch tar.gz/.deb (new-world, glibc ≥ 2.36) cross-built and tested under qemu 2026-11-02; CI builds all of them into a draft release on a tag; real LoongArch hardware still untested |
+| **M1 Chinese layout** | Upstream PRs: grid fixes (28 chars/line) ✅, full-width quotes ✅, kinsoku ✅, punctuation compression ✅. Grow the corpus to 200 real documents with WPS reference renders ✅. Page counts within J1's 80% ⏳ | 3–5 weeks | **nearly done**: corpus of 200 with WPS references (2026-10-31); patch queue 0002–0030, every rule measured in WPS first (docs/WPS-FINDINGS.md F1–F19: grids, punctuation squeeze, autospace, East Asian line height, font fallback, embedded fonts per document); page counts 112 → **156 / 200**, mean 0.903 → **0.933** (one process per document, 2026-11-03). Upstream: #5002–#5006 updated with 0011–0015, 0016 opened as draft #5327; 0017–0030 not opened yet. Left: 7 documents a page or two off, and 4 more matches for J1 |
+| **M2 Desktop alpha** | Wenshu desktop build (WordCraft UI with `init()`, zh-Hans default, branding), 公文 templates in File › New, "Check 公文" command, Windows/Linux (incl. LoongArch) installers | 3–4 weeks | **alpha 2026-10-31**: `wenshu-desktop` runs (zh-Hans or English UI, 文枢 brand, own settings folder, Chinese blank documents in a Chinese region, 公文 templates in File › New, 检查公文格式 on the ribbon), Windows portable zip and per-user MSI, Linux tar.gz/.deb/AppImage (x86_64), all install-tested 2026-11-02; LoongArch tar.gz/.deb (new-world, glibc ≥ 2.36) cross-built and tested under qemu 2026-11-02; CI builds all of them into a draft release on a tag; **v0.1.0** published as a pre-release, **v0.1.1** (the fidelity work through patch 0018) built as a draft; real LoongArch hardware still untested |
 | **M3 Formats** | OFD export (`wenshu-ofd`); DeckCraft slides with the same font hook; IronCalc zh-CN locale | 4–6 weeks | |
 | **M4 Public beta** | Web build, signed releases, public fidelity scoreboard | 2–3 weeks | |
 
@@ -41,12 +41,14 @@ beyond what upstream offers.
 1. **Reference renders:** ~~who has WPS and Word licences?~~ A licensed WPS Office 12.1 is on the dev PC
    (2026-10-30) with COM automation, so renders can be made locally. Still open: a Word reference,
    and whether WPS renders may be shared publicly (until then `corpus/ref/` stays local, per
-   `.gitignore`).
+   `.gitignore`). Upstream targets Word, so most WPS-measured patches (0008–0030) need Word
+   evidence or a spec argument before they can be offered as PRs.
 2. **Fonts:** ~~bundle open FangSong/Kai designs, or rely on the system fonts?~~ Both (2026-11-02): the
    Linux packages ship 朱雀仿宋 Zhuque Fangsong and 霞鹜文楷 GB (OFL-1.1, unmodified,
    `/usr/share/wenshu/fonts`); Windows uses its own FangSong and KaiTi. Still open: no open 小标宋
    (titles fall back to Noto Serif CJK), and Zhuque's `×` and curly quotes are narrower than
-   Windows FangSong's full-width ones.
+   Windows FangSong's full-width ones. Fidelity is measured on Windows with its system fonts;
+   the Linux packages' scores are unmeasured.
 3. **Governance:** work as a CJK working group inside the storytold/ArtCraft community, or as a
    separate organisation? This affects branding and CLA.
 4. **Engine risk:** WordCraft is 3 weeks old. If upstream stalls, the patch queue becomes a fork.
