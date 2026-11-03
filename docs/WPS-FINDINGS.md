@@ -449,6 +449,24 @@ opacity, so it drew them, and wrote them back opaque: WPS then showed them acros
 opacity now becomes a transparent text fill (`w14:textFill` with `w14:alpha`), and WPS's render of
 the saved file matches the original again (page score 0.99995, was 0.984). Patch 0039.
 
+## F25. A heading that opens with a page break; bookmarks between paragraphs
+
+Measured 2026-11-03 with probes (16 pt text, exact 28 pt lines and the corpus document's own
+grid and margins; filler lines up to the page bottom, then a heading `<w:br w:type="page"/>附件1`):
+
+- WPS places a paragraph with a page break inside as if `w:keepNext` and `w:keepLines` were not
+  set: with either or both, the heading's text starts the next page and nothing more. Wenshu
+  moved the whole paragraph when the page was nearly full (keep lines: its two lines didn't fit;
+  keep with next: with the next paragraph's first line), then broke again, so an empty page came
+  before the heading.
+- A line holding only the page break stays at the bottom of a full page in WPS (and Word). In the
+  corpus document a `w:bookmarkEnd` between two paragraphs is carried onto the heading's start,
+  so that line also held a bookmark marker, and Wenshu then made it need room: it went over and
+  left an empty page. Markers (bookmarks, comment ranges) now don't count.
+
+`gov-nmpa-1`, `-5`, `-6` (attachments 附件1–4, each a heading-3 opening with a page break) and
+`dc-technical-c2c92639c7` now match their page counts. Patch 0040.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

@@ -71,8 +71,9 @@ longer applies, and running the fidelity corpus before and after.
 | 0037-layout-field-result-fonts | wordcraft-layout | A field result shaped in more than one font (`yyyy年M月d日`: digits Latin, 年月日 East Asian) is a cluster per font, each standing for the whole object; one cluster drew every glyph in the first face with the others' glyph ids (wrong glyphs; the PDF face couldn't be subset). Tests | draft [#5462](https://github.com/storytold/wordcraft/pull/5462) (2026-11-03, on `main` `ae5c65b9`) |
 | 0038-engine-date-picture-chinese-weekday | wordcraft-engine | Date picture `W` (either case): the Chinese weekday, 二 / 周二 / 星期二 for 1 / 2 / 3+ letters (WPS, F23). Test | not opened: WPS-measured; Word's Chinese pictures to check |
 | 0039-docx-vml-wordart-fill-opacity | wordcraft-docx | VML WordArt letters take the shape fill's `opacity` (a transparent `w14:textFill`) and `filled="f"`; a WPS tracing watermark at opacity 0 was drawn opaque, and after a save WPS showed it too. Test | draft [#5463](https://github.com/storytold/wordcraft/pull/5463) (2026-11-03, on `main` `ae5c65b9`) |
+| 0040-layout-page-break-heading-no-empty-page | wordcraft-layout | A paragraph with a page or column break inside is placed as if keep with next / keep lines together were unset; a break line holding only markers still stays at the bottom of a full page (WPS, F25). Tests | not opened: the keep part is WPS-measured (Word to check); the marker part is a plain bug fix |
 
-All 39 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-03); the
+All 40 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-03); the
 `wordcraft-layout` (602), `-fonts` (109), `-doc` (242), `-docx` (373 + 134 integration) and
 `-engine` (1095) suites pass with them, and fmt and clippy are clean.
 

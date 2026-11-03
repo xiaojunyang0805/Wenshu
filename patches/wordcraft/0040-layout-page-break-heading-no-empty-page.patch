@@ -1,0 +1,160 @@
+Upstream: (not opened; layout fix, measured in WPS: a paragraph with a page or column break inside is placed as if keep with next and keep lines together were not set, and a break line holding only markers (a bookmark carried over from between paragraphs) still stays at the bottom of a full page; a heading opening with a page break left an empty page before it)
+diff --git a/crates/layout/src/flow.rs b/crates/layout/src/flow.rs
+index fe923259..cd76c499 100644
+--- a/crates/layout/src/flow.rs
++++ b/crates/layout/src/flow.rs
+@@ -305,6 +305,13 @@ impl<'a> Flow<'a> {
+     /// the space before applied (`before`, or what is left of it at the top of the next column).
+     fn keep_together(&self, ctx: &mut Ctx, pb: &mut PageBuilder, rooms: Rooms, before: f32) -> f32 {
+         let rp = &self.pl.rp;
++        // A paragraph with a page or column break inside is placed as if neither were set (WPS:
++        // a heading opening with a page break, kept with the next paragraph and its lines
++        // together, lays out like one without the properties). It moved whole when the page was
++        // nearly full, then broke again: an empty page before each such heading.
++        if break_line(&self.pl).is_some() {
++            return before;
++        }
+         let height = self.pl.height + rooms.top + rooms.bottom;
+         if !(rp.keep_lines || (rp.keep_next && pb.y + height <= pb.bottom + 0.01)) {
+             return before;
+@@ -418,9 +425,7 @@ impl<'a> Flow<'a> {
+     fn stays_at_bottom(&self, pb: &PageBuilder, l: &para::Line) -> bool {
+         let p = self.p;
+         let only_break = matches!(l.end, LineEnd::PageBreak | LineEnd::ColumnBreak)
+-            && p.text
+-                .get(l.start..l.stop)
+-                .is_some_and(|t| t.chars().all(|c| matches!(c, wordcraft_doc::para::PAGE_BREAK | wordcraft_doc::para::COLUMN_BREAK)));
++            && only_breaks(p, l.start..l.stop, |c| matches!(c, wordcraft_doc::para::PAGE_BREAK | wordcraft_doc::para::COLUMN_BREAK));
+         only_break || (pb.next_starts_page && p.section.is_some() && p.text.is_empty())
+     }
+ 
+@@ -538,10 +543,8 @@ impl<'a> Flow<'a> {
+         let (block, body_top) = (self.block, self.body_top);
+         // A paragraph that starts with a page break starts on the new page, its space before
+         // there (Word).
+-        let starts_with_break = self.l0 == 1
+-            && self.pl.lines.first().is_some_and(|l| {
+-                self.p.text.get(l.start..l.stop).is_some_and(|t| !t.is_empty() && t.chars().all(|c| c == wordcraft_doc::para::PAGE_BREAK))
+-            });
++        let starts_with_break =
++            self.l0 == 1 && self.pl.lines.first().is_some_and(|l| only_breaks(self.p, l.start..l.stop, |c| c == wordcraft_doc::para::PAGE_BREAK));
+         match forced {
+             Some(LineEnd::PageBreak) if mark_with_break => {
+                 pb.new_page(block, body_top);
+@@ -760,6 +763,22 @@ fn place_para_in_flow(ctx: &mut Ctx, pb: &mut PageBuilder, p: &Paragraph, block:
+ 
+ /// Whether `range` of `p`'s text holds nothing but zero-width markers (bookmarks, field and
+ /// control boundaries…), or nothing at all: a line of them takes no room after a page break.
++/// Whether `range` of `p` holds breaks `is_break` accepts and nothing else that shows: markers
++/// (bookmarks, comment ranges…) draw nothing, so a bookmark carried onto a heading that opens
++/// with a page break leaves the break alone on its line.
++fn only_breaks(p: &Paragraph, range: std::ops::Range<usize>, is_break: impl Fn(char) -> bool) -> bool {
++    let Some(text) = p.text.get(range.clone()) else { return false };
++    let mut any = false;
++    for (i, c) in text.char_indices() {
++        if is_break(c) {
++            any = true;
++        } else if !(c == wordcraft_doc::para::OBJ && p.object_at(range.start + i).is_some_and(InlineObject::is_marker)) {
++            return false;
++        }
++    }
++    any
++}
++
+ fn only_markers(p: &Paragraph, range: std::ops::Range<usize>) -> bool {
+     let Some(text) = p.text.get(range.clone()) else { return false };
+     text.char_indices().all(|(i, c)| c == wordcraft_doc::para::OBJ && p.object_at(range.start + i).is_some_and(InlineObject::is_marker))
+@@ -916,7 +935,11 @@ fn next_first_line(ctx: &mut Ctx, block: usize, width: f32, depth: usize, counte
+             // Its border room, unless it joins the paragraph before (or after) in one box.
+             let own = Edges::own(&pl, 0, pl.lines.len());
+             let top = if joined(ctx.doc, &ctx.doc.body, block + 1, Some(block), None) { 0.0 } else { own.top };
+-            if pl.rp.keep_next && depth < 8 {
++            if let Some(k) = break_line(&pl) {
++                // Its own keep properties don't apply (see `keep_together`): its first line starts
++                // there, or two with widow/orphan control unless the break ends the first.
++                pl.rp.space_before + top + lines_height(&pl, if pl.rp.widow_control && k >= 1 { 1 } else { 0 })
++            } else if pl.rp.keep_next && depth < 8 {
+                 let bottom = if joined(ctx.doc, &ctx.doc.body, block + 1, Some(block + 2), None) { 0.0 } else { own.bottom };
+                 pl.rp.space_before + top + pl.height + bottom + pl.rp.space_after + next_first_line(ctx, block + 1, width, depth + 1, counters)
+             } else {
+@@ -941,3 +964,17 @@ fn next_first_line(ctx: &mut Ctx, block: usize, width: f32, depth: usize, counte
+         None => 0.0,
+     }
+ }
++
++/// The first line of `pl` that ends with a page or column break, unless it is the last line.
++fn break_line(pl: &ParaLayout) -> Option<usize> {
++    let last = pl.lines.len().checked_sub(1)?;
++    pl.lines.iter().take(last).position(|l| matches!(l.end, LineEnd::PageBreak | LineEnd::ColumnBreak))
++}
++
++/// The height of `pl`'s lines from the first to line `k` (all of them when `k` is past the end).
++fn lines_height(pl: &ParaLayout, k: usize) -> f32 {
++    match (pl.lines.first(), pl.lines.get(k).or(pl.lines.last())) {
++        (Some(first), Some(last)) => last.top + last.height - first.top,
++        _ => 0.0,
++    }
++}
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+index e65e3f90..39d1b730 100644
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -8507,6 +8507,58 @@ fn keep_with_next_moves_a_paragraph_only_when_it_would_fit() {
+     assert_eq!(pages(fit - 1, kn.clone(), kn.clone()), [1, 1, 1, 1, 1, 1], "a kept chain moves together");
+ }
+ 
++/// A page break inside a paragraph ends what keep lines together and keep with next hold (WPS:
++/// a heading that opens with a page break, kept with the next paragraph and its lines together,
++/// lays out like one without the properties). It moved whole when the page was nearly full,
++/// then broke again: an empty page before each heading.
++#[test]
++fn a_page_break_inside_a_kept_paragraph_ends_what_is_kept() {
++    let page_of_heading = |fillers: usize, props: &ParaProps, marker: bool| -> (usize, usize) {
++        let plain = ParaProps {
++            space_before: Some(0.0),
++            space_after: Some(0.0),
++            line_spacing: Some(wordcraft_doc::props::LineSpacing::Exactly(28.0)),
++            ..Default::default()
++        };
++        let para = |text: &str, p: &ParaProps| {
++            let mut x = wordcraft_doc::Paragraph::with_text(text, Default::default());
++            x.props = p.clone();
++            wordcraft_doc::para_block(x)
++        };
++        let mut d = Document::new();
++        d.body = (0..fillers).map(|i| para(&format!("F{i}"), &plain)).collect();
++        let heading = ParaProps { line_spacing: plain.line_spacing, space_before: Some(0.0), space_after: Some(0.0), ..props.clone() };
++        let mut h = wordcraft_doc::Paragraph::with_text(&format!("{}Annex", wordcraft_doc::para::PAGE_BREAK), Default::default());
++        h.props = heading;
++        if marker {
++            // A bookmark ending between two paragraphs, which the reader carries onto the next.
++            h.insert_object(0, InlineObject::BookmarkEnd { name: "toc".into() }, &CharProps::default()).unwrap();
++        }
++        d.body.push(wordcraft_doc::para_block(h));
++        d.body.push(para("Text", &plain));
++        let l = lay(&d);
++        let annex = if marker { 1 + wordcraft_doc::para::OBJ.len_utf8() } else { 1 };
++        (l.caret(&Pos::body(fillers, annex)).unwrap().page, l.pages.len())
++    };
++    let none = ParaProps::default();
++    let kn = ParaProps { keep_next: Some(true), ..Default::default() };
++    let kl = ParaProps { keep_lines: Some(true), ..Default::default() };
++    let both = ParaProps { keep_next: Some(true), keep_lines: Some(true), ..Default::default() };
++    // The filler count after which the heading's text no longer starts on page 2.
++    let full = (10..80).find(|n| page_of_heading(*n, &none, false).0 == 2).expect("a filler count that fills page 1");
++    // Up to the bottom of page 1 (no room left even for the break's own line), the heading's
++    // text starts page 2: the keep properties change nothing, nor does a bookmark marker before
++    // the break (it shows nothing, so the break is still alone on its line).
++    for n in full - 4..full {
++        for marker in [false, true] {
++            assert_eq!(page_of_heading(n, &none, marker), (1, 2), "{n} fillers, marker {marker}");
++            for (props, label) in [(&kn, "keep with next"), (&kl, "keep lines"), (&both, "both")] {
++                assert_eq!(page_of_heading(n, props, marker), (1, 2), "{n} fillers, {label}, marker {marker}: no empty page");
++            }
++        }
++    }
++}
++
+ /// A kept heading goes with the paragraph after it when that paragraph cannot start on its
+ /// page (#966): with widow/orphan control on, one line of it at the bottom of the page moves
+ /// over with the rest, so only two lines below the heading hold it there. Word and LibreOffice

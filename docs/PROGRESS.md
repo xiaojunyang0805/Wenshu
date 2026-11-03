@@ -2,6 +2,27 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-03 (9): no empty page before a heading that opens with a page break (F25): 170 / 200
+
+- **gov-nmpa-5** was four pages long: an empty page before each attachment (附件1–4), each a
+  kept heading 3 opening with a page break. Probes in WPS: keep with next and keep lines together
+  don't apply to a paragraph with a break inside; Wenshu moved it whole, then broke again. And a
+  `w:bookmarkEnd` between paragraphs, carried onto the heading, stopped the break line from
+  staying at the bottom of a full page (found by shrinking the document to 21 blocks, then
+  removing parts one at a time). Patch 0040, with a test of both that fails without it.
+- **Fidelity: 166 → 170 / 200**, mean 0.9354 → 0.9367; gains `gov-nmpa-1`, `-5`, `-6`,
+  `dc-technical-c2c92639c7`; no losses.
+- Upstream: 0027 + 0033 opened as draft
+  [#5470](https://github.com/storytold/wordcraft/pull/5470) (cherry-picked onto `main`; its engine
+  test's family renamed, as "JetBrains Scop" matches JetBrains Mono there).
+
+Tests: layout 603; fmt and clippy clean; the queue 0001–0040 applies on the pin and reproduces the
+tested tree.
+
+**Next:** the 30 documents still a page off (the largest gaps: `dc-administrative-82eb70e86d`,
+`dc-forms-173ff7b3a5`, `dc-policies-efacf8571b`, `dc-reports-1aa06d7905` at +2; `a9f763a2b4`,
+`f899568bb2` at −2); picture fills for shapes (the last J5 text loss).
+
 ## 2026-11-03 (8): v0.1.2; J5 measured right: 199 / 200 texts kept; an invisible watermark (F24)
 
 - **v0.1.2** tagged (Cargo 0.1.2); release.yml built all eight packages into a draft release
