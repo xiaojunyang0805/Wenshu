@@ -23,36 +23,62 @@ def parts(path):
     return out
 
 
+# Fields whose result the reader recalculates (WPS and Word on open or when laying out): their
+# saved results may differ without anything being lost. Other results (hyperlinks, REF, TOC
+# entries) are text the reader shows as it is, and are compared.
+VOLATILE = {'PAGE', 'NUMPAGES', 'SECTIONPAGES', 'SECTION', 'DATE', 'TIME', 'PRINTDATE', 'SAVEDATE',
+            'CREATEDATE', 'EDITTIME', 'FILENAME', 'FILESIZE', 'NUMWORDS', 'NUMCHARS', 'PAGEREF', '='}
+
+
+def field_name(instr):
+    import html
+    m = re.match(r'\s*(=|[A-Za-z]+)', html.unescape(instr))
+    return m.group(1).upper() if m else ''
+
+
 def unfield(xml):
-    # Field results are recalculated by the reader (page numbers, dates): drop what lies between
-    # a field's separate and end marks, and fldSimple results.
-    xml = re.sub(r'<w:fldSimple[^>]*/>', '', xml)
-    xml = re.sub(r'<w:fldSimple.*?</w:fldSimple>', '', xml, flags=re.S)
-    out, depth, skip, pos = [], 0, [], 0
-    for m in re.finditer(r'<w:fldChar [^>]*w:fldCharType="(begin|separate|end)"[^>]*/>', xml):
-        kind = m.group(1)
-        if not (skip and skip[-1]):
+    # Drop the results of VOLATILE fields: what lies between a field's separate and end marks
+    # (nested fields included), and such fldSimple results.
+    def simple(m):
+        return '' if field_name(m.group(1)) in VOLATILE else m.group(0)
+    xml = re.sub(r'<w:fldSimple [^>]*w:instr="([^"]*)"[^>]*/>', '', xml)
+    xml = re.sub(r'<w:fldSimple [^>]*w:instr="([^"]*)"[^>]*>.*?</w:fldSimple>', simple, xml, flags=re.S)
+    out, stack, pos = [], [], 0  # stack: [instruction text, skipping the result]
+    tok = re.compile(r'<w:fldChar [^>]*w:fldCharType="(begin|separate|end)"[^>]*/>|<w:instrText[^>]*>([^<]*)</w:instrText>')
+    for m in tok.finditer(xml):
+        if not any(f[1] for f in stack):
             out.append(xml[pos:m.start()])
         pos = m.end()
-        if kind == 'begin':
-            skip.append(False)
-        elif kind == 'separate' and skip:
-            skip[-1] = True
-        elif kind == 'end' and skip:
-            skip.pop()
-    if not (skip and skip[-1]):
+        kind = m.group(1)
+        if kind is None:  # instruction text, for the innermost field still collecting its code
+            if stack and not stack[-1][1]:
+                stack[-1][0] += m.group(2)
+        elif kind == 'begin':
+            stack.append(['', False])
+        elif kind == 'separate' and stack:
+            stack[-1][1] = field_name(stack[-1][0]) in VOLATILE
+        elif kind == 'end' and stack:
+            stack.pop()
+    if not any(f[1] for f in stack):
         out.append(xml[pos:])
     return ''.join(out)
 
 
 def text(xml):
-    # Visible text runs, VML fallbacks (a second copy of text boxes) and field results left out,
-    # entities decoded, whitespace dropped.
+    # Visible text runs, VML fallbacks (a second copy of text boxes; the tag often carries
+    # namespace declarations) and recalculated field results left out, entities decoded,
+    # whitespace dropped.
     import html
-    xml = re.sub(r'<mc:Fallback>.*?</mc:Fallback>', '', xml, flags=re.S)
+    xml = re.sub(r'<mc:Fallback\b.*?</mc:Fallback>', '', xml, flags=re.S)
     xml = re.sub(r'<w:delText[^>]*>.*?</w:delText>', '', xml, flags=re.S)
     xml = unfield(xml)
+    # A break or tab inside w:t (against the schema, from some generators) still leaves its text
+    inner = re.compile(r'(<w:t(?: [^>]*)?>[^<]*)<w:(?:br|cr|tab)\b[^>]*/>')
+    while inner.search(xml):
+        xml = inner.sub(r'\1', xml)
     t = ''.join(re.findall(r'<w:t(?: [^>]*)?>([^<]*)</w:t>', xml))
+    # WordArt's text is its v:textpath string (a writer may keep it as runs instead)
+    t += ''.join(re.findall(r'<v:textpath [^>]*string="([^"]*)"', xml))
     return re.sub(r'\s+', '', html.unescape(t))
 
 
@@ -66,11 +92,12 @@ def kind(n):
 
 def summary(path):
     p = parts(path)
+    # Headers and footers by kind, as a sorted list of their parts' texts: a writer may number the
+    # parts differently (header1 ↔ header2) without changing any of them.
     by = {}
     for n, x in p.items():
-        k = kind(n)
-        by.setdefault(k, '')
-        by[k] += text(x)
+        by.setdefault(kind(n), []).append(text(x))
+    by = {k: '|'.join(sorted(v)) for k, v in by.items()}
     doc = p.get('word/document.xml', '')
     return by, doc.count('<w:tbl>'), ea_fonts(doc)
 

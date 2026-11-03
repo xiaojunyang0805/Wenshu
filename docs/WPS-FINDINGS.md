@@ -440,6 +440,15 @@ WPS updating fields through COM (`Fields.Update`).
   export (and unlike its screen view, which shows the markup; nine corpus documents have tracked
   changes, all with matching page counts).
 
+## F24. An invisible WordArt watermark (round-trip)
+
+A WPS-generated government notice carries VML WordArt in its header with `fillcolor="gray"` and
+`<v:fill opacity="0"/>`: a tracing watermark (names and phone numbers, between 爩灪 and 犪
+markers) that WPS doesn't show. Wenshu read the letters in the fill colour and ignored the
+opacity, so it drew them, and wrote them back opaque: WPS then showed them across the page. The
+opacity now becomes a transparent text fill (`w14:textFill` with `w14:alpha`), and WPS's render of
+the saved file matches the original again (page score 0.99995, was 0.984). Patch 0039.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

@@ -2,6 +2,34 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-03 (8): v0.1.2; J5 measured right: 199 / 200 texts kept; an invisible watermark (F24)
+
+- **v0.1.2** tagged (Cargo 0.1.2); release.yml built all eight packages into a draft release
+  (publishing is the user's call; v0.1.1 is a draft too).
+- **J5's text comparison fixed** (`corpus/tools/roundtrip.py`): it dropped every field result
+  (hyperlinks written back as `w:hyperlink` counted as new text), counted text boxes twice
+  (`mc:Fallback` tags carry namespace declarations), missed text before a `w:br` inside `w:t`,
+  and joined header parts in file-name order. Now only recalculated fields (page numbers, dates)
+  are left out and parts compare as a set. With today's build: text identical **199 / 200**,
+  tables 200 / 200, East Asian fonts 199 / 200, WPS page count unchanged 197 / 200, mean page
+  score 0.9932 (161 pixel-identical).
+- **F24, patch 0039:** a WPS tracing watermark (VML WordArt with fill opacity 0, names and phone
+  numbers) was drawn, and after a save WPS showed it across the page. The fill opacity now carries
+  over as a transparent `w14:textFill`. WPS's render of the saved page: 0.99995 (was 0.984).
+- **Upstream:** 0037 prepared as a branch on upstream `main` (`fix/field-result-fonts`, tests
+  pass except three hyphenation tests that fail on clean `main` here); opening the PR is waiting
+  for the user (out/pr-0037.md has the description).
+
+Tests: docx 373 + 134; fmt and clippy clean; the queue 0001–0039 applies on the pin and reproduces
+the tested tree.
+
+**Open:** the text box in a picture-filled shape (`aae80ea709`; the shape model has no image fill,
+so it is read as a picture and its text dropped: the last J5 text and font loss); the three page
+changes of J5 (documents Wenshu itself lays out a page off).
+
+**Next:** open the 0037 PR (user); offer 0027 + 0033 + 0039; picture fills for shapes; the 34
+documents still a page off WPS.
+
 ## 2026-11-03 (7): M2 — PDF export measured (J4); field results in two fonts (F23)
 
 - **J4 measured** (`corpus/tools/pdf_check.py`): every corpus document converted by the CLI (a
