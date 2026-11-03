@@ -74,8 +74,10 @@ longer applies, and running the fidelity corpus before and after.
 | 0040-layout-page-break-heading-no-empty-page | wordcraft-layout | A paragraph with a page or column break inside is placed as if keep with next / keep lines together were unset; a break line holding only markers still stays at the bottom of a full page (WPS, F25). Tests | not opened: the keep part is WPS-measured (Word to check); the marker part is a plain bug fix |
 | 0041-layout-kept-paragraph-closing-section | wordcraft-layout | The last paragraph of a section before a new page: keep with next unset, and keep lines too when empty (WPS, F26). Test | not opened: WPS-measured, Word to check |
 | 0042-layout-section-mark-after-page-break | wordcraft-layout | An empty next-page section mark right after a paragraph ending with a page break takes no line on the break page; the section takes that page back (WPS with `w:compat`, F26). Test | not opened: WPS-measured, Word to check |
+| 0043-layout-break-only-paragraph-goes-over | wordcraft-layout | A paragraph of only a page break that doesn't fit goes over (its break leaves a blank page); a break opening a paragraph stays at the bottom (WPS, F28). Test | not opened: WPS behaviour, Word keeps both |
+| 0044-layout-turned-distributed-cell-length | wordcraft-layout | Turned cell text measured by its own length, not its justified one, and at least an at-least row's height (F28). Test | not opened: bug fix, a candidate upstream |
 
-All 42 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-03); the
+All 44 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-03); the
 `wordcraft-layout` (602), `-fonts` (109), `-doc` (242), `-docx` (373 + 134 integration) and
 `-engine` (1095) suites pass with them, and fmt and clippy are clean.
 

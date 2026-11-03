@@ -499,6 +499,21 @@ so a church bulletin set in 華康細圓體 came out half as long as in WPS. Wen
 (`wenshu-cjk`) now follows WPS. `dc-administrative-f899568bb2` matches; `a9f763a2b4` is a page
 closer.
 
+## F28. A paragraph of only a page break at the page bottom; turned cells with distributed text
+
+- A paragraph holding nothing but a page break (`<w:p><w:r><w:br w:type="page"/></w:r></w:p>`)
+  whose line doesn't fit at the bottom of a page goes over in WPS, and its break then leaves the
+  next page blank (measured with exact line heights 28 to 80 pt, with and without space after).
+  When the paragraph goes on after the break (a heading opening with one, F25), its break line
+  stays at the bottom. Word keeps both, as upstream's comment says; Wenshu now does as WPS does
+  (patch 0043). No corpus document gained from it (the one where WPS shows such a blank page,
+  `9c189a35a9`, differs earlier), and `29a7772dfb`, already off, moved a page further.
+- A turned cell (`w:textDirection tbRlV`) with distributed text (`jc="distribute"`, a rating
+  scale's 非常不符合 header) in a row of at-least height: WPS spreads the characters over the row.
+  Wenshu measured the text as laid out on a long probe line, where distributing spreads it across
+  the whole probe, and gave the row the longest turned length allowed (a page). Its own length,
+  and at least the row's height, now (patch 0044). `dc-policies-efacf8571b` matches.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

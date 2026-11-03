@@ -1,0 +1,72 @@
+Upstream: (not opened; layout fix: turned cell text is as long as its own text, not its justified length (distributed text asked for the longest turned line, and a five-character rating-scale header filled a page), and at least as long as an at-least row height)
+diff --git a/crates/layout/src/table.rs b/crates/layout/src/table.rs
+index 701aad2f..644b345e 100644
+--- a/crates/layout/src/table.rs
++++ b/crates/layout/src/table.rs
+@@ -97,8 +97,11 @@ fn natural_length(items: &[Placed]) -> f32 {
+                 (lo, hi) = (*a, *b);
+             }
+             let hy = l.hyphen.map_or(0.0, |h| h.2);
++            // The text's own length, not its justified one: distributed text spreads across the
++            // whole probe, and measured placed it would ask for the longest line allowed.
++            let own: f32 = para.clusters.get(l.c0..l.c1).unwrap_or(&[]).iter().map(|c| c.adv.max(0.0)).sum();
+             if hi >= lo {
+-                len = len.max(x.max(0.0) + hi - lo + hy + indents);
++                len = len.max(x.max(0.0) + (hi - lo).min(own) + hy + indents);
+             }
+         }
+     }
+@@ -624,10 +627,16 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
+                 let snap = (ctx.counters.clone(), ctx.eq_count);
+                 let len = match (row.props.height, row.props.height_rule) {
+                     (Some(h), HeightRule::Exact) if h > 0.0 => (h + row_bottom - insets).clamp(4.0, TURNED_LIMIT),
+-                    _ => {
++                    (h, rule) => {
+                         let probe = layout_box(ctx, BoxInput::cell(story, &cell.blocks, &cpath, TURNED_MAX, text, depth)).items;
+                         (ctx.counters, ctx.eq_count) = (snap.0.clone(), snap.1);
+-                        natural_length(&probe).clamp(4.0, TURNED_MAX)
++                        // An at-least row is at least that tall: its lines are at least that long
++                        // (distributed text spreads across the row, as in WPS).
++                        let least = match (h, rule) {
++                            (Some(h), HeightRule::AtLeast) if h > 0.0 => h + row_bottom - insets,
++                            _ => 0.0,
++                        };
++                        natural_length(&probe).max(least).clamp(4.0, TURNED_MAX)
+                     }
+                 };
+                 let BoxLayout { items, height, floats_bottom, .. } = layout_box(ctx, BoxInput::cell(story, &cell.blocks, &cpath, len, text, depth));
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+index 2c6f4212..d39c63c9 100644
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -2118,6 +2118,30 @@ fn turned_lines(l: &DocLayout) -> &Placed {
+     l.pages[0].items.iter().find(|it| matches!(it, Placed::Lines { path, .. } if path.0 == [1, 0, 1, 0])).unwrap()
+ }
+ 
++/// Distributed turned text (a rating scale's "非常不符合" header, `jc="distribute"`): the row is as
++/// long as the text needs, or its at-least height, not the longest turned line allowed (the
++/// spread text measured placed asked for that, and a five-character header filled the page).
++#[test]
++fn distributed_turned_text_keeps_its_own_length() {
++    let row_h = |rule: Option<f32>| {
++        let mut d = turned_table(TextDirection::Down, "非常不符合", None);
++        let Some(Block::Table(t)) = d.body.get_mut(1).map(Arc::make_mut) else { panic!("no table") };
++        if let Some(Block::Para(p)) = t.rows[0].cells[1].blocks.first_mut().map(Arc::make_mut) {
++            p.props.align = Some(Align::Distribute);
++        }
++        if let Some(h) = rule {
++            t.rows[0].props.height = Some(h);
++            t.rows[0].props.height_rule = wordcraft_doc::props::HeightRule::AtLeast;
++        }
++        let l = lay(&d);
++        l.caret(&Pos::body(2, 0)).unwrap().top - l.caret(&Pos::body(0, 0)).unwrap().top
++    };
++    let plain = row_h(None);
++    assert!(plain < 120.0, "about five characters long: {plain}");
++    let least = row_h(Some(150.0));
++    assert!(least > 150.0 && least < 200.0, "at least the row's height: {least}");
++}
++
+ /// Table Layout › Text Direction (#226): turned cell text runs along the cell's height, the row
+ /// grows to fit it, and caret, clicks and drawing follow the turn.
+ #[test]
