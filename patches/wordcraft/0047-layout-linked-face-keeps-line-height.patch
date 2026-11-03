@@ -1,0 +1,138 @@
+Upstream: (not opened; WPS measurement: CJK compatibility ideographs drawn in a face standing in for the run fonts (font linking, 0046) add no height to the line; the line keeps the run font height. It grew by the stand-in face East Asian line height)
+diff --git a/crates/layout/src/para/builder.rs b/crates/layout/src/para/builder.rs
+index 6315f884..40e2fdb9 100644
+--- a/crates/layout/src/para/builder.rs
++++ b/crates/layout/src/para/builder.rs
+@@ -18,6 +18,9 @@ pub(super) struct Builder<'a> {
+     pub(super) levels: Vec<u8>,
+     /// Text drawn by clusters that stand for an object, by cluster index (see `ParaLayout::shown`).
+     pub(super) shown: Vec<(usize, String, Vec<std::ops::Range<usize>>)>,
++    /// By style index: the face its line height came from, when not its own (see
++    /// [`Builder::style_with_line`]).
++    pub(super) line_faces: Vec<Option<u32>>,
+ }
+ 
+ struct SegmentInput<'a> {
+@@ -93,6 +96,12 @@ impl<'a> Builder<'a> {
+ 
+     /// Style index for a resolved char in `face` (caps-scaled `size` override for small caps).
+     pub(super) fn style(&mut self, rc: &Arc<ResolvedChar>, face_override: Option<FaceRef>, small: bool) -> u32 {
++        self.style_with_line(rc, face_override, small, None)
++    }
++
++    /// [`Self::style`] whose line height comes from `line_face` when given: a face only filling in
++    /// characters the run's fonts lack by font linking adds no height to the line (WPS).
++    pub(super) fn style_with_line(&mut self, rc: &Arc<ResolvedChar>, face_override: Option<FaceRef>, small: bool, line_face: Option<FaceRef>) -> u32 {
+         let r = wordcraft_fonts::word::resolve(lookup_family(self.env.doc, &rc.font), rc.bold, rc.italic);
+         let face = face_override.unwrap_or(r.face);
+         // The display list reads every run's format (link target, strike kind, underline colour,
+@@ -104,8 +113,10 @@ impl<'a> Builder<'a> {
+             let mut h = std::collections::hash_map::DefaultHasher::new();
+             (face.id(), small, &rc.font, rc.size.to_bits(), rc.bold, rc.italic, rc.color, rc.highlight, rc.shading).hash(&mut h);
+             (rc.underline_color, rc.strike, rc.double_strike, &rc.link, rc.ins, rc.del, rc.hidden).hash(&mut h);
++            line_face.map(|f| f.id()).hash(&mut h);
+             h.finish()
+         };
++        let line_id = line_face.map(|f| f.id());
+         let bucket = self.style_index.entry(key).or_default();
+         // Formats that never compare equal (a NaN from a hostile file) get their own styles; a capped
+         // scan keeps such a bucket from turning quadratic.
+@@ -113,6 +124,7 @@ impl<'a> Builder<'a> {
+             if s == small
+                 && let Some(st) = self.styles.get(i as usize)
+                 && st.face.id() == face.id()
++                && self.line_faces.get(i as usize).copied().flatten() == line_id
+                 && (Arc::ptr_eq(&st.rc, rc) || *st.rc == **rc)
+             {
+                 return i;
+@@ -121,11 +133,12 @@ impl<'a> Builder<'a> {
+         let size = rc.draw_size() * if small { 0.8 } else { 1.0 };
+         // A symbol font that isn't installed, or is installed one em tall (Apple's Symbol), takes
+         // the height Word gives it.
++        let metrics = line_face.unwrap_or(face);
+         let (a, d) = match wordcraft_fonts::word::symbol_line(&rc.font, &r).or_else(|| wordcraft_fonts::word::missing_font_line(&rc.font, &r)) {
+-            Some((a, d)) => (a * face.upem, d * face.upem),
+-            None => wordcraft_fonts::word::text_line_metrics(&face),
++            Some((a, d)) => (a * metrics.upem, d * metrics.upem),
++            None => wordcraft_fonts::word::text_line_metrics(&metrics),
+         };
+-        let k = size as f64 / face.upem.max(1.0);
++        let k = size as f64 / metrics.upem.max(1.0);
+         // A fallback face (letters the requested font lacks) is emboldened or slanted when it has
+         // no bold or italic of its own.
+         let (synth_bold, synth_italic) = match face_override {
+@@ -146,6 +159,7 @@ impl<'a> Builder<'a> {
+         // hold in memory, so every format keeps its own style.
+         let i = u32::try_from(self.styles.len()).unwrap_or(u32::MAX);
+         self.styles.push(st);
++        self.line_faces.push(line_id);
+         self.style_index.entry(key).or_default().push((i, small));
+         i
+     }
+@@ -239,7 +253,15 @@ impl<'a> Builder<'a> {
+             };
+             let rc = &rc;
+             let small = key.small;
+-            let si = self.style(rc, key.face, small);
++            // CJK compatibility ideographs in a face standing in for the run's fonts (理 written
++            // U+F9E4, drawn in Microsoft JhengHei UI by font linking) keep the run's line height:
++            // WPS's line is as tall as without them (measured).
++            let linked = key.face.is_some()
++                && key.face.map(|f| f.id()) != primary_ea.map(|f| f.id())
++                && !sub.is_empty()
++                && sub.chars().all(|c| matches!(u32::from(c), 0xF900..=0xFAFF | 0x2F800..=0x2FA1F));
++            let si =
++                if linked { self.style_with_line(rc, key.face, small, Some(primary_ea.unwrap_or(primary))) } else { self.style(rc, key.face, small) };
+             let Some(st) = self.styles.get(si as usize).cloned() else { continue };
+             let upper = rc.caps || small;
+             // All Caps and Small Caps draw a letter's full capital, which can be several
+diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
+index 52919a85..ab715965 100644
+--- a/crates/layout/src/para/paragraph.rs
++++ b/crates/layout/src/para/paragraph.rs
+@@ -587,7 +587,16 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+     let rp = paragraph_props(p, env);
+     let res = Resolver { doc, style: p.props.style.as_deref(), table: env.table.map(|t| &t.chr) };
+     let levels = bidi_levels(&p.text, rp.bidi);
+-    let b = Builder { env, styles: Vec::new(), style_index: Default::default(), glyphs: Vec::new(), clusters: Vec::new(), levels, shown: Vec::new() };
++    let b = Builder {
++        env,
++        styles: Vec::new(),
++        style_index: Default::default(),
++        glyphs: Vec::new(),
++        clusters: Vec::new(),
++        levels,
++        shown: Vec::new(),
++        line_faces: Vec::new(),
++    };
+     let cx = Cx { p, env, rp: &rp, res, math_props: doc.settings.math.clone().unwrap_or_default(), drop_first: drop_cap_char(p, &rp) };
+     let mut sh = Shaped::new(b, env.eq_number);
+     let mark_rc = cx.res.char(&p.mark);
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+index d39c63c9..cc9af3b9 100644
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -1334,6 +1334,23 @@ fn a_missing_roman_font_with_its_own_substitute_keeps_it() {
+     assert_eq!(para.styles[first.style as usize].face, wordcraft_fonts::word::resolve("Times New Roman", false, false).face);
+ }
+ 
++/// A CJK compatibility ideograph the run's fonts lack (理 written U+F9E4) is drawn in a face
++/// standing in for them, which adds no height to the line: WPS lays the line out as tall as one
++/// without it (measured with Microsoft JhengHei UI filling in for 宋体). It grew by that face's
++/// own East Asian line height.
++#[test]
++fn a_compatibility_ideograph_keeps_the_line_height() {
++    let height = |text: &str| {
++        let props = CharProps { font: Some("Times New Roman".into()), font_ea: Some("SimSun".into()), ..Default::default() };
++        let mut d = Document::new();
++        d.body = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text(text, props))];
++        let l = lay(&d);
++        let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!("no text") };
++        para.lines[0].height
++    };
++    assert_eq!(height("漢\u{f9e4}漢"), height("漢漢漢"));
++}
++
+ #[test]
+ fn an_empty_section_mark_stays_on_a_full_page() {
+     use wordcraft_doc::section::SectionProps;

@@ -1,0 +1,167 @@
+Upstream: (not opened; WPS measurement: a CJK compatibility ideograph the run font lacks (理 written U+F9E4) falls back to Microsoft JhengHei UI, then Microsoft JhengHei, as Windows font linking gives it for 宋体, 仿宋 and 新細明體 runs; it went to whichever loaded face covered it first, a Japanese UI font)
+diff --git a/crates/fonts/src/fontdb/fallback.rs b/crates/fonts/src/fontdb/fallback.rs
+index 8f05ee7a..6df18534 100644
+--- a/crates/fonts/src/fontdb/fallback.rs
++++ b/crates/fonts/src/fontdb/fallback.rs
+@@ -1,7 +1,7 @@
+ use super::face::{FALLBACK_FAMILY, FontFace};
+ use super::fallback_data::{
+-    CJK_FALLBACK_FAMILY, FALLBACK_CACHE_MAX, RTL_FALLBACKS, RUN_FALLBACK_CACHE_CHARS, RUN_FALLBACK_CACHE_MAX, arabic_block, fallback_order,
+-    prefers_for_cjk,
++    CJK_COMPAT_FALLBACK_FAMILY, CJK_FALLBACK_FAMILY, FALLBACK_CACHE_MAX, RTL_FALLBACKS, RUN_FALLBACK_CACHE_CHARS, RUN_FALLBACK_CACHE_MAX,
++    arabic_block, cjk_compat, cjk_rank, fallback_order,
+ };
+ #[cfg(not(target_arch = "wasm32"))]
+ use super::fallback_data::{CoverageIndex, IndexedFile, SYS_MISSES_MAX, SYSTEM_FALLBACKS, coverage_ranges, ranges_hold, read_fallback_file};
+@@ -112,9 +112,12 @@ impl FontDb {
+ 
+     /// The best loaded face covering `c`, and the number of loaded faces it was chosen from.
+     fn loaded_fallback(&self, c: char, exclude: u32) -> (Option<Arc<FontFace>>, usize) {
+-        let cjk = crate::is_cjk(c);
++        let cjk = crate::is_cjk(c) || cjk_compat(c);
+         if cjk {
+             self.load_cjk_fallback();
++            if cjk_compat(c) {
++                self.load_shared_family(CJK_COMPAT_FALLBACK_FAMILY);
++            }
+         }
+         let faces = self.read_faces();
+         let mut order: Vec<&Arc<FontFace>> = faces.iter().filter(|f| f.id != exclude && f.owner == 0).collect();
+@@ -136,7 +139,7 @@ impl FontDb {
+         order.sort_by_key(|f| {
+             (
+                 rank(f),
+-                cjk && !prefers_for_cjk(f),
++                if cjk { cjk_rank(c, f) } else { 0 },
+                 shaping(f),
+                 !f.family.eq_ignore_ascii_case(FALLBACK_FAMILY),
+                 f.italic,
+@@ -149,13 +152,22 @@ impl FontDb {
+     /// Load [`CJK_FALLBACK_FAMILY`] when it is installed and not loaded yet, so it can lead the
+     /// fallbacks for Chinese characters over faces loaded for other reasons.
+     fn load_cjk_fallback(&self) {
++        self.load_shared_family(CJK_FALLBACK_FAMILY);
++    }
++
++    /// Load the installed `family` when no shared face of it is loaded yet. A document's own copy
++    /// (an embedded SimSun under another table name) doesn't count: fallbacks never use document
++    /// faces ([`Self::load_cataloged`] skips it too).
++    fn load_shared_family(&self, family: &str) {
+         #[cfg(not(target_arch = "wasm32"))]
+-        // A document's own copy (an embedded SimSun under another table name) doesn't count:
+-        // fallbacks never use document faces ([`Self::load_cataloged`] skips it too).
+-        let shared = self.read_faces().iter().any(|f| f.owner == 0 && f.named(CJK_FALLBACK_FAMILY));
+-        if !shared && self.sys.lock().unwrap_or_else(std::sync::PoisonError::into_inner).enabled {
+-            self.load_cataloged(CJK_FALLBACK_FAMILY);
++        {
++            let shared = self.read_faces().iter().any(|f| f.owner == 0 && f.named(family));
++            if !shared && self.sys.lock().unwrap_or_else(std::sync::PoisonError::into_inner).enabled {
++                self.load_cataloged(family);
++            }
+         }
++        #[cfg(target_arch = "wasm32")]
++        let _ = family;
+     }
+ 
+     /// One fallback face for a run: the first face in the fallback order that covers **every**
+@@ -253,10 +265,14 @@ impl FontDb {
+     /// The first face in the fallback order that covers every char, and the number of loaded
+     /// faces it was chosen from.
+     fn loaded_covering(&self, chars: &[char], exclude: u32) -> (Option<Arc<FontFace>>, usize) {
+-        let cjk = chars.iter().any(|c| crate::is_cjk(*c));
+-        if cjk {
++        let compat = chars.iter().copied().find(|c| cjk_compat(*c));
++        let cjk = compat.or_else(|| chars.iter().copied().find(|c| crate::is_cjk(*c)));
++        if cjk.is_some() {
+             self.load_cjk_fallback();
+         }
++        if compat.is_some() {
++            self.load_shared_family(CJK_COMPAT_FALLBACK_FAMILY);
++        }
+         let faces = self.read_faces();
+         let rtl = chars.iter().any(|c| crate::is_rtl(*c) || arabic_block(*c));
+         // A complex-script character picks the families its script prefers (the lowest one: the
+diff --git a/crates/fonts/src/fontdb/fallback_data.rs b/crates/fonts/src/fontdb/fallback_data.rs
+index 60dc972a..17e93f48 100644
+--- a/crates/fonts/src/fontdb/fallback_data.rs
++++ b/crates/fonts/src/fontdb/fallback_data.rs
+@@ -233,7 +233,9 @@ pub(super) const RUN_FALLBACK_CACHE_CHARS: usize = 1 << 20;
+ /// complex-script character `complex` (Thai, Myanmar…) faces with OpenType layout tables, the
+ /// script's own families first, as the per-character fallback ranks them; then the fallback
+ /// family, upright, nearest to regular weight.
+-pub(super) fn fallback_order(faces: &[Arc<FontFace>], exclude: u32, rtl: bool, complex: Option<char>, cjk: bool) -> Vec<&Arc<FontFace>> {
++/// `cjk`: a CJK character of the run (a compatibility ideograph when it has one), which ranks the
++/// East Asian faces ([`cjk_rank`]).
++pub(super) fn fallback_order(faces: &[Arc<FontFace>], exclude: u32, rtl: bool, complex: Option<char>, cjk: Option<char>) -> Vec<&Arc<FontFace>> {
+     let mut order: Vec<&Arc<FontFace>> = faces.iter().filter(|f| f.id != exclude).collect();
+     let rank =
+         |f: &FontFace| if rtl { RTL_FALLBACKS.iter().position(|n| f.family.eq_ignore_ascii_case(n)).unwrap_or(RTL_FALLBACKS.len()) } else { 0 };
+@@ -242,7 +244,14 @@ pub(super) fn fallback_order(faces: &[Arc<FontFace>], exclude: u32, rtl: bool, c
+         None => (false, 0),
+     };
+     order.sort_by_key(|f| {
+-        (rank(f), cjk && !prefers_for_cjk(f), shaping(f), !f.family.eq_ignore_ascii_case(FALLBACK_FAMILY), f.italic, (f.weight - 400.0).abs() as i32)
++        (
++            rank(f),
++            cjk.map_or(0, |c| cjk_rank(c, f)),
++            shaping(f),
++            !f.family.eq_ignore_ascii_case(FALLBACK_FAMILY),
++            f.italic,
++            (f.weight - 400.0).abs() as i32,
++        )
+     });
+     order
+ }
+@@ -256,4 +265,29 @@ pub(super) fn prefers_for_cjk(f: &FontFace) -> bool {
+     f.family.eq_ignore_ascii_case(CJK_FALLBACK_FAMILY)
+ }
+ 
++/// The face WPS Office on Windows draws a CJK compatibility ideograph (U+F900–FAFF, a 理 written
++/// U+F9E4) in when the run's font lacks it: Microsoft JhengHei UI for 宋体, 仿宋 and 新細明體 runs
++/// (Windows font linking), measured; then Microsoft JhengHei.
++pub(super) const CJK_COMPAT_FALLBACK_FAMILY: &str = "Microsoft JhengHei UI";
++
++/// Whether `c` is a CJK compatibility ideograph.
++pub(super) fn cjk_compat(c: char) -> bool {
++    matches!(u32::from(c), 0xF900..=0xFAFF | 0x2F800..=0x2FA1F)
++}
++
++/// How a face ranks among the fallbacks for the CJK character `c` (lower first): compatibility
++/// ideographs prefer Microsoft JhengHei UI, then Microsoft JhengHei; every CJK character then
++/// prefers 宋体 ([`CJK_FALLBACK_FAMILY`]).
++pub(super) fn cjk_rank(c: char, f: &FontFace) -> u8 {
++    if cjk_compat(c) {
++        if f.family.eq_ignore_ascii_case(CJK_COMPAT_FALLBACK_FAMILY) {
++            return 0;
++        }
++        if f.family.eq_ignore_ascii_case("Microsoft JhengHei") {
++            return 1;
++        }
++    }
++    if prefers_for_cjk(f) { 2 } else { 3 }
++}
++
+ pub(super) const FALLBACK_CACHE_MAX: usize = 20_000;
+diff --git a/crates/fonts/src/fontdb/tests/sysfonts.rs b/crates/fonts/src/fontdb/tests/sysfonts.rs
+index 628abf66..55bf85be 100644
+--- a/crates/fonts/src/fontdb/tests/sysfonts.rs
++++ b/crates/fonts/src/fontdb/tests/sysfonts.rs
+@@ -734,10 +734,15 @@ fn chinese_characters_fall_back_to_simsun_before_other_loaded_faces() {
+     db.set_system_fallback(false);
+     db.add_document_fonts(vec![(named_face("SourceSerif4-Regular.ttf", "Other Face"), "Other Face".to_string())], 0);
+     db.add_document_fonts(vec![(named_face("SourceSerif4-Regular.ttf", "SimSun"), "SimSun".to_string())], 0);
++    db.add_document_fonts(vec![(named_face("SourceSerif4-Regular.ttf", "Microsoft JhengHei"), "Microsoft JhengHei".to_string())], 0);
++    db.add_document_fonts(vec![(named_face("SourceSerif4-Regular.ttf", "Microsoft JhengHei UI"), "Microsoft JhengHei UI".to_string())], 0);
+     let faces = db.read_faces();
+-    let first = |cjk: bool| super::fallback_data::fallback_order(&faces, u32::MAX, false, None, cjk).first().map(|f| f.family.clone());
+-    assert_eq!(first(true).as_deref(), Some("SimSun"));
+-    assert_ne!(first(false).as_deref(), Some("SimSun"), "Latin characters keep the usual order");
++    let first = |cjk: Option<char>| super::fallback_data::fallback_order(&faces, u32::MAX, false, None, cjk).first().map(|f| f.family.clone());
++    assert_eq!(first(Some('漢')).as_deref(), Some("SimSun"));
++    assert_ne!(first(None).as_deref(), Some("SimSun"), "Latin characters keep the usual order");
++    // A CJK compatibility ideograph (理 written U+F9E4) goes to Microsoft JhengHei UI, as WPS
++    // draws it (Windows font linking), then Microsoft JhengHei.
++    assert_eq!(first(Some('\u{f9e4}')).as_deref(), Some("Microsoft JhengHei UI"));
+ }
+ 
+ /// A document's embedded copy of an installed font under another table name (WPS embeds SimSun

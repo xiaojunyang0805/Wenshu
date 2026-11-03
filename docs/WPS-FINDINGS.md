@@ -530,6 +530,18 @@ closer.
   (the change was made and reverted). The probes behind F25, F26 and F28 were checked against the
   corpus documents they fixed.
 
+## F30. CJK compatibility ideographs: the fallback face and the line height
+
+Measured 2026-11-03 (probes with a settings part). A run in 宋体, 仿宋 or 新細明體 holding a CJK
+compatibility ideograph its font lacks (U+F900–FAFF; a 理 written U+F9E4 in a corpus document) is
+drawn by WPS in Microsoft JhengHei UI (Microsoft JhengHei for a Microsoft YaHei run), as Windows
+font linking gives it; Wenshu took whichever loaded face covered it, Yu Gothic UI (patch 0046).
+That face adds no height to the line: a single-spaced line holding it is exactly as tall as the
+others (16.8 pt at 13 pt), where Wenshu added the face's own East Asian line height, 1.3 × its
+1.27 em (patch 0047). 宋体 reached as a fallback for a run with no East Asian font still counts in
+full, as before. `dc-educational-92262161df` matches; `dc-reports-2d6a9da333`, whose line breaks
+differ from WPS's elsewhere, lost the page count it had matched by those taller lines.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

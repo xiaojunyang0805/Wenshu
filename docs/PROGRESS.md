@@ -29,6 +29,12 @@ too, with no corpus gain yet. Tests: layout 607; the queue 0001-0044 reproduces 
 On the way, a space-width "rule" measured with probes lacking a settings part turned out to be
 WPS's handling of such files only; the change was reverted, and probes now always carry one.
 
+**Then (F30, patches 0046-0047): still 176 / 200.** A 理 written as a compatibility ideograph
+(U+F9E4) fell back to a Japanese UI font with a taller line; WPS uses Microsoft JhengHei UI and
+keeps the line height. `92262161df` matches; `2d6a9da333`, off elsewhere, lost its lucky match.
+`9c189a35a9` (a chart with top-and-bottom wrap): WPS and Wenshu both respond non-monotonically as
+the chart moves; left for a study of floats and the line grid.
+
 **Next:** the 24 left: more empty pages (`493a360281`, `cd82c17bf5`, `228229e95c`, `ea10dc7972`,
 `82eb70e86d`: tables and trailing empty paragraphs), then line-height differences.
 
