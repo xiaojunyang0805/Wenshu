@@ -42,7 +42,22 @@ line in WPS (`377b4bf861` matches).
 (公文 titles in 方正小标宋简体); ten documents score higher. Open: Latin text in 新細明體 runs drawn
 in Segoe Print by WPS (three references).
 
-**Next:** the 23 left: more empty pages (`493a360281`, `cd82c17bf5`, `228229e95c`, `ea10dc7972`,
+**Where the 23 stand (2026-11-04):**
+- `29a7772dfb` (+2): cut down to 16 blocks (`out/bis/reduce2.py … 第二部分2023`); WPS keeps a
+  break-only paragraph after text ending at y 724, Wenshu (725) sends it over (empty page). Probe:
+  on a 312-twip grid WPS needs the full grid line for that paragraph (Wenshu fits 13.6 pt in 14),
+  so Wenshu must lose more than 2 pt of room above it, in its exact 30 pt lines: trace line boxes.
+- `8f343b7812` (−1), `9c189a35a9` (−1): floats with top-and-bottom wrap (in table cells; under a
+  chart); WPS's offsets vary with how rows split / where the float sits, non-monotonically.
+- `cd82c17bf5`, `228229e95c`, `82eb70e86d`: the empty page is a symptom of earlier line-height or
+  break differences.
+- `f7d3afdfdb` (−1): Latin text in Arial Unicode MS drawn by WPS in a font of its own (widths).
+- `173ff7b3a5`, `ffe3dc89e6`: WPS draws Latin text in 新細明體 runs in Segoe Print (F32, open).
+- The rest not yet traced: `a9f763a2b4`, `a180b9d578`, `2d6a9da333`, `1f522d22f6`, `493a360281`,
+  `e67370879a`, `aa1a5e719d`, `40991f97da`, `7abe5be4e9`, `1403def07e`, `39de0888eb`,
+  `a5beccd773`, `85cb8e4b30`, `9c1f3849ea`.
+
+**Next:** continue down that list (`493a360281`, `cd82c17bf5`, `228229e95c`, `ea10dc7972`,
 `82eb70e86d`: tables and trailing empty paragraphs), then line-height differences.
 
 ## 2026-11-03 (9): no empty page before a heading that opens with a page break (F25): 170 / 200
