@@ -5806,11 +5806,11 @@ checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
 
 [[package]]
 name = "wenshu-cjk"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "wenshu-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -5821,7 +5821,7 @@ dependencies = [
 
 [[package]]
 name = "wenshu-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde_json",
  "wenshu-cjk",
@@ -5832,7 +5832,7 @@ dependencies = [
 
 [[package]]
 name = "wenshu-desktop"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "log",
  "wenshu-core",
@@ -5844,7 +5844,7 @@ dependencies = [
 
 [[package]]
 name = "wenshu-fidelity"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "image",
  "serde",
@@ -5854,7 +5854,7 @@ dependencies = [
 
 [[package]]
 name = "wenshu-gongwen"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "quick-xml 0.41.0",
  "serde",
