@@ -418,6 +418,28 @@ Patch 0032.
 - A VML text box carrying an empty `<v:imagedata o:title=""/>` (WPS writes one) is a text box; it
   was dropped with its text, in groups too (patch 0035; `dc-policies-de24610147` had 220).
 
+## F23. Date fields: when WPS refreshes them, the W picture; PDF export (J4)
+
+Measured 2026-11-03 with probe documents (`DATE` and `CREATEDATE` with the stored result `X`) and
+WPS updating fields through COM (`Fields.Update`).
+
+- WPS refreshes `DATE` and `TIME` to the moment it renders: a corpus footer
+  `TIME \@ "yyyy年M月d日星期W"` stored as 2018年6月27日星期三 shows the render date, 2026年10月31日星期六.
+  `CREATEDATE` keeps its stored result on open, and an explicit update gives
+  `错误！未定义书签。` (WPS doesn't support it).
+- `W`, either case, is the Chinese weekday: `W` 二, `WW` 周二, `WWW` (or `Www`) 星期二 on a
+  Tuesday. Sunday could only be measured by changing the clock; Wenshu writes 日 (patch 0038).
+  Without a language tag WPS also gives `dddd` 星期二 and `ddd` 二, where Wenshu writes English
+  names (open).
+- In the result, digits take the Latin font and 年月日 the East Asian one, with the automatic
+  space between them (2026 年 10 月 31 日). Wenshu drew the whole result in the first font's face,
+  with the East Asian font's glyph ids: wrong glyphs on screen, and in a PDF that face could not
+  be subset and was drawn as outlines without text (15% of one document's text unextractable).
+  Fixed in layout, patch 0037.
+- WPS's PDF export is the final text: tracked changes are applied and not marked, like Wenshu's
+  export (and unlike its screen view, which shows the markup; nine corpus documents have tracked
+  changes, all with matching page counts).
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).
@@ -435,5 +457,6 @@ Patch 0032.
   1.8 em there), and marks of mixed sizes on one line.
 - Where at-least spacing puts the baseline when the minimum is larger than the text (F6 covers
   exact only).
+- `dddd` / `ddd` day names by the field's language (F23), and Sunday's `W`.
 - Word's behaviour for each finding. Upstream targets Word, so changes to #5003/#5006 need
   either Word references or an argument from the spec. F2 has one; F1 does not yet.

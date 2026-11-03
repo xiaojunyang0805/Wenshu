@@ -1,0 +1,47 @@
+Upstream: (not opened; date pictures: W, either case, is the Chinese weekday as WPS shows it: 二, 周二, 星期二 for 1, 2, 3+ letters; Sunday 日 (unmeasured))
+diff --git a/crates/engine/src/cmd/insert/items.rs b/crates/engine/src/cmd/insert/items.rs
+index 78e08b5f..d0778931 100644
+--- a/crates/engine/src/cmd/insert/items.rs
++++ b/crates/engine/src/cmd/insert/items.rs
+@@ -89,6 +89,24 @@ pub fn format_date_parts(fmt: &str, y: i64, m: usize, d: u32, (hh, mm, ss): (u32
+             i += 5;
+             continue;
+         }
++        // `W` (either case, measured in WPS): the Chinese weekday, 二, 周二, 星期二 for 1, 2, 3+
++        // letters; Sunday is 日 (not measured: WPS updates only DATE and TIME, to today).
++        if c.eq_ignore_ascii_case(&'w') {
++            let mut n = 1;
++            while chars.get(i + n).is_some_and(|x| x.eq_ignore_ascii_case(&'w')) {
++                n += 1;
++            }
++            const CN_DAYS: [&str; 7] = ["四", "五", "六", "日", "一", "二", "三"];
++            let wd = CN_DAYS.get(days_since.rem_euclid(7) as usize).copied().unwrap_or("一");
++            out.push_str(match n {
++                1 => "",
++                2 => "周",
++                _ => "星期",
++            });
++            out.push_str(wd);
++            i += n;
++            continue;
++        }
+         let mut n = 1;
+         while chars.get(i + n) == Some(&c) {
+             n += 1;
+diff --git a/crates/engine/src/cmd/insert/tests.rs b/crates/engine/src/cmd/insert/tests.rs
+index fbff175e..591b6c78 100644
+--- a/crates/engine/src/cmd/insert/tests.rs
++++ b/crates/engine/src/cmd/insert/tests.rs
+@@ -343,6 +343,12 @@ fn date_pictures() {
+     assert_eq!(format_date_parts("hh:mm", 2026, 10, 21, (17, 27, 3), 0), "05:27");
+     assert_eq!(format_date_parts("h:mm", 2026, 10, 21, (17, 27, 3), 0), "5:27");
+     assert_eq!(format_date_parts("HH:mm", 2026, 10, 21, (5, 7, 3), 0), "05:07");
++    // `W`, the Chinese weekday, as WPS shows it (2026-11-03, a Tuesday, is day 20760).
++    let tue = 20_760;
++    assert_eq!(format_date_parts("yyyy年M月d日星期W", 2026, 11, 3, (0, 0, 0), tue), "2026年11月3日星期二");
++    assert_eq!(format_date_parts("w|WW|WWW|Www", 2026, 11, 3, (0, 0, 0), tue), "二|周二|星期二|星期二");
++    assert_eq!(format_date_parts("W", 2026, 11, 1, (0, 0, 0), tue - 2), "日", "Sunday");
++    assert_eq!(format_date_parts("W", 2026, 11, 7, (0, 0, 0), tue + 4), "六");
+     let d = format_date("yyyy-MM-dd");
+     assert_eq!(d.len(), 10);
+     assert!(format_date("MMMM d, yyyy").contains(", "));

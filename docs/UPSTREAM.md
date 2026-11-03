@@ -68,9 +68,11 @@ longer applies, and running the fidelity corpus before and after.
 | 0034-docx-break-inside-text | wordcraft-docx | A `w:br`/`w:cr`/`w:tab` inside `w:t` breaks the line instead of being dropped. Test | not opened: reader robustness, a candidate upstream |
 | 0035-docx-vml-textbox-empty-imagedata | wordcraft-docx | A VML text box with an empty `v:imagedata` is read as a text box (it was dropped). Test | not opened: bug fix, a candidate upstream |
 | 0036-layout-spacing-in-lines | wordcraft-doc, -docx, -layout | `w:beforeLines`/`w:afterLines` read, written back and laid out in grid lines (12 pt without a grid), overriding points; 0 ignored (WPS, F22). Tests | not opened: read/write part is spec, the unit is WPS-measured |
+| 0037-layout-field-result-fonts | wordcraft-layout | A field result shaped in more than one font (`yyyy年M月d日`: digits Latin, 年月日 East Asian) is a cluster per font, each standing for the whole object; one cluster drew every glyph in the first face with the others' glyph ids (wrong glyphs; the PDF face couldn't be subset). Tests | not opened: bug fix, a strong candidate upstream |
+| 0038-engine-date-picture-chinese-weekday | wordcraft-engine | Date picture `W` (either case): the Chinese weekday, 二 / 周二 / 星期二 for 1 / 2 / 3+ letters (WPS, F23). Test | not opened: WPS-measured; Word's Chinese pictures to check |
 
-All 36 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-03); the
-`wordcraft-layout` (600), `-fonts` (109), `-doc` (242), `-docx` (373 + 134 integration) and
+All 38 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-03); the
+`wordcraft-layout` (602), `-fonts` (109), `-doc` (242), `-docx` (373 + 134 integration) and
 `-engine` (1095) suites pass with them, and fmt and clippy are clean.
 
 **Review status (2026-10-31):** four CodeRabbit rounds; every thread resolved or answered, and the

@@ -15,9 +15,44 @@ USAGE:
   wenshu gongwen new <spec.json> <out.docx>     write a GB/T 9704 official document
   wenshu gongwen check <file.docx> [--json]     check a document against GB/T 9704 (exit 1 on failures)
   wenshu fidelity <corpus> <out> [--scale S]    render <corpus>/files, compare with <corpus>/ref, write <out>/report.json
+
+Warnings (for example a font drawn as outlines in a PDF) go to stderr; WENSHU_LOG=off|error|warn|info|debug
+sets the level (default warn).
 ";
 
+/// Writes log records at or above the level in `WENSHU_LOG` (default warn) to stderr.
+struct StderrLog;
+
+impl log::Log for StderrLog {
+    fn enabled(&self, m: &log::Metadata) -> bool {
+        m.level() <= log::max_level()
+    }
+    fn log(&self, r: &log::Record) {
+        if self.enabled(r.metadata()) {
+            eprintln!(
+                "wenshu: {}: {}",
+                r.level().as_str().to_lowercase(),
+                r.args()
+            );
+        }
+    }
+    fn flush(&self) {}
+}
+
+static LOGGER: StderrLog = StderrLog;
+
+fn init_log() {
+    let level = std::env::var("WENSHU_LOG")
+        .ok()
+        .and_then(|v| v.parse::<log::LevelFilter>().ok())
+        .unwrap_or(log::LevelFilter::Warn);
+    if log::set_logger(&LOGGER).is_ok() {
+        log::set_max_level(level);
+    }
+}
+
 fn main() -> ExitCode {
+    init_log();
     let args: Vec<String> = std::env::args().skip(1).collect();
     match run(&args) {
         Ok(code) => code,

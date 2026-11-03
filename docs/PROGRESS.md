@@ -2,6 +2,34 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-03 (7): M2 — PDF export measured (J4); field results in two fonts (F23)
+
+- **J4 measured** (`corpus/tools/pdf_check.py`): every corpus document converted by the CLI (a
+  process each), then the PDF read back. 200 / 200 written; page counts equal to Wenshu's layout
+  200 / 200; every font embedded and subset 200 / 200; text extractable with mean recall
+  **0.9986** (Chinese 0.9984), every character in 169 / 200; pages match the screen render
+  (worst page above 0.99 in 198 / 200). The two others differ by screen-only markup (tracked
+  changes, field shading), which WPS's PDF leaves out too. Median 0.2 s, 164 KB.
+- **Found by it, patch 0037:** a field result in more than one font (a footer
+  `TIME \@ "yyyy年M月d日星期W"`) drew every glyph in the first font with the other font's glyph
+  ids, so the screen showed wrong glyphs and the PDF couldn't embed that face (drawn as outlines,
+  so no text; three documents lost 15–50% of their extractable text). Now a cluster per font, with
+  WPS's automatic space between digits and 年月日.
+- **F23, patch 0038:** WPS refreshes `DATE`/`TIME` to the render date; `W` is the Chinese weekday
+  (二 / 周二 / 星期二). WPS doesn't support `CREATEDATE`.
+- The CLI now prints library warnings to stderr (`WENSHU_LOG`, default warn), so a font drawn as
+  outlines shows up.
+- Fidelity unchanged (166 / 200, mean 0.935; no document moved by more than 0.002).
+
+Tests: layout 602, engine 1095, pdf 42 + 65; fmt and clippy clean; the queue 0001–0038 applies on
+the pin and reproduces the tested tree.
+
+**Open from J4:** a vertical (`btLr`) text box drawn empty (`aae80ea709`; WPS's own page 1 is blank
+too); hollow (`w14:textFill noFill`) text not extractable; `dddd`/`ddd` day names in Chinese
+without a language tag (F23).
+
+**Next (M2):** release v0.1.2; offer 0027 + 0033 + 0037 upstream; then the J5 text differences.
+
 ## 2026-11-03 (6): M2 — desktop smoke test, the .docx round-trip (J5)
 
 - **Desktop smoke test** (`corpus/tools/desktop_smoke.py`, control channel): five corpus
