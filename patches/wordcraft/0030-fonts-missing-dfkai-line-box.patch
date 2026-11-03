@@ -1,0 +1,59 @@
+Upstream: (not opened; WPS measurement: DFKai-SB / 標楷體 not installed keeps its own 0.95 / 0.35 em box under its substitute; F17)
+diff --git a/crates/fonts/src/word.rs b/crates/fonts/src/word.rs
+index 2c928184..6f5094a3 100644
+--- a/crates/fonts/src/word.rs
++++ b/crates/fonts/src/word.rs
+@@ -195,6 +195,20 @@ pub fn symbol_line(family: &str, resolved: &Resolved) -> Option<(f64, f64)> {
+     (resolved.substituted || one_em(line_metrics(&resolved.face), resolved.face.upem)).then_some(m)
+ }
+ 
++/// The (ascent, descent) in em WPS Office gives a line in a font it knows but this system lacks,
++/// when the text is drawn in a substitute: DFKai-SB (標楷體) keeps its own 1.3 em box, the
++/// baseline 0.95 em down (measured at 10.5, 16 and 22 pt, drawn in 宋体 or Microsoft JhengHei
++/// Light), where the substitute's own box would put it 1.0 em down.
++pub fn missing_font_line(family: &str, resolved: &Resolved) -> Option<(f64, f64)> {
++    if !resolved.substituted {
++        return None;
++    }
++    match family.trim().to_lowercase().as_str() {
++        "標楷體" | "标楷体" | "dfkai-sb" | "dfkai" => Some((0.95, 0.35)),
++        _ => None,
++    }
++}
++
+ /// Is a line's (ascent, descent) one `upem` em tall?
+ fn one_em((ascent, descent): (f64, f64), upem: f64) -> bool {
+     upem > 0.0 && ((ascent + descent) / upem - 1.0).abs() < 0.005
+@@ -633,6 +647,19 @@ mod tests {
+         assert_eq!(substitutes(charset_base_family("Times New Roman Cyr")), substitutes("Times New Roman"));
+     }
+ 
++    #[test]
++    fn a_missing_dfkai_keeps_its_own_line_box() {
++        let mut r = resolve("Arial", false, false);
++        r.substituted = true;
++        for name in ["標楷體", "标楷体", "DFKai-SB", " dfkai-sb "] {
++            assert_eq!(missing_font_line(name, &r), Some((0.95, 0.35)), "{name}");
++        }
++        assert_eq!(missing_font_line("Arial", &r), None);
++        // Installed, the font's own metrics count.
++        r.substituted = false;
++        assert_eq!(missing_font_line("標楷體", &r), None);
++    }
++
+     #[test]
+     fn pcl6_symbol_has_symbols_line_metrics() {
+         assert_eq!(symbol_font_metrics("Symbol (PCL6)"), symbol_font_metrics("Symbol"));
+diff --git a/crates/layout/src/para/builder.rs b/crates/layout/src/para/builder.rs
+index 773cbbc0..f7f0211f 100644
+--- a/crates/layout/src/para/builder.rs
++++ b/crates/layout/src/para/builder.rs
+@@ -121,7 +121,7 @@ impl<'a> Builder<'a> {
+         let size = rc.draw_size() * if small { 0.8 } else { 1.0 };
+         // A symbol font that isn't installed, or is installed one em tall (Apple's Symbol), takes
+         // the height Word gives it.
+-        let (a, d) = match wordcraft_fonts::word::symbol_line(&rc.font, &r) {
++        let (a, d) = match wordcraft_fonts::word::symbol_line(&rc.font, &r).or_else(|| wordcraft_fonts::word::missing_font_line(&rc.font, &r)) {
+             Some((a, d)) => (a * face.upem, d * face.upem),
+             None => wordcraft_fonts::word::text_line_metrics(&face),
+         };

@@ -1,21 +1,98 @@
-Upstream: (not opened; WPS measurement, Word unmeasured (it documents adjustLineHeightInTable as snapping): lines in table cells don't snap to the line grid; F18)
+Upstream: (not opened; WPS measurement: lines in table cells snap to the line grid only under w:adjustLineHeightInTable, now read and written back; F18)
+diff --git a/crates/doc/src/settings.rs b/crates/doc/src/settings.rs
+index db9845cd..3e4199ec 100644
+--- a/crates/doc/src/settings.rs
++++ b/crates/doc/src/settings.rs
+@@ -135,6 +135,10 @@ pub struct Settings {
+     /// digits and punctuation keep their own widths.
+     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+     pub balance_sbcs_dbcs: bool,
++    /// `w:adjustLineHeightInTable`: lines in table cells snap to the document's line grid as the
++    /// body's do; without it they keep their own heights (WPS Office, modes 14 and 15).
++    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
++    pub adjust_line_height_in_table: bool,
+     /// Keep contextual paragraph spacing inside legacy table cells (`allowSpaceOfSameStyleInTable`).
+     /// Word ignores the layout override in compatibility mode 15, but the flag still round-trips.
+     pub allow_space_of_same_style_in_table: bool,
+@@ -345,6 +349,7 @@ impl Default for Settings {
+             sum_paragraph_spacing: false,
+             do_not_expand_shift_return: false,
+             balance_sbcs_dbcs: false,
++            adjust_line_height_in_table: false,
+             allow_space_of_same_style_in_table: false,
+             grid_h: DEFAULT_GRID,
+             grid_v: DEFAULT_GRID,
+diff --git a/crates/docx/src/read/meta.rs b/crates/docx/src/read/meta.rs
+index 7685889e..c6d8d449 100644
+--- a/crates/docx/src/read/meta.rs
++++ b/crates/docx/src/read/meta.rs
+@@ -40,6 +40,7 @@ impl Reader<'_> {
+                     s.sum_paragraph_spacing = k.children("w:doNotUseHTMLParagraphAutoSpacing").any(on_off);
+                     s.do_not_expand_shift_return = k.children("w:doNotExpandShiftReturn").any(on_off);
+                     s.balance_sbcs_dbcs = k.children("w:balanceSingleByteDoubleByteWidth").any(on_off);
++                    s.adjust_line_height_in_table = k.children("w:adjustLineHeightInTable").any(on_off);
+                 }
+                 "w:trackRevisions" => s.track_changes = on_off(k),
+                 "w:doNotTrackMoves" => s.track_moves = !on_off(k),
+diff --git a/crates/docx/src/write/settings.rs b/crates/docx/src/write/settings.rs
+index 39a3f43e..56432108 100644
+--- a/crates/docx/src/write/settings.rs
++++ b/crates/docx/src/write/settings.rs
+@@ -145,6 +145,9 @@ fn write_compatibility_settings(w: &mut W, doc: &Document) {
+     if doc.settings.do_not_expand_shift_return {
+         w.empty("w:doNotExpandShiftReturn", &[]);
+     }
++    if doc.settings.adjust_line_height_in_table {
++        w.empty("w:adjustLineHeightInTable", &[]);
++    }
+     if doc.settings.sum_paragraph_spacing {
+         w.empty("w:doNotUseHTMLParagraphAutoSpacing", &[]);
+     }
+diff --git a/crates/docx/tests/it/fixtures.rs b/crates/docx/tests/it/fixtures.rs
+index 82ce4b56..e51e0dda 100644
+--- a/crates/docx/tests/it/fixtures.rs
++++ b/crates/docx/tests/it/fixtures.rs
+@@ -3741,6 +3741,22 @@ fn balance_single_byte_double_byte_width_is_read_and_kept() {
+     assert_eq!(settings(""), (false, false));
+ }
+ 
++/// `w:adjustLineHeightInTable` in the settings' `w:compat` (table cells then snap to the line
++/// grid) is read and written back.
++#[test]
++fn adjust_line_height_in_table_is_read_and_kept() {
++    let settings = |compat: &str| {
++        let s = format!(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings {W_NS}><w:compat>{compat}</w:compat></w:settings>"#);
++        let rels = [("rId9", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings", "settings.xml")];
++        let d = wordcraft_docx::read(&docx("<w:p/>", &rels, &[("word/settings.xml", &s)])).unwrap();
++        let again = wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap();
++        (d.settings.adjust_line_height_in_table, again.settings.adjust_line_height_in_table)
++    };
++    assert_eq!(settings("<w:doNotExpandShiftReturn/><w:adjustLineHeightInTable/><w:useFELayout/>"), (true, true));
++    assert_eq!(settings(r#"<w:adjustLineHeightInTable w:val="0"/>"#), (false, false));
++    assert_eq!(settings(""), (false, false));
++}
++
+ /// A right triangle (`rtTriangle`) has its right angle at the bottom left: a cover page's white
+ /// corner cut-outs drawn as isosceles triangles pointed the wrong way.
+ #[test]
 diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
-index e89cdc8d..2cc5ed44 100644
+index e89cdc8d..a0b1dca1 100644
 --- a/crates/layout/src/para/lines.rs
 +++ b/crates/layout/src/para/lines.rs
-@@ -200,7 +200,9 @@ impl<'e> Breaker<'e> {
+@@ -200,7 +200,10 @@ impl<'e> Breaker<'e> {
              hyph_limit: settings.consecutive_hyphen_limit as usize,
              widths: word_widths(&pl.clusters, &pl.hyph_after),
              rtl_para: rp.bidi,
 -            grid: Some(env.grid).filter(|g| g.line.is_some() && rp.snap_to_grid),
-+            // Lines in table cells don't snap to the line grid in WPS, `adjustLineHeightInTable`
-+            // or not (13 pt 宋体 on a 15.6 pt grid: 16.9 pt lines, modes 14 and 15).
-+            grid: Some(env.grid).filter(|g| g.line.is_some() && rp.snap_to_grid && env.table.is_none()),
++            // Lines in table cells snap to the line grid only under `adjustLineHeightInTable`
++            // (WPS, modes 14 and 15: 13 pt 宋体 on a 15.6 pt grid takes 16.9 pt in a cell without
++            // it, two pitches with it, as in the body).
++            grid: Some(env.grid).filter(|g| g.line.is_some() && rp.snap_to_grid && (env.table.is_none() || settings.adjust_line_height_in_table)),
              bidi: rp.bidi || !pl.bidi_levels.is_empty(),
              est_h,
              // Exact spacing fixes the table-contact boundary even when the mark has other metrics.
 diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
-index 00d83b30..d811dc58 100644
+index 00d83b30..61e2b003 100644
 --- a/crates/layout/src/tests/grid.rs
 +++ b/crates/layout/src/tests/grid.rs
 @@ -355,3 +355,33 @@ fn a_character_grid_narrows_the_column_to_whole_pitches() {
@@ -23,10 +100,10 @@ index 00d83b30..d811dc58 100644
      assert!((right(&with_grid("x", DocGridType::Lines, 0)) - full).abs() < 0.01);
  }
 +
-+/// Lines in a table cell keep their natural height on a line grid (WPS, modes 14 and 15,
-+/// `adjustLineHeightInTable` or not): only the body's lines take whole pitches.
++/// Lines in a table cell keep their natural height on a line grid unless the document says
++/// `adjustLineHeightInTable` (WPS, modes 14 and 15): then they take whole pitches as the body's do.
 +#[test]
-+fn table_cells_do_not_snap_to_the_line_grid() {
++fn table_cells_snap_to_the_line_grid_only_when_adjusted() {
 +    use wordcraft_doc::{Path, Table};
 +    let mut d = with_grid("Grid line", DocGridType::Lines, 0);
 +    let mut t = Table::new(1, 1, 300.0);
@@ -36,9 +113,8 @@ index 00d83b30..d811dc58 100644
 +    p.props.line_spacing = Some(LineSpacing::Multiple(1.0));
 +    t.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(p)];
 +    d.insert_block(StoryRef::Body, &Path::top(1), Block::Table(t)).unwrap();
-+    let l = lay(&d);
-+    let height = |cell: bool| {
-+        l.pages[0]
++    let height = |d: &Document, cell: bool| {
++        lay(d).pages[0]
 +            .items
 +            .iter()
 +            .find_map(|i| match i {
@@ -47,8 +123,9 @@ index 00d83b30..d811dc58 100644
 +            })
 +            .unwrap()
 +    };
-+    let (body, cell) = (height(false), height(true));
++    let (body, cell) = (height(&d, false), height(&d, true));
 +    assert!((body / 18.0 - (body / 18.0).round()).abs() < 1e-3, "body line {body} takes whole pitches");
 +    assert!(cell < body - 1.0, "the cell's line keeps its own height ({cell}), the body's snaps ({body})");
++    d.settings.adjust_line_height_in_table = true;
++    assert!((height(&d, true) - body).abs() < 1e-3, "adjusted, the cell's line snaps like the body's");
 +}
-+

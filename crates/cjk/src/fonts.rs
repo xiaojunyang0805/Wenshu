@@ -52,6 +52,18 @@ pub const SONG: &[&str] = &[
     "Source Han Serif SC",
     "Noto Serif SC",
 ];
+/// DFKai-SB asked for by its English name, where it isn't installed: WPS Office draws it in
+/// Microsoft JhengHei Light (by its Chinese name, 標楷體, in 宋体), then the Song designs.
+pub const DFKAI_SB: &[&str] = &[
+    "Microsoft JhengHei Light",
+    "Microsoft JhengHei",
+    "SimSun",
+    "宋体",
+    "Songti SC",
+    "Noto Serif CJK SC",
+    "Source Han Serif SC",
+    "Noto Serif SC",
+];
 /// Heavy display Song (小标宋, 中宋): 公文 titles and the issuing-organ mark.
 pub const XIAOBIAOSONG: &[&str] = &[
     "FZXiaoBiaoSong-B05S",
@@ -102,10 +114,11 @@ pub fn substitutes(family: &str) -> Option<&'static [&'static str]> {
         "楷体" | "kaiti" | "方正楷体" | "fzkai" | "fzkai-z03s" | "fzkai-z03" | "华文楷体"
         | "stkaiti" | "楷体字" => KAITI,
         // Traditional Chinese document fonts (Taiwan, Hong Kong) that Simplified Chinese systems
-        // lack: WPS draws all of them, 標楷體 included, as 宋体, with SimSun's half-width digits
-        // and line height (a Latin fallback would widen the digits).
-        "標楷體" | "标楷体" | "dfkai-sb" | "dfkai" | "新細明體" | "細明體" | "新细明体"
-        | "细明体" | "pmingliu" | "mingliu" => SONG,
+        // lack: WPS draws them as 宋体, with SimSun's half-width digits (a Latin fallback would
+        // widen them), 標楷體 included; DFKai-SB by that name in Microsoft JhengHei Light.
+        "dfkai-sb" | "dfkai" => DFKAI_SB,
+        "標楷體" | "标楷体" | "新細明體" | "細明體" | "新细明体" | "细明体" | "pmingliu"
+        | "mingliu" => SONG,
         "宋体" | "simsun" | "新宋体" | "nsimsun" | "华文宋体" | "stsong" | "方正书宋"
         | "fzshusong" | "fzshusong-z01s" => SONG,
         "方正小标宋"
@@ -164,7 +177,7 @@ mod tests {
     #[test]
     fn traditional_chinese_fonts_fall_back_as_wps_draws_them() {
         assert_eq!(substitutes("標楷體"), Some(SONG));
-        assert_eq!(substitutes("DFKai-SB"), Some(SONG));
+        assert_eq!(substitutes("DFKai-SB"), Some(DFKAI_SB));
         assert_eq!(substitutes("新細明體"), Some(SONG));
         assert_eq!(substitutes("PMingLiU"), Some(SONG));
         assert_eq!(substitutes("微軟正黑體"), Some(YAHEI));

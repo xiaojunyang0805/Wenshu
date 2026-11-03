@@ -1,0 +1,140 @@
+Upstream: (not opened; WPS measurement: Chinese characters a run's font lacks fall back to SimSun before faces loaded for other reasons; F17)
+diff --git a/crates/fonts/src/fontdb/fallback.rs b/crates/fonts/src/fontdb/fallback.rs
+index 9c374160..8f05ee7a 100644
+--- a/crates/fonts/src/fontdb/fallback.rs
++++ b/crates/fonts/src/fontdb/fallback.rs
+@@ -1,7 +1,10 @@
+ use super::face::{FALLBACK_FAMILY, FontFace};
++use super::fallback_data::{
++    CJK_FALLBACK_FAMILY, FALLBACK_CACHE_MAX, RTL_FALLBACKS, RUN_FALLBACK_CACHE_CHARS, RUN_FALLBACK_CACHE_MAX, arabic_block, fallback_order,
++    prefers_for_cjk,
++};
+ #[cfg(not(target_arch = "wasm32"))]
+ use super::fallback_data::{CoverageIndex, IndexedFile, SYS_MISSES_MAX, SYSTEM_FALLBACKS, coverage_ranges, ranges_hold, read_fallback_file};
+-use super::fallback_data::{FALLBACK_CACHE_MAX, RTL_FALLBACKS, RUN_FALLBACK_CACHE_CHARS, RUN_FALLBACK_CACHE_MAX, arabic_block, fallback_order};
+ use super::{Arc, FontDb};
+ #[cfg(not(target_arch = "wasm32"))]
+ use super::{HashMap, Ordering};
+@@ -109,6 +112,10 @@ impl FontDb {
+ 
+     /// The best loaded face covering `c`, and the number of loaded faces it was chosen from.
+     fn loaded_fallback(&self, c: char, exclude: u32) -> (Option<Arc<FontFace>>, usize) {
++        let cjk = crate::is_cjk(c);
++        if cjk {
++            self.load_cjk_fallback();
++        }
+         let faces = self.read_faces();
+         let mut order: Vec<&Arc<FontFace>> = faces.iter().filter(|f| f.id != exclude && f.owner == 0).collect();
+         // Right-to-left letters prefer a font made for the script, so a word isn't split across
+@@ -126,10 +133,31 @@ impl FontDb {
+         // the script's own families, so syllables reorder and stack (#604).
+         let complex = crate::needs_layout_tables(c);
+         let shaping = |f: &FontFace| if complex { (!f.has_layout_tables(), crate::fallback_rank(c, &f.family)) } else { (false, 0) };
+-        order.sort_by_key(|f| (rank(f), shaping(f), !f.family.eq_ignore_ascii_case(FALLBACK_FAMILY), f.italic, (f.weight - 400.0).abs() as i32));
++        order.sort_by_key(|f| {
++            (
++                rank(f),
++                cjk && !prefers_for_cjk(f),
++                shaping(f),
++                !f.family.eq_ignore_ascii_case(FALLBACK_FAMILY),
++                f.italic,
++                (f.weight - 400.0).abs() as i32,
++            )
++        });
+         (order.into_iter().find(|f| f.covers(c)).cloned(), faces.len())
+     }
+ 
++    /// Load [`CJK_FALLBACK_FAMILY`] when it is installed and not loaded yet, so it can lead the
++    /// fallbacks for Chinese characters over faces loaded for other reasons.
++    fn load_cjk_fallback(&self) {
++        #[cfg(not(target_arch = "wasm32"))]
++        // A document's own copy (an embedded SimSun under another table name) doesn't count:
++        // fallbacks never use document faces ([`Self::load_cataloged`] skips it too).
++        let shared = self.read_faces().iter().any(|f| f.owner == 0 && f.named(CJK_FALLBACK_FAMILY));
++        if !shared && self.sys.lock().unwrap_or_else(std::sync::PoisonError::into_inner).enabled {
++            self.load_cataloged(CJK_FALLBACK_FAMILY);
++        }
++    }
++
+     /// One fallback face for a run: the first face in the fallback order that covers **every**
+     /// given character, so a whole run draws in a single face instead of mixing faces character
+     /// by character. East Asian runs: a bundled Japanese Mincho for JIS-covered ideographs beside
+@@ -225,12 +253,17 @@ impl FontDb {
+     /// The first face in the fallback order that covers every char, and the number of loaded
+     /// faces it was chosen from.
+     fn loaded_covering(&self, chars: &[char], exclude: u32) -> (Option<Arc<FontFace>>, usize) {
++        let cjk = chars.iter().any(|c| crate::is_cjk(*c));
++        if cjk {
++            self.load_cjk_fallback();
++        }
+         let faces = self.read_faces();
+         let rtl = chars.iter().any(|c| crate::is_rtl(*c) || arabic_block(*c));
+         // A complex-script character picks the families its script prefers (the lowest one: the
+         // run's characters come sorted).
+         let complex = chars.iter().copied().find(|c| crate::needs_layout_tables(*c));
+-        let found = fallback_order(&faces, exclude, rtl, complex).into_iter().find(|f| f.owner == 0 && chars.iter().all(|c| f.covers(*c))).cloned();
++        let found =
++            fallback_order(&faces, exclude, rtl, complex, cjk).into_iter().find(|f| f.owner == 0 && chars.iter().all(|c| f.covers(*c))).cloned();
+         (found, faces.len())
+     }
+ 
+diff --git a/crates/fonts/src/fontdb/fallback_data.rs b/crates/fonts/src/fontdb/fallback_data.rs
+index 109b1229..60dc972a 100644
+--- a/crates/fonts/src/fontdb/fallback_data.rs
++++ b/crates/fonts/src/fontdb/fallback_data.rs
+@@ -233,7 +233,7 @@ pub(super) const RUN_FALLBACK_CACHE_CHARS: usize = 1 << 20;
+ /// complex-script character `complex` (Thai, Myanmar…) faces with OpenType layout tables, the
+ /// script's own families first, as the per-character fallback ranks them; then the fallback
+ /// family, upright, nearest to regular weight.
+-pub(super) fn fallback_order(faces: &[Arc<FontFace>], exclude: u32, rtl: bool, complex: Option<char>) -> Vec<&Arc<FontFace>> {
++pub(super) fn fallback_order(faces: &[Arc<FontFace>], exclude: u32, rtl: bool, complex: Option<char>, cjk: bool) -> Vec<&Arc<FontFace>> {
+     let mut order: Vec<&Arc<FontFace>> = faces.iter().filter(|f| f.id != exclude).collect();
+     let rank =
+         |f: &FontFace| if rtl { RTL_FALLBACKS.iter().position(|n| f.family.eq_ignore_ascii_case(n)).unwrap_or(RTL_FALLBACKS.len()) } else { 0 };
+@@ -241,8 +241,19 @@ pub(super) fn fallback_order(faces: &[Arc<FontFace>], exclude: u32, rtl: bool, c
+         Some(c) => (!f.has_layout_tables(), crate::fallback_rank(c, &f.family)),
+         None => (false, 0),
+     };
+-    order.sort_by_key(|f| (rank(f), shaping(f), !f.family.eq_ignore_ascii_case(FALLBACK_FAMILY), f.italic, (f.weight - 400.0).abs() as i32));
++    order.sort_by_key(|f| {
++        (rank(f), cjk && !prefers_for_cjk(f), shaping(f), !f.family.eq_ignore_ascii_case(FALLBACK_FAMILY), f.italic, (f.weight - 400.0).abs() as i32)
++    });
+     order
+ }
+ 
++/// The face Chinese text without a font of its own falls back to first, as WPS Office draws it
++/// (a Latin font, an empty theme East Asian font): 宋体.
++pub(super) const CJK_FALLBACK_FAMILY: &str = "SimSun";
++
++/// Whether `f` is [`CJK_FALLBACK_FAMILY`], which leads the fallbacks for Chinese characters.
++pub(super) fn prefers_for_cjk(f: &FontFace) -> bool {
++    f.family.eq_ignore_ascii_case(CJK_FALLBACK_FAMILY)
++}
++
+ pub(super) const FALLBACK_CACHE_MAX: usize = 20_000;
+diff --git a/crates/fonts/src/fontdb/tests/sysfonts.rs b/crates/fonts/src/fontdb/tests/sysfonts.rs
+index 5709ac9a..95edb49d 100644
+--- a/crates/fonts/src/fontdb/tests/sysfonts.rs
++++ b/crates/fonts/src/fontdb/tests/sysfonts.rs
+@@ -725,6 +725,21 @@ fn catalog_postscript_names() {
+     std::fs::remove_dir_all(dir).unwrap();
+ }
+ 
++/// Chinese characters a run's font lacks fall back to 宋体 first, as WPS draws them, even when
++/// another face covering them (Microsoft YaHei, say) was loaded before it; other characters
++/// keep the usual order.
++#[test]
++fn chinese_characters_fall_back_to_simsun_before_other_loaded_faces() {
++    let db = FontDb::with_font_dirs(Vec::new());
++    db.set_system_fallback(false);
++    db.add_document_fonts(vec![(named_face("SourceSerif4-Regular.ttf", "Other Face"), "Other Face".to_string())], 0);
++    db.add_document_fonts(vec![(named_face("SourceSerif4-Regular.ttf", "SimSun"), "SimSun".to_string())], 0);
++    let faces = db.read_faces();
++    let first = |cjk: bool| super::fallback_data::fallback_order(&faces, u32::MAX, false, None, cjk).first().map(|f| f.family.clone());
++    assert_eq!(first(true).as_deref(), Some("SimSun"));
++    assert_ne!(first(false).as_deref(), Some("SimSun"), "Latin characters keep the usual order");
++}
++
+ /// A document's embedded copy of an installed font under another table name (WPS embeds SimSun
+ /// as 黑体 or 等线, keeping SimSun's own names) belongs to that document: it doesn't stand in for
+ /// the installed font elsewhere, and the installed font still loads when asked for by name.

@@ -1,0 +1,75 @@
+Upstream: (not opened; WPS measurement: multiple spacing on a line grid takes the larger of the line's whole pitches and m pitches, not pitches times m; F18)
+diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
+index ab5d3c13..c3256198 100644
+--- a/crates/layout/src/para/grid.rs
++++ b/crates/layout/src/para/grid.rs
+@@ -49,6 +49,17 @@ impl Grid {
+         let adv = size + pitch - self.font_size;
+         Some(if adv.is_finite() { adv.clamp(0.0, 1e4) } else { pitch })
+     }
++    /// A line of natural height `h` at multiple spacing `m` on the grid: its whole pitches, or
++    /// `m` pitches when that is more (WPS: 16 pt 宋体 on a 15.6 pt grid takes two pitches at
++    /// single and 1.5 spacing and 2.5 pitches at 2.5; 32 pt takes three at any of them). Below
++    /// single, the pitches scaled by `m`. `h × m` without a line grid.
++    pub fn multiple_height(&self, h: f32, m: f32) -> f32 {
++        match self.line {
++            Some(p) if m >= 1.0 => self.snap_height(h).max((p * m).min(1e6)),
++            Some(_) => self.snap_height(h) * m,
++            None => h * m,
++        }
++    }
+     /// `h` rounded up to whole line pitches (unchanged without a line grid).
+     pub fn snap_height(&self, h: f32) -> f32 {
+         match self.line {
+diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
+index a0b1dca1..ad9b371e 100644
+--- a/crates/layout/src/para/lines.rs
++++ b/crates/layout/src/para/lines.rs
+@@ -489,7 +489,7 @@ impl<'e> Breaker<'e> {
+         // Document grid: the line takes whole line pitches, its text centred in them.
+         let grid = self.grid.as_ref();
+         let (height, centred) = match (rp.line_spacing, grid) {
+-            (LineSpacing::Multiple(m), Some(g)) => ((g.snap_height(natural) * m).max(g.snap_height(pictures)), true),
++            (LineSpacing::Multiple(m), Some(g)) => (g.multiple_height(natural, m).max(g.snap_height(pictures)), true),
+             (LineSpacing::AtLeast(v), Some(g)) => (g.snap_height(natural.max(pictures)).max(v), true),
+             (LineSpacing::Multiple(m), None) => ((text_natural * m + label_extra).max(text_pictures), false),
+             (LineSpacing::AtLeast(v), None) => (natural.max(text_pictures).max(v), false),
+@@ -575,7 +575,7 @@ impl<'e> Breaker<'e> {
+         let (asc, desc) = pl.styles.get(self.mark_style as usize).map(|s| (s.ascent, s.descent)).unwrap_or((10.0, 3.0));
+         let natural = asc + desc;
+         let h = match (rp.line_spacing, grid) {
+-            (LineSpacing::Multiple(m), Some(g)) => g.snap_height(natural) * m,
++            (LineSpacing::Multiple(m), Some(g)) => g.multiple_height(natural, m),
+             (LineSpacing::AtLeast(v), Some(g)) => g.snap_height(natural).max(v),
+             (LineSpacing::Multiple(m), None) => natural * m,
+             (LineSpacing::AtLeast(v), None) => natural.max(v),
+diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
+index e4b69505..3ca9586c 100644
+--- a/crates/layout/src/tests/grid.rs
++++ b/crates/layout/src/tests/grid.rs
+@@ -419,3 +419,25 @@ fn a_grid_lines_pitch_below_its_text_may_run_into_the_bottom_margin() {
+     }
+     assert!(past_margin > 0, "some shift should leave the last line's pitch past the margin");
+ }
++
++/// Multiple spacing on a line grid takes the line's whole pitches or `m` pitches, whichever is
++/// more (WPS): large text keeps its pitches at 1.5 spacing, small text at 2.5 spacing takes 2.5.
++#[test]
++fn multiple_spacing_on_a_line_grid_takes_the_larger_of_the_pitches_and_m_pitches() {
++    let height = |size: f32, m: f32| {
++        let mut d = with_grid("Grid line", DocGridType::Lines, 0);
++        for b in d.body.iter_mut() {
++            if let Block::Para(p) = std::sync::Arc::make_mut(b) {
++                p.props.line_spacing = Some(LineSpacing::Multiple(m));
++                for r in p.runs.iter_mut() {
++                    r.props.size = Some(size);
++                }
++            }
++        }
++        lines(&lay(&d)).1[0]
++    };
++    let big = height(30.0, 1.0);
++    assert!(big >= 36.0 - 1e-3, "30 pt text takes at least two 18 pt pitches ({big})");
++    assert!((height(30.0, 1.5) - big).abs() < 1e-3, "1.5 × 18 is less than its pitches: unchanged");
++    assert!((height(10.0, 2.5) - 45.0).abs() < 1e-3, "small text at 2.5 spacing takes 2.5 pitches ({})", height(10.0, 2.5));
++}

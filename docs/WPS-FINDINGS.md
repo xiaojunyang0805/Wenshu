@@ -324,15 +324,47 @@ East Asian font with an en-US language, `02_mixed_cjk`) is drawn in 宋体 too, 
 Microsoft YaHei. Wenshu's substitute table maps the Traditional names to the Song list and the
 system fallbacks try SimSun before YaHei (patch 0023).
 
-## F18. Grids in table cells and at the page foot
+Refinements (long-paragraph probes, `corpus/tools/lh_probe_fonts.py` style, averaged over 30
+lines): the height is **1.3 × the win height in whole font units, rounded down**: SimSun 332 of
+256 units (1.2969 em, not 1.3), YaHei 3513 of 2048 (1.7153 em); over `dc-policies-de24610147`'s 86
+pages the 0.24% is two pages (patch 0022). The same rule holds below single spacing (`line=150`
+to `276` auto). Chinese characters a run's font lacks take SimSun even when another CJK face
+(YaHei) was loaded first; Wenshu's fallback preferred loaded faces (patch 0028).
+DFKai-SB not installed: WPS keeps its own box, 1.30 em with the baseline 0.95 em down (a 0.8 /
+0.2 em font, 1.3 ×), while drawing 標楷體 in 宋体 and **DFKai-SB, by that name, in Microsoft
+JhengHei Light** (patch 0030; Wenshu's font table maps the English name to JhengHei Light).
+
+Embedded fonts (`dc-legal-ce628d9760`): WPS embeds whole SimSun files as 黑体, 等线 and
+仿宋_GB2312. A document's embedded fonts are now its own (patch 0027): other documents neither
+find them nor fall back to them, and a copy that keeps SimSun's names no longer stops the
+installed SimSun from loading.
+
+## F18. Grids in table cells, at the page foot, and with multiple spacing
 
 Probes (`corpus/tools/lh_probe_tables.py`: 13 pt 宋体 on a 15.6 pt line grid, modes 14 and 15, with and without
-`adjustLineHeightInTable`): lines in a table cell **don't snap** to the line grid (16.9 pt, the
-font's 1.3 em; the body's lines take two pitches). The setting changes nothing. Patch 0024.
+`adjustLineHeightInTable`): lines in a table cell snap to the line grid **only under
+`w:adjustLineHeightInTable`** (two pitches with it; 16.9 pt, the font's 1.3 em, without). The
+setting sits in `w:compat`; a first probe put it under `w:settings`, where WPS ignores it, and
+read as "never snaps" (corrected after `dc-administrative-bd6b721e4e`, whose whole text is in one
+table and does snap). Fixed table layout, `textAlignment`, at-least row heights and cell margins
+change nothing. Patch 0024, which also reads and writes the setting.
 
 At the page foot (`gov-mct-keji`): a 16 pt line on a 15.6 pt grid takes two pitches with its
 text centred, and stays on the page while its text ends 1 pt above the bottom margin and its
 pitches end 4.2 pt below it, as multiple spacing's leading may run into the margin. Patch 0025.
+
+Multiple spacing on a line grid (16, 22 and 32 pt 宋体 and YaHei at 1, 1.5 and 2.5): a line takes
+**its whole pitches or m pitches, whichever is more**: 16 pt (two pitches) stays at 31.2 pt at 1.5
+and takes 2.5 pitches (39.0 pt) at 2.5; 32 pt (three pitches) stays at 46.8 pt at any of them.
+Wenshu multiplied the pitches by m (2.5 × 3 pitches for a red-header title,
+`dc-administrative-f526989771` a page long). The two agree for text within one pitch. Below
+single spacing it is unmeasured on a grid. Patch 0029.
+
+## F19. A file without a styles part
+
+Probe (no `styles.xml`, no run formatting): WPS lays the text out single-spaced with no space
+after paragraphs, in 10.5 pt Calibri (Latin) and 宋体 (Chinese). Wenshu took a new document's
+styles (12 pt, 1.15 spacing, 8 pt after). Patch 0026.
 
 ## Still to measure
 

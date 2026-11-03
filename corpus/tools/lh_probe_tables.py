@@ -7,7 +7,7 @@ DRELS = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships x
 W='xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
 ZH='中文字体行高测试文字' * 6
 def settings(adj, mode):
-    return f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings {W}>' + ('<w:adjustLineHeightInTable/>' if adj else '') + f'<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="{mode}"/></w:compat></w:settings>'
+    return f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings {W}><w:compat>' + ('<w:adjustLineHeightInTable/>' if adj else '') + f'<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="{mode}"/></w:compat></w:settings>'
 def doc(sz, grid, table):
     rpr = f'<w:rFonts w:ascii="宋体" w:hAnsi="宋体" w:eastAsia="宋体"/><w:sz w:val="{sz}"/>'
     p = f'<w:p><w:pPr><w:spacing w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:rPr>{rpr}</w:rPr><w:t>{ZH}</w:t></w:r></w:p>'

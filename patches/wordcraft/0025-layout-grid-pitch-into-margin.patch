@@ -23,13 +23,14 @@ index cdb9db2a..de485f12 100644
      }
  }
 diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
-index d811dc58..7553d6c4 100644
+index 61e2b003..e4b69505 100644
 --- a/crates/layout/src/tests/grid.rs
 +++ b/crates/layout/src/tests/grid.rs
-@@ -385,3 +385,36 @@ fn table_cells_do_not_snap_to_the_line_grid() {
-     assert!(cell < body - 1.0, "the cell's line keeps its own height ({cell}), the body's snaps ({body})");
+@@ -385,3 +385,37 @@ fn table_cells_snap_to_the_line_grid_only_when_adjusted() {
+     d.settings.adjust_line_height_in_table = true;
+     assert!((height(&d, true) - body).abs() < 1e-3, "adjusted, the cell's line snaps like the body's");
  }
- 
++
 +/// A single-spaced line on a line grid has its text centred in whole pitches, and the pitch
 +/// below the text may run into the bottom margin, as multiple spacing's leading does (WPS,
 +/// `gov-mct-keji`): on every page the last line's text ends within the margin, the next line's

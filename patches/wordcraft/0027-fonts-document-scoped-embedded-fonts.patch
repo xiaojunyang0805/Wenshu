@@ -1,0 +1,469 @@
+Upstream: (not opened; bug fix: a document's embedded fonts belong to it: other documents in the process neither find them by name nor fall back to them, and an embedded copy carrying an installed font's names doesn't stop that font loading; gov-mct-keji after gov-fj-gaoxin)
+diff --git a/crates/doc/src/document.rs b/crates/doc/src/document.rs
+index fbc911c3..33fccd26 100644
+--- a/crates/doc/src/document.rs
++++ b/crates/doc/src/document.rs
+@@ -43,6 +43,18 @@ impl PartialEq for MediaIndex {
+     }
+ }
+ 
++/// Who owns a document's embedded fonts in the font database ([`Document::embedded_fonts`]): an
++/// id, 0 for none. Equal whatever the ids, like [`MediaIndex`], so it never makes two documents
++/// differ.
++#[derive(Clone, Copy, Debug, Default)]
++pub struct EmbeddedFontsOwner(pub u64);
++
++impl PartialEq for EmbeddedFontsOwner {
++    fn eq(&self, _: &Self) -> bool {
++        true
++    }
++}
++
+ impl std::fmt::Debug for MediaIndex {
+     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+         f.write_str("MediaIndex")
+@@ -76,6 +88,7 @@ impl Document {
+             passthrough: BTreeMap::new(),
+             glossary: Vec::new(),
+             media_index: MediaIndex::default(),
++            embedded_fonts: EmbeddedFontsOwner::default(),
+         }
+     }
+ 
+@@ -152,6 +165,7 @@ impl Document {
+             passthrough,
+             glossary,
+             media_index: _,
++            embedded_fonts: _,
+         } = self;
+         let Document {
+             body: other_body,
+@@ -171,6 +185,7 @@ impl Document {
+             passthrough: other_passthrough,
+             glossary: other_glossary,
+             media_index: _,
++            embedded_fonts: _,
+         } = other;
+         same_blocks(body, other_body)
+             && same_parts(parts, other_parts)
+diff --git a/crates/doc/src/lib.rs b/crates/doc/src/lib.rs
+index d47d3328..d5b5e2c0 100644
+--- a/crates/doc/src/lib.rs
++++ b/crates/doc/src/lib.rs
+@@ -78,6 +78,7 @@ mod text_walk;
+ 
+ pub use block::{Block, Blocks, BoxBudget, MAX_TEXT_BOX_DEPTH};
+ pub use compare::para_block;
++pub use document::EmbeddedFontsOwner;
+ use document::MediaIndex;
+ pub use error::{DocError, Result};
+ pub use parts::{MAX_LINKED_BOXES, MAX_TEXT_BOX_INSET, NoteSeparators, Part, PartKind, PermRange, TEXT_BOX_INSET, TextBody, free_id};
+@@ -126,6 +127,11 @@ pub struct Document {
+     /// by `==`).
+     #[serde(skip)]
+     media_index: MediaIndex,
++    /// The owner of the fonts this document embeds in the process-wide font database (0: none
++    /// loaded), so layout sees them and other documents don't; not part of the document (never
++    /// saved, ignored by `==`, kept by copies).
++    #[serde(skip)]
++    pub embedded_fonts: EmbeddedFontsOwner,
+ }
+ 
+ #[cfg(test)]
+diff --git a/crates/engine/src/io.rs b/crates/engine/src/io.rs
+index 96025503..f0719cac 100644
+--- a/crates/engine/src/io.rs
++++ b/crates/engine/src/io.rs
+@@ -180,21 +180,24 @@ pub fn region_page(region: &wordcraft_geom::Region) -> wordcraft_doc::SectionPro
+ /// (see [`region_page`]); a document with its own page size keeps it.
+ pub fn open_bytes_in(name: &str, bytes: &[u8], password: Option<&str>, region: &wordcraft_geom::Region) -> Result<(Document, bool), String> {
+     let page = region_page(region);
+-    let (doc, encrypted) = read_bytes(name, bytes, password, &page)?;
+-    load_embedded_fonts(&doc);
++    let (mut doc, encrypted) = read_bytes(name, bytes, password, &page)?;
++    load_embedded_fonts(&mut doc);
+     Ok((doc, encrypted))
+ }
+ 
+ /// Load the fonts `doc` embeds (#1171) for this run, in memory only: text set in a font that isn't
+ /// installed then lays out and exports with it instead of a fallback. Faces already available
+-/// stay as they are.
+-fn load_embedded_fonts(doc: &Document) {
++/// stay as they are. They belong to `doc` (`Document::embedded_fonts`): another document asking
++/// for the same family doesn't get them.
++fn load_embedded_fonts(doc: &mut Document) {
+     let files: Vec<(Vec<u8>, String)> = wordcraft_docx::embedded_fonts(doc)
+         .into_iter()
+         .filter_map(|f| wordcraft_fonts::decode_font_file(&f.data).ok().map(|data| (data, f.name)))
+         .collect();
+     if !files.is_empty() {
+-        wordcraft_fonts::FontDb::global().add_document_fonts(files);
++        let owner = wordcraft_fonts::DocumentFonts::new_owner();
++        wordcraft_fonts::FontDb::global().add_document_fonts(files, owner);
++        doc.embedded_fonts = wordcraft_doc::EmbeddedFontsOwner(owner);
+     }
+ }
+ 
+diff --git a/crates/engine/src/tests/fonts.rs b/crates/engine/src/tests/fonts.rs
+index 29a072b0..d0778981 100644
+--- a/crates/engine/src/tests/fonts.rs
++++ b/crates/engine/src/tests/fonts.rs
+@@ -192,3 +192,23 @@ fn a_subset_font_word_embeds_lays_out_text_set_in_its_table_name() {
+     let x = end_x(&docx_embedding(FAMILY, Some((&subset, "{6A0E3B57-1C2D-4E8F-9A7B-3D5C1E0F2B64}")), TEXT));
+     assert!((x - mono).abs() < 0.01, "measured with the embedded subset: {x} vs {mono} (missing {missing})");
+ }
++
++/// Fonts a document embeds are its own: a document opened later that asks for the same family
++/// without embedding it falls back as if the first had never been opened (a subset embedded in
++/// one file drew another's text in a fallback, `gov-mct-keji` after `gov-fj-gaoxin`), and the
++/// first document still lays out with its font.
++#[test]
++fn fonts_embedded_in_one_document_are_not_used_by_another() {
++    const TEXT: &str = "illicit little lilies fill tiny jill";
++    const FAMILY: &str = "JetBrains Scop";
++    let end_x = |s: &mut Session| s.layout().caret_on(&Pos::body(0, TEXT.len()), 0).unwrap().x;
++    let open = |bytes: &[u8]| Session::new(crate::io::open_bytes("e.docx", bytes).unwrap());
++    let mono = end_x(&mut open(&docx_embedding("JetBrains Mono", None, TEXT)));
++    let font = renamed("JetBrainsMono-Regular.ttf", "JetBrains Mono", FAMILY);
++    let mut first = open(&docx_embedding(FAMILY, Some((&font, "{00000000-0000-0000-0000-000000000000}")), TEXT));
++    assert!((end_x(&mut first) - mono).abs() < 0.01, "the embedding document uses its font");
++    let mut other = open(&docx_embedding(FAMILY, None, TEXT));
++    let x = end_x(&mut other);
++    assert!((x - mono).abs() > 1.0, "another document asking for {FAMILY} falls back: {x} vs {mono}");
++    assert!((end_x(&mut first) - mono).abs() < 0.01, "the embedding document keeps its font");
++}
+diff --git a/crates/fonts/src/fontdb.rs b/crates/fonts/src/fontdb.rs
+index 425ffa04..955dc4e2 100644
+--- a/crates/fonts/src/fontdb.rs
++++ b/crates/fonts/src/fontdb.rs
+@@ -21,6 +21,7 @@ mod fallback;
+ mod fallback_data;
+ mod lookup;
+ mod names;
++mod scope;
+ 
+ use face::{BUNDLED, FontBytes};
+ pub use face::{FALLBACK_FAMILY, FaceRef, FontFace, bundled};
+@@ -38,6 +39,7 @@ use names::{MAX_FILE_FACES, enumerate_faces, make_face};
+ use names::{file_face_names, font_faces, mini_font, name};
+ #[cfg(test)]
+ pub(crate) use names::{last_resort_face, legacy_family};
++pub use scope::DocumentFonts;
+ 
+ /// Process-wide font database.
+ pub struct FontDb {
+diff --git a/crates/fonts/src/fontdb/catalog.rs b/crates/fonts/src/fontdb/catalog.rs
+index f749e53e..77da7697 100644
+--- a/crates/fonts/src/fontdb/catalog.rs
++++ b/crates/fonts/src/fontdb/catalog.rs
+@@ -125,6 +125,12 @@ impl FontDb {
+     /// [`FontDb::add_document_fonts`]) has them go by that name instead. Faces already present
+     /// (same family and style) are skipped. Returns how many were added.
+     pub(super) fn add_fonts(&self, files: Vec<(Vec<u8>, Option<String>)>) -> usize {
++        self.add_owned_fonts(files, 0)
++    }
++
++    /// [`Self::add_fonts`] for the document `owner` (0: shared): its faces count as present only
++    /// beside the same owner's, so two documents embedding the same family keep a copy each.
++    pub(super) fn add_owned_fonts(&self, files: Vec<(Vec<u8>, Option<String>)>, owner: u64) -> usize {
+         let mut new = Vec::new();
+         for (bytes, name) in files {
+             let data = Arc::new(bytes);
+@@ -132,6 +138,7 @@ impl FontDb {
+             for f in enumerate_faces(&data, MAX_FILE_FACES) {
+                 if let Some(mut face) = make_face(FontBytes::Owned(data.clone()), f.index, f.family, f.style, f.legacy, f.coords) {
+                     face.local_names = f.local;
++                    face.owner = owner;
+                     if let Some(n) = name.as_deref().filter(|n| !face.named(n) && !face.local_names.iter().any(|l| l.name.eq_ignore_ascii_case(n))) {
+                         face.family = n.to_string();
+                         face.legacy_family = n.to_string();
+@@ -142,7 +149,7 @@ impl FontDb {
+         }
+         let mut faces = self.faces.write().unwrap_or_else(std::sync::PoisonError::into_inner);
+         // Indexed: a document's fonts may add hundreds of faces to thousands (#3716).
+-        let key = |f: &FontFace| (f.family.to_ascii_lowercase(), f.style.to_ascii_lowercase());
++        let key = |f: &FontFace| (f.family.to_ascii_lowercase(), f.style.to_ascii_lowercase(), f.owner);
+         let mut present: std::collections::HashSet<_> = faces.iter().map(|g| key(g)).collect();
+         let mut added = 0;
+         for f in new {
+@@ -233,8 +240,9 @@ impl FontDb {
+     #[cfg(not(target_arch = "wasm32"))]
+     pub(super) fn load_cataloged(&self, family: &str) -> bool {
+         let _loading = self.loading.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+-        // Another lookup may have loaded it while this one waited.
+-        if self.is_loaded(family) {
++        // Another lookup may have loaded it while this one waited. A document's embedded copy
++        // answering to the name (a SimSun embedded as 黑体 keeps SimSun's names) doesn't count.
++        if self.read_faces().iter().any(|f| f.owner == 0 && f.named(family)) {
+             return true;
+         }
+         let paths = self.family_paths(family);
+diff --git a/crates/fonts/src/fontdb/face.rs b/crates/fonts/src/fontdb/face.rs
+index f28507e0..d83b585a 100644
+--- a/crates/fonts/src/fontdb/face.rs
++++ b/crates/fonts/src/fontdb/face.rs
+@@ -38,6 +38,10 @@ pub(super) enum FontBytes {
+ /// One loaded font face.
+ pub struct FontFace {
+     pub(super) id: u32,
++    /// The document that embedded the face ([`FontDb::add_document_fonts`]), or 0 for a face
++    /// every document sees. A document's faces are found by name only while that document is
++    /// laid out ([`crate::DocumentFonts`]) and never chosen as fallbacks.
++    pub owner: u64,
+     /// Typographic family name (e.g. "Source Sans 3").
+     pub family: String,
+     /// Typographic style name (e.g. "Semibold", "Italic").
+diff --git a/crates/fonts/src/fontdb/fallback.rs b/crates/fonts/src/fontdb/fallback.rs
+index 8c18abb3..9c374160 100644
+--- a/crates/fonts/src/fontdb/fallback.rs
++++ b/crates/fonts/src/fontdb/fallback.rs
+@@ -110,7 +110,7 @@ impl FontDb {
+     /// The best loaded face covering `c`, and the number of loaded faces it was chosen from.
+     fn loaded_fallback(&self, c: char, exclude: u32) -> (Option<Arc<FontFace>>, usize) {
+         let faces = self.read_faces();
+-        let mut order: Vec<&Arc<FontFace>> = faces.iter().filter(|f| f.id != exclude).collect();
++        let mut order: Vec<&Arc<FontFace>> = faces.iter().filter(|f| f.id != exclude && f.owner == 0).collect();
+         // Right-to-left letters prefer a font made for the script, so a word isn't split across
+         // fonts (that breaks Arabic joining). Emoji prefer a colour emoji font.
+         let rank = |f: &FontFace| {
+@@ -184,7 +184,7 @@ impl FontDb {
+             // A character no loaded face covers: load a system font for it, then retry (the run's
+             // other characters may already be covered by loaded faces).
+             for c in chars {
+-                if self.read_faces().iter().any(|f| f.id != exclude && f.covers(*c)) {
++                if self.read_faces().iter().any(|f| f.id != exclude && f.owner == 0 && f.covers(*c)) {
+                     continue;
+                 }
+                 if self.system_fallback(*c) {
+@@ -230,7 +230,7 @@ impl FontDb {
+         // A complex-script character picks the families its script prefers (the lowest one: the
+         // run's characters come sorted).
+         let complex = chars.iter().copied().find(|c| crate::needs_layout_tables(*c));
+-        let found = fallback_order(&faces, exclude, rtl, complex).into_iter().find(|f| chars.iter().all(|c| f.covers(*c))).cloned();
++        let found = fallback_order(&faces, exclude, rtl, complex).into_iter().find(|f| f.owner == 0 && chars.iter().all(|c| f.covers(*c))).cloned();
+         (found, faces.len())
+     }
+ 
+@@ -248,13 +248,13 @@ impl FontDb {
+                 return false;
+             }
+         }
+-        let covered = |db: &FontDb| db.read_faces().iter().any(|f| f.covers(c));
++        let covered = |db: &FontDb| db.read_faces().iter().any(|f| f.owner == 0 && f.covers(c));
+         let cataloged: Vec<String> = self.read_catalog().iter().map(|e| e.family.clone()).collect();
+         let rtl = crate::is_rtl(c) || arabic_block(c);
+         let preferred = RTL_FALLBACKS.iter().filter(|_| rtl);
+         for fam in crate::script_fallbacks(c).iter().chain(preferred).chain(SYSTEM_FALLBACKS.iter()) {
+             // Each family is tried once: one that fails to load isn't read again per character.
+-            if self.is_loaded(fam) || !cataloged.iter().any(|f| f.eq_ignore_ascii_case(fam)) {
++            if self.read_faces().iter().any(|f| f.owner == 0 && f.named(fam)) || !cataloged.iter().any(|f| f.eq_ignore_ascii_case(fam)) {
+                 continue;
+             }
+             if !self.sys.lock().unwrap_or_else(std::sync::PoisonError::into_inner).tried.insert(fam) {
+@@ -301,7 +301,7 @@ impl FontDb {
+     /// whether a loaded face now covers them all.
+     #[cfg(not(target_arch = "wasm32"))]
+     fn load_indexed(&self, chars: &[char], whole_family: bool) -> bool {
+-        let covered = |db: &FontDb| db.read_faces().iter().any(|f| chars.iter().all(|c| f.covers(*c)));
++        let covered = |db: &FontDb| db.read_faces().iter().any(|f| f.owner == 0 && chars.iter().all(|c| f.covers(*c)));
+         let cps: Vec<u32> = chars.iter().map(|c| u32::from(*c)).collect();
+         let maps_all = |ranges: &[(u32, u32)]| cps.iter().all(|cp| ranges_hold(ranges, *cp));
+         let mut index = self.coverage.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+diff --git a/crates/fonts/src/fontdb/lookup.rs b/crates/fonts/src/fontdb/lookup.rs
+index dc181ca4..d45e1d93 100644
+--- a/crates/fonts/src/fontdb/lookup.rs
++++ b/crates/fonts/src/fontdb/lookup.rs
+@@ -129,7 +129,7 @@ impl FontDb {
+ 
+     /// Is a face named `family` (typographic, legacy, full or PostScript) loaded?
+     pub fn is_loaded(&self, family: &str) -> bool {
+-        self.read_faces().iter().any(|f| f.named(family))
++        self.read_faces().iter().any(|f| f.visible() && f.named(family))
+     }
+ 
+     /// A variable font's axes: (tag, name, min, default, max), empty for static fonts.
+@@ -178,24 +178,25 @@ impl FontDb {
+         if style.contains('{') {
+             {
+                 let faces = self.read_faces();
+-                if let Some(f) = faces.iter().find(|f| f.named(family) && f.style == style) {
++                if let Some(f) = faces.iter().find(|f| f.visible() && f.named(family) && f.style == style) {
+                     return Some(f.clone());
+                 }
+             }
+             return self.instance(family, style);
+         }
+         let faces = self.read_faces();
+-        let mut cands: Vec<&Arc<FontFace>> = faces.iter().filter(|f| f.family.eq_ignore_ascii_case(family)).collect();
++        // Shared faces, and the faces of the document being laid out.
++        let visible = || faces.iter().filter(|f| f.visible());
++        let mut cands: Vec<&Arc<FontFace>> = visible().filter(|f| f.family.eq_ignore_ascii_case(family)).collect();
+         if cands.is_empty() {
+             // A legacy family name: choose among the faces it names (bold and italic as usual).
+-            cands = faces.iter().filter(|f| f.legacy_family.eq_ignore_ascii_case(family)).collect();
++            cands = visible().filter(|f| f.legacy_family.eq_ignore_ascii_case(family)).collect();
+         }
+         if cands.is_empty() {
+             // Exact full names keep precedence over PostScript aliases; either selects one face.
+-            return faces
+-                .iter()
++            return visible()
+                 .find(|f| f.full_name.as_ref().is_some_and(|n| n.eq_ignore_ascii_case(family)))
+-                .or_else(|| faces.iter().find(|f| f.postscript.as_ref().is_some_and(|n| n.eq_ignore_ascii_case(family))))
++                .or_else(|| visible().find(|f| f.postscript.as_ref().is_some_and(|n| n.eq_ignore_ascii_case(family))))
+                 .cloned();
+         }
+         let ns = norm(style);
+diff --git a/crates/fonts/src/fontdb/names.rs b/crates/fonts/src/fontdb/names.rs
+index 579c2a9e..07a365c3 100644
+--- a/crates/fonts/src/fontdb/names.rs
++++ b/crates/fonts/src/fontdb/names.rs
+@@ -366,6 +366,7 @@ pub(super) fn make_face(
+         .unwrap_or(!matches!(a.style, skrifa::attribute::Style::Normal) || style_italic(&style));
+     Some(FontFace {
+         id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
++        owner: 0,
+         family,
+         style,
+         legacy_family,
+diff --git a/crates/fonts/src/fontdb/scope.rs b/crates/fonts/src/fontdb/scope.rs
+new file mode 100644
+index 00000000..1d34709c
+--- /dev/null
++++ b/crates/fonts/src/fontdb/scope.rs
+@@ -0,0 +1,52 @@
++//! Fonts a document embeds belong to that document. They are added to the process-wide database
++//! with an owner ([`FontFace::owner`]); lookups by family name see them only while their document
++//! is laid out on this thread ([`DocumentFonts`]), so another document asking for the same family
++//! (often only a subset was embedded) gets its own embedded copy, the installed font or a
++//! substitute, as it would when opened alone.
++
++use std::cell::Cell;
++use std::sync::atomic::{AtomicU64, Ordering};
++
++use super::FontFace;
++
++thread_local! {
++    static CURRENT: Cell<u64> = const { Cell::new(0) };
++}
++
++/// While alive, lookups on this thread also see the faces `owner`'s document embedded. Dropping
++/// it restores the previous document (guards nest).
++#[must_use = "the document's fonts are visible only while the guard lives"]
++pub struct DocumentFonts {
++    prev: u64,
++}
++
++impl DocumentFonts {
++    /// Make `owner`'s fonts visible on this thread (0: only the shared fonts).
++    pub fn enter(owner: u64) -> Self {
++        DocumentFonts { prev: CURRENT.with(|c| c.replace(owner)) }
++    }
++
++    /// The document whose fonts lookups on this thread see (0: none).
++    pub fn current() -> u64 {
++        CURRENT.with(Cell::get)
++    }
++
++    /// A new owner id for a document's embedded fonts (never 0).
++    pub fn new_owner() -> u64 {
++        static NEXT: AtomicU64 = AtomicU64::new(1);
++        NEXT.fetch_add(1, Ordering::Relaxed).max(1)
++    }
++}
++
++impl Drop for DocumentFonts {
++    fn drop(&mut self) {
++        CURRENT.with(|c| c.set(self.prev));
++    }
++}
++
++impl FontFace {
++    /// Whether lookups by name on this thread see the face: shared, or its document's.
++    pub(super) fn visible(&self) -> bool {
++        self.owner == 0 || self.owner == DocumentFonts::current()
++    }
++}
+diff --git a/crates/fonts/src/fontdb/tests/sysfonts.rs b/crates/fonts/src/fontdb/tests/sysfonts.rs
+index 3ddfd680..5709ac9a 100644
+--- a/crates/fonts/src/fontdb/tests/sysfonts.rs
++++ b/crates/fonts/src/fontdb/tests/sysfonts.rs
+@@ -690,7 +690,7 @@ fn circle_without_text_face() {
+ fn circle_checks_face_coverage() {
+     let db = FontDb::with_font_dirs(Vec::new());
+     db.set_system_fallback(false);
+-    db.add_document_fonts(vec![(named_face("SourceSerif4-Regular.ttf", "Times New Roman"), "Times New Roman".to_string())]);
++    db.add_document_fonts(vec![(named_face("SourceSerif4-Regular.ttf", "Times New Roman"), "Times New Roman".to_string())], 0);
+     let preferred = db.face("Times New Roman", "Regular");
+     assert!(!preferred.covers('●'));
+     let primary = db.face("Source Serif 4", "Regular");
+@@ -724,3 +724,22 @@ fn catalog_postscript_names() {
+     assert!(!has(&db.families(), "SysfontSans-Bold"));
+     std::fs::remove_dir_all(dir).unwrap();
+ }
++
++/// A document's embedded copy of an installed font under another table name (WPS embeds SimSun
++/// as 黑体 or 等线, keeping SimSun's own names) belongs to that document: it doesn't stand in for
++/// the installed font elsewhere, and the installed font still loads when asked for by name.
++#[test]
++fn a_documents_copy_of_an_installed_font_does_not_stop_it_loading() {
++    let dir = font_dir("doc-copy");
++    let db = FontDb::with_font_dirs(vec![dir.clone()]);
++    let owner = crate::DocumentFonts::new_owner();
++    db.add_document_fonts(vec![(renamed("SourceSans3-Regular.ttf"), FAMILY.to_string())], owner);
++    let shared_loaded = |db: &FontDb| db.read_faces().iter().any(|f| f.owner == 0 && f.family == FAMILY);
++    {
++        let _doc = crate::DocumentFonts::enter(owner);
++        assert!(db.is_loaded(FAMILY), "the document sees its copy");
++        db.load_cataloged(FAMILY);
++        assert!(shared_loaded(&db), "the installed family loads beside the document's copy");
++    }
++    let _ = std::fs::remove_dir_all(dir);
++}
+diff --git a/crates/fonts/src/fontdb/user.rs b/crates/fonts/src/fontdb/user.rs
+index 0c8a0f69..edce9e1e 100644
+--- a/crates/fonts/src/fontdb/user.rs
++++ b/crates/fonts/src/fontdb/user.rs
+@@ -388,9 +388,11 @@ impl FontDb {
+     /// with the name the document's font table gives it, which its faces answer to as well: Word
+     /// embeds a subset ("embed only the characters used") under a made-up family
+     /// (`___WRD_EMBED_SUB_46`), and the text asks for it by the table's name (#2240). Returns how
+-    /// many faces were added.
+-    pub fn add_document_fonts(&self, files: Vec<(Vec<u8>, String)>) -> usize {
+-        let added = self.add_fonts(files.into_iter().map(|(data, name)| (data, Some(name))).collect());
++    /// many faces were added. The faces belong to the document `owner`
++    /// ([`crate::DocumentFonts::new_owner`]): lookups see them only while it is laid out
++    /// ([`crate::DocumentFonts::enter`]), and they are never fallbacks for other text.
++    pub fn add_document_fonts(&self, files: Vec<(Vec<u8>, String)>, owner: u64) -> usize {
++        let added = self.add_owned_fonts(files.into_iter().map(|(data, name)| (data, Some(name))).collect(), owner);
+         if added > 0 {
+             self.fonts_changed();
+         }
+diff --git a/crates/fonts/src/lib.rs b/crates/fonts/src/lib.rs
+index 3c70572c..a3960db8 100644
+--- a/crates/fonts/src/lib.rs
++++ b/crates/fonts/src/lib.rs
+@@ -15,8 +15,8 @@ mod ui_fallback;
+ pub mod word;
+ 
+ pub use fontdb::{
+-    FALLBACK_FAMILY, FONT_FILE_EXTS, FaceRef, FontDb, FontFace, FontFormat, Installed, LocalName, MAX_FONT_FILE_BYTES, UserFont, UserFontError,
+-    base_style, bundled, decode_font_file, is_font_file_name, name_language_matches, sniff, system_font_dirs,
++    DocumentFonts, FALLBACK_FAMILY, FONT_FILE_EXTS, FaceRef, FontDb, FontFace, FontFormat, Installed, LocalName, MAX_FONT_FILE_BYTES, UserFont,
++    UserFontError, base_style, bundled, decode_font_file, is_font_file_name, name_language_matches, sniff, system_font_dirs,
+ };
+ pub use harfrust::Feature;
+ use harfrust::{Direction, ShapeOptions, ShapePlan, ShapePlanKey, Shaper, Tag, UnicodeBuffer};
+diff --git a/crates/layout/src/lib.rs b/crates/layout/src/lib.rs
+index d3873e1d..1bfd0b55 100644
+--- a/crates/layout/src/lib.rs
++++ b/crates/layout/src/lib.rs
+@@ -308,6 +308,8 @@ pub struct DocLayout {
+ /// Lay out the whole document.
+ pub fn layout(doc: &Document, cache: &mut LayoutCache, opts: &LayoutOptions) -> DocLayout {
+     let t0 = now_ms();
++    // The fonts this document embeds, and no other document's, answer to their names.
++    let _fonts = wordcraft_fonts::DocumentFonts::enter(doc.embedded_fonts.0);
+     // Page totals shown in the body (`NUMPAGES`, `SECTIONPAGES`) are known only after
+     // paginating: lay out again with the totals found until they hold (bounded). Footnotes
+     // numbered again on each page likewise settle over a few more passes.

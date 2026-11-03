@@ -2,6 +2,35 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-03 (4): the open items: embedded fonts per document, grids, defaults (F17–F19)
+
+Each rule measured in WPS first; scores are isolated (one process per document).
+
+- **Embedded fonts per document (0027):** a face a document embeds has an owner; layout enters
+  its document's fonts (`DocumentFonts`), other documents never see them, fallbacks never use
+  them. Found on the way: WPS embeds whole SimSun files as 黑体 / 等线 / 仿宋_GB2312 (`ce628d9760`),
+  and such a copy kept the installed SimSun from loading (fixed in `load_cataloged` too).
+- **No styles part (0026, F19):** single spacing, no space after, 10.5 pt Calibri / 宋体.
+- **標楷體 / DFKai-SB (0030):** missing, they keep a 0.95 / 0.35 em box; DFKai-SB by its English
+  name draws in Microsoft JhengHei Light (Wenshu's font table).
+- **F18 corrected (0024):** table cells *do* snap to the line grid under
+  `adjustLineHeightInTable` (the first probe had the setting outside `w:compat`). The setting is
+  now read and written back. `bd6b721e4e` back to 12 pages.
+- **Grid multiple spacing (0029):** max(whole pitches, m pitches), not pitches × m. 18 probes
+  match; `f526989771`'s red header and a dozen long documents shorten to their reference.
+- **SimSun first for Chinese fallbacks (0028)** even when YaHei was loaded before it.
+- **1.3 × in whole font units (0022 amended):** SimSun 1.2969 em, YaHei 1.7153; long-paragraph
+  pitches now within 0.03% of WPS (were 0.3%). `de24610147` 88 → 86 pages, its reference.
+
+Re-scored (isolated): **144 → 156 / 200**, mean **0.9227 → 0.9329** (the 0020 baseline was 137 /
+0.9117). Of the 13 documents 0021–0025 had lost, 6 are back; 7 remain a page or two off
+(`f9e6e0e0e6`, `92262161df`, `b8de3ae296`, `be4a26d95e`, `7abe5be4e9`, `b6747d9df3`, `ea10dc7972`),
+and their line heights now match WPS, so the cause is elsewhere. Tests: fonts 108, layout 594,
+doc 242, docx 370 + 134, engine 1095, cjk 7; fmt and clippy clean; the queue 0001–0030 applies
+on the pin and reproduces the tested tree (0027 also builds without 0028).
+
+**Next:** the 7 documents above, by line-break diffs (`out/breakall.py`) against the 0030 build.
+
 ## 2026-11-03 (3): East Asian line height (F17), grids in tables (F18), harness isolation
 
 - **Harness:** `wenshu fidelity` now lays each document out in a process of its own (hidden
