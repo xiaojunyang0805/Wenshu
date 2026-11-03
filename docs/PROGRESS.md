@@ -2,6 +2,27 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-03 (10): the 30 documents a page off: empty pages at section ends, 華康 fonts: 174 / 200
+
+- **Triage** (`out/triage.py`): of the 30, nine had an empty page in Wenshu's layout. Their causes,
+  each probed in WPS:
+  - a kept empty paragraph closing a section (a heading style on it) moved over, then the
+    section break began another page (`aa35f17a03`); patch 0041, F26;
+  - cover, page break, an empty next-page section mark: WPS starts the section on the break's page
+    whenever the file has `w:compat` (`ef14cd2f88`, `1aa06d7905`; found by cutting the document
+    down until removing the compatibility settings brought WPS's blank page back); patch 0042.
+- **F27:** two church bulletins in 華康細圓體 were half as long: WPS draws nine 華康 names in
+  Microsoft JhengHei (whose taller line takes two grid pitches) and three in SimHei, by a table of
+  names (24 probed). `wenshu-cjk` follows it.
+- **Fidelity: 170 → 174 / 200**, mean 0.9367 → 0.9395; gains `aa35f17a03`, `ef14cd2f88`,
+  `1aa06d7905`, `f899568bb2`; no losses.
+
+Tests: layout 605, cjk 8; fmt and clippy clean; the queue 0001–0042 applies on the pin and
+reproduces the tested tree.
+
+**Next:** the 26 left: more empty pages (`493a360281`, `cd82c17bf5`, `228229e95c`, `ea10dc7972`,
+`82eb70e86d`: tables and trailing empty paragraphs), then line-height differences.
+
 ## 2026-11-03 (9): no empty page before a heading that opens with a page break (F25): 170 / 200
 
 - **gov-nmpa-5** was four pages long: an empty page before each attachment (附件1–4), each a

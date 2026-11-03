@@ -467,6 +467,38 @@ grid and margins; filler lines up to the page bottom, then a heading `<w:br w:ty
 `gov-nmpa-1`, `-5`, `-6` (attachments 附件1–4, each a heading-3 opening with a page break) and
 `dc-technical-c2c92639c7` now match their page counts. Patch 0040.
 
+## F26. Section ends: kept closing paragraphs, a mark after a page break
+
+Measured 2026-11-03 with probes (filler lines to the page bottom, then the paragraph closing a
+section, next-page and next-column breaks; and the start of a corpus document cut down step by
+step):
+
+- The last paragraph of a section before one that starts a new page is placed as if `w:keepNext`
+  were unset, and an empty one as if `w:keepLines` were unset too: kept or not, WPS lays them out
+  the same. Wenshu moved a kept closing paragraph (a heading style on the section's empty last
+  paragraph) to a new page, and the section break then began another (patch 0041).
+- "Cover, a paragraph of only a page break, an empty paragraph carrying a next-page section
+  break, the next section": WPS starts the next section on the page the break began, in any file
+  with `w:compat` (whatever its `compatibilityMode`, 11 to 15); without a `w:compat` element at
+  all, WPS leaves that page blank. Wenshu always left it blank. The mark now takes no line there
+  (its line sits beside the break's mark on the page before), and the section takes the page
+  back (patch 0042). Files without `w:compat` aren't told apart: Wenshu's settings default to the
+  current mode.
+
+`dc-reports-aa35f17a03`, `dc-administrative-ef14cd2f88` and `dc-reports-1aa06d7905` (two empty
+pages) now match their page counts.
+
+## F27. Missing Traditional Chinese (華康) fonts
+
+WPS substitutes a missing font by a table of names, not by design class (measured name by name,
+24 names): 華康細圓體, 華康中圓體, 華康粗圓體, 華康中黑體, 華康粗黑體, 華康標楷體, 華康細明體,
+華康中明體 and 華康隸書體 are drawn in Microsoft JhengHei; 華康儷中黑, 華康黑體 and 文鼎粗黑 in
+SimHei; everything else (華康圓體, 華康楷書體W5, 華康新特明體, 文鼎中楷, the display faces) in 宋体.
+Wenshu drew them all in 宋体; on a line grid Microsoft JhengHei's taller line takes two pitches,
+so a church bulletin set in 華康細圓體 came out half as long as in WPS. Wenshu's font table
+(`wenshu-cjk`) now follows WPS. `dc-administrative-f899568bb2` matches; `a9f763a2b4` is a page
+closer.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

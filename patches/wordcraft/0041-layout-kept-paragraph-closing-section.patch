@@ -1,0 +1,66 @@
+Upstream: (not opened; layout fix, measured in WPS: the last paragraph of a section before one that starts a new page is placed as if keep with next were unset, and an empty one as if keep lines together were unset too; a kept closing paragraph moved over and the break began another page)
+diff --git a/crates/layout/src/flow.rs b/crates/layout/src/flow.rs
+index cd76c499..ee362f92 100644
+--- a/crates/layout/src/flow.rs
++++ b/crates/layout/src/flow.rs
+@@ -312,11 +312,20 @@ impl<'a> Flow<'a> {
+         if break_line(&self.pl).is_some() {
+             return before;
+         }
++        // The last paragraph of a section before one that starts a new page has no next
++        // paragraph to keep with on its page, and an empty one stays at the bottom of a full page
++        // (`stays_at_bottom`): WPS places them as if the properties were unset. A kept empty
++        // paragraph closing a section moved over, and the section break then began another page.
++        let closes_section = self.p.section.is_some() && pb.next_starts_page;
++        if closes_section && self.p.text.is_empty() {
++            return before;
++        }
++        let keep_next = rp.keep_next && !closes_section;
+         let height = self.pl.height + rooms.top + rooms.bottom;
+-        if !(rp.keep_lines || (rp.keep_next && pb.y + height <= pb.bottom + 0.01)) {
++        if !(rp.keep_lines || (keep_next && pb.y + height <= pb.bottom + 0.01)) {
+             return before;
+         }
+-        let need = height + if rp.keep_next { next_first_line(ctx, self.block, self.width, 0, &mut ctx.counters.clone()) } else { 0.0 };
++        let need = height + if keep_next { next_first_line(ctx, self.block, self.width, 0, &mut ctx.counters.clone()) } else { 0.0 };
+         // (Against the whole column: balanced columns grow to hold it.)
+         // With the 0.01 pt of slack the other fit checks take.
+         if pb.y + need > pb.bottom + 0.01 && !pb.fresh() && need <= pb.next_room(self.body_top) {
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+index 39d1b730..b89d50cf 100644
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -1357,6 +1357,33 @@ fn an_empty_section_mark_stays_on_a_full_page() {
+     assert_eq!(pages(false), 3);
+ }
+ 
++/// The last paragraph of a section before a new page is placed as if keep with next and keep
++/// lines together were unset (measured in WPS, next-page and next-column breaks): there is no next
++/// paragraph on its page to keep with, and an empty one still stays at the bottom of a full page.
++/// A kept closing paragraph (a heading style) moved over, and the break then began another page.
++#[test]
++fn a_kept_paragraph_closing_a_section_leaves_no_empty_page() {
++    use wordcraft_doc::section::SectionProps;
++    let pages = |text: &str, kept: bool, extra: usize| {
++        let lines: Vec<String> = (1..=200).map(|i| format!("Line {i}")).collect();
++        let one_page = lay(&Document::from_text(&lines.join("\n"))).pages[0].items.iter().filter(|i| matches!(i, Placed::Lines { .. })).count();
++        let fill = one_page - extra;
++        let mut d = Document::from_text(&format!("{}\n{text}\nNext", lines[..fill].join("\n")));
++        let mark = d.para_mut(StoryRef::Body, &Path::top(fill)).unwrap();
++        mark.section = Some(Box::new(SectionProps::default()));
++        if kept {
++            mark.props.keep_next = Some(true);
++            mark.props.keep_lines = Some(true);
++        }
++        lay(&d).pages.len()
++    };
++    // Empty, on a full page or with one line of room; with text, with one line of room.
++    for (text, extra) in [("", 0), ("", 1), ("End of the section", 1)] {
++        assert_eq!(pages(text, true, extra), pages(text, false, extra), "{text:?}, {extra} lines of room");
++        assert_eq!(pages(text, true, extra), 2, "{text:?}, {extra} lines of room");
++    }
++}
++
+ #[test]
+ fn a_bookmark_after_a_page_break_takes_no_line() {
+     // "Before", a page break, then a bookmark start (Word writes the next heading's TOC bookmark

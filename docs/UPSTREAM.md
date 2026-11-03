@@ -72,8 +72,10 @@ longer applies, and running the fidelity corpus before and after.
 | 0038-engine-date-picture-chinese-weekday | wordcraft-engine | Date picture `W` (either case): the Chinese weekday, 二 / 周二 / 星期二 for 1 / 2 / 3+ letters (WPS, F23). Test | not opened: WPS-measured; Word's Chinese pictures to check |
 | 0039-docx-vml-wordart-fill-opacity | wordcraft-docx | VML WordArt letters take the shape fill's `opacity` (a transparent `w14:textFill`) and `filled="f"`; a WPS tracing watermark at opacity 0 was drawn opaque, and after a save WPS showed it too. Test | draft [#5463](https://github.com/storytold/wordcraft/pull/5463) (2026-11-03, on `main` `ae5c65b9`) |
 | 0040-layout-page-break-heading-no-empty-page | wordcraft-layout | A paragraph with a page or column break inside is placed as if keep with next / keep lines together were unset; a break line holding only markers still stays at the bottom of a full page (WPS, F25). Tests | not opened: the keep part is WPS-measured (Word to check); the marker part is a plain bug fix |
+| 0041-layout-kept-paragraph-closing-section | wordcraft-layout | The last paragraph of a section before a new page: keep with next unset, and keep lines too when empty (WPS, F26). Test | not opened: WPS-measured, Word to check |
+| 0042-layout-section-mark-after-page-break | wordcraft-layout | An empty next-page section mark right after a paragraph ending with a page break takes no line on the break page; the section takes that page back (WPS with `w:compat`, F26). Test | not opened: WPS-measured, Word to check |
 
-All 40 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-03); the
+All 42 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-03); the
 `wordcraft-layout` (602), `-fonts` (109), `-doc` (242), `-docx` (373 + 134 integration) and
 `-engine` (1095) suites pass with them, and fmt and clippy are clean.
 

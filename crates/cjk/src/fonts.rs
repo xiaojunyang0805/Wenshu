@@ -64,6 +64,19 @@ pub const DFKAI_SB: &[&str] = &[
     "Source Han Serif SC",
     "Noto Serif SC",
 ];
+/// DynaComware (華康) Traditional Chinese fonts that WPS Office draws in Microsoft JhengHei when
+/// they are missing (measured name by name: the 圓, 中黑/粗黑, 明, 標楷 and 隸書 faces; others fall
+/// back to 宋体). The open Traditional Chinese sans faces follow for systems without it.
+pub const JHENGHEI: &[&str] = &[
+    "Microsoft JhengHei",
+    "微軟正黑體",
+    "PingFang TC",
+    "Noto Sans CJK TC",
+    "Source Han Sans TC",
+    "Noto Sans TC",
+    "Microsoft YaHei",
+    "SimSun",
+];
 /// Heavy display Song (小标宋, 中宋): 公文 titles and the issuing-organ mark.
 pub const XIAOBIAOSONG: &[&str] = &[
     "FZXiaoBiaoSong-B05S",
@@ -117,6 +130,11 @@ pub fn substitutes(family: &str) -> Option<&'static [&'static str]> {
         // lack: WPS draws them as 宋体, with SimSun's half-width digits (a Latin fallback would
         // widen them), 標楷體 included; DFKai-SB by that name in Microsoft JhengHei Light.
         "dfkai-sb" | "dfkai" => DFKAI_SB,
+        // DynaComware names WPS maps to Microsoft JhengHei (measured; 華康圓體, 華康楷書體W5 and
+        // the display faces fall back to 宋体 there, as Wenshu does without an entry).
+        "華康細圓體" | "华康细圆体" | "華康中圓體" | "华康中圆体" | "華康粗圓體" | "华康粗圆体"
+        | "華康中黑體" | "华康中黑体" | "華康粗黑體" | "华康粗黑体" | "華康標楷體" | "华康标楷体"
+        | "華康細明體" | "华康细明体" | "華康中明體" | "华康中明体" | "華康隸書體" | "华康隶书体" => JHENGHEI,
         "標楷體" | "标楷体" | "新細明體" | "細明體" | "新细明体" | "细明体" | "pmingliu"
         | "mingliu" => SONG,
         "宋体" | "simsun" | "新宋体" | "nsimsun" | "华文宋体" | "stsong" | "方正书宋"
@@ -132,6 +150,8 @@ pub fn substitutes(family: &str) -> Option<&'static [&'static str]> {
         | "fzdabiaosong-b06s" => XIAOBIAOSONG,
         "黑体" | "simhei" | "方正黑体" | "fzhei" | "fzhei-b01s" | "华文黑体" | "stheiti"
         | "华文细黑" | "stxihei" => HEI,
+        // Traditional Chinese Hei faces WPS draws in SimHei (measured).
+        "華康儷中黑" | "华康俪中黑" | "華康黑體" | "华康黑体" | "文鼎粗黑" => HEI,
         "微软雅黑" | "microsoftyahei" | "等线" | "dengxian" | "苹方" | "pingfangsc"
         | "微軟正黑體" | "微软正黑体" | "microsoftjhenghei" => YAHEI,
         _ => return None,
@@ -172,6 +192,21 @@ mod tests {
         assert_eq!(substitutes("FZXiaoBiaoSong-B05S"), Some(XIAOBIAOSONG));
         assert_eq!(substitutes("黑体"), Some(HEI));
         assert_eq!(substitutes(" Microsoft YaHei "), Some(YAHEI));
+    }
+
+    #[test]
+    fn dynacomware_names_follow_wps() {
+        // Measured in WPS: each of these drawn in Microsoft JhengHei, these in SimHei, the rest
+        // (no entry) in 宋体.
+        for name in ["華康細圓體", "華康中圓體", "華康粗圓體", "華康中黑體", "華康粗黑體", "華康標楷體", "華康細明體", "華康中明體", "華康隸書體"] {
+            assert_eq!(substitutes(name), Some(JHENGHEI), "{name}");
+        }
+        for name in ["華康儷中黑", "華康黑體", "文鼎粗黑"] {
+            assert_eq!(substitutes(name), Some(HEI), "{name}");
+        }
+        for name in ["華康圓體", "華康楷書體W5", "華康新特明體", "文鼎中楷"] {
+            assert_eq!(substitutes(name), None, "{name}");
+        }
     }
 
     #[test]
