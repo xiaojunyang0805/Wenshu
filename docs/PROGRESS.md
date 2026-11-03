@@ -20,8 +20,14 @@ documents better, 2 slightly worse (−0.0015, −0.0005). `dc-reports-7f0a1221f
 `dc-policies-228229e95c` is a page closer. Layout 590 tests; fmt and clippy clean; the queue
 0001–0019 applies on the pin and reproduces the tested tree.
 
+- **F16, patch 0020:** lines ending in a digit run (`…给予300`, `…病床120`) squeeze an em in WPS.
+  The pool is half an em plus what the last unit is wider than an em, which also reproduces
+  every F12 sweep (it replaces F12's count of marks). Re-scored (0019 → 0020): matches 137 / 200
+  unchanged, mean 0.9084 → **0.9085**, 6 documents better, 3 slightly worse (worst −0.003).
+  Layout 591 tests; the queue 0001–0020 reproduces the tested tree.
+
 **Next:** items 2–3 of the entry below (the one-character-short and one-longer groups), with
-`out/breakall.py` against the 0019 build.
+`out/breakall.py` against the 0020 build; then fold 0019/0020 into #5006 and 0017/0019 with 0009.
 
 ## 2026-11-03: autospace squeeze, whole grid cells (F13, F14); three smaller fixes
 

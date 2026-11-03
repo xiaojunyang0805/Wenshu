@@ -278,6 +278,27 @@ spacing **twice** (+1 pt → 18.0, −0.3 → 15.4; on the grid 18.306, 15.706),
 without it, once each. As if spacing were per byte, a GBK character being two. Patch 0019. With
 it, the line fits 26 characters as in WPS.
 
+## F16. The pool grows by what the last unit is wider than an em
+
+`dc-policies-7380cfbea3`'s `绿色通道，4家…设置老年病床120` squeezes its two commas by 0.545 em
+in all in WPS, more than F12's half em, and leaves its automatic spaces whole. Its last unit is the
+digits `120`. Sweeps (`sweep_lines.py … enddigits`, `enddigits2`, mode 14, natural widths
+counted from the text):
+
+| Line | Squeeze |
+|---|---|
+| 2 commas, last unit `120` / `abc` / `，120` | 1.00 em |
+| 3 or 5 commas, last unit `120` | 1.00 em |
+| 2 commas, last unit `12345` | 1.12 em (the commas' 1.0 and a space's 0.125: all the room) |
+| 2 commas, last unit `1`; or `120` mid-line and `瑞` ending the line | 0.50 em |
+| 1 comma, last unit `120` | 0.62 em (the comma's half and a space's eighth) |
+| the real line | 0.99 em |
+
+Without automatic spaces the same, less the spaces' share. **Rule (replaces F12's count):** the
+pool is half an em plus what the last unit is wider than an em (`《瑞`, `瑞。`: an em, as F12
+had; `《「瑞`: two; `120`: half an em; `1` or `瑞`: nothing). It gives every F12 sweep again. In
+mode 15 half that is assumed, as F12 measured for marks. Patch 0020.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).
