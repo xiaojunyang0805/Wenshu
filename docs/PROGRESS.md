@@ -28,7 +28,7 @@ the tested tree.
 so it is read as a picture and its text dropped: the last J5 text and font loss); the three page
 changes of J5 (documents Wenshu itself lays out a page off).
 
-**Next:** offer 0027 + 0033; picture fills for shapes; the 34
+**Next:** (0027 + 0033 opened as draft [#5470](https://github.com/storytold/wordcraft/pull/5470)); picture fills for shapes; the 34
 documents still a page off WPS.
 
 ## 2026-11-03 (7): M2 — PDF export measured (J4); field results in two fonts (F23)
