@@ -134,8 +134,12 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         },
         Some("fidelity") => {
             let out = Path::new(arg(&p, 2)?);
-            let report =
-                wenshu_fidelity::run(Path::new(arg(&p, 1)?), out, parse(args, "--scale", 1.0)?)?;
+            let report = wenshu_fidelity::run_with(
+                Path::new(arg(&p, 1)?),
+                out,
+                parse(args, "--scale", 1.0)?,
+                fidelity_doc_isolated,
+            )?;
             let json = serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?;
             std::fs::write(out.join("report.json"), json).map_err(|e| e.to_string())?;
             for d in &report.documents {
@@ -166,6 +170,44 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
                 ExitCode::from(1)
             })
         }
+        // One document of `fidelity`, in a process of its own: prints its report as JSON.
+        Some("fidelity-doc") => {
+            let report = wenshu_fidelity::run_one(
+                Path::new(arg(&p, 1)?),
+                Path::new(arg(&p, 2)?),
+                Path::new(arg(&p, 3)?),
+                parse(args, "--scale", 1.0)?,
+            );
+            println!(
+                "{}",
+                serde_json::to_string(&report).map_err(|e| e.to_string())?
+            );
+            Ok(ExitCode::SUCCESS)
+        }
         Some(other) => Err(format!("unknown command `{other}`\n\n{USAGE}")),
+    }
+}
+
+/// Run one `fidelity` document in a child process (`fidelity-doc`), so fonts one document embeds
+/// don't change how the next lays out. Falls back to this process when the child can't run.
+fn fidelity_doc_isolated(
+    file: &Path,
+    ref_dir: &Path,
+    out: &Path,
+    scale: f64,
+) -> wenshu_fidelity::DocReport {
+    let child = std::env::current_exe().and_then(|exe| {
+        std::process::Command::new(exe)
+            .arg("fidelity-doc")
+            .args([file, ref_dir, out])
+            .args(["--scale", &scale.to_string()])
+            .output()
+    });
+    match child {
+        Ok(o) if o.status.success() => {
+            serde_json::from_slice::<wenshu_fidelity::DocReport>(&o.stdout)
+                .unwrap_or_else(|_| wenshu_fidelity::run_one(file, ref_dir, out, scale))
+        }
+        _ => wenshu_fidelity::run_one(file, ref_dir, out, scale),
     }
 }

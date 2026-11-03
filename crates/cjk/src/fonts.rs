@@ -101,6 +101,11 @@ pub fn substitutes(family: &str) -> Option<&'static [&'static str]> {
         | "华文仿宋" | "stfangsong" | "仿宋体" => FANGSONG,
         "楷体" | "kaiti" | "方正楷体" | "fzkai" | "fzkai-z03s" | "fzkai-z03" | "华文楷体"
         | "stkaiti" | "楷体字" => KAITI,
+        // Traditional Chinese document fonts (Taiwan, Hong Kong) that Simplified Chinese systems
+        // lack: WPS draws all of them, 標楷體 included, as 宋体, with SimSun's half-width digits
+        // and line height (a Latin fallback would widen the digits).
+        "標楷體" | "标楷体" | "dfkai-sb" | "dfkai" | "新細明體" | "細明體" | "新细明体"
+        | "细明体" | "pmingliu" | "mingliu" => SONG,
         "宋体" | "simsun" | "新宋体" | "nsimsun" | "华文宋体" | "stsong" | "方正书宋"
         | "fzshusong" | "fzshusong-z01s" => SONG,
         "方正小标宋"
@@ -114,9 +119,8 @@ pub fn substitutes(family: &str) -> Option<&'static [&'static str]> {
         | "fzdabiaosong-b06s" => XIAOBIAOSONG,
         "黑体" | "simhei" | "方正黑体" | "fzhei" | "fzhei-b01s" | "华文黑体" | "stheiti"
         | "华文细黑" | "stxihei" => HEI,
-        "微软雅黑" | "microsoftyahei" | "等线" | "dengxian" | "苹方" | "pingfangsc" => {
-            YAHEI
-        }
+        "微软雅黑" | "microsoftyahei" | "等线" | "dengxian" | "苹方" | "pingfangsc"
+        | "微軟正黑體" | "微软正黑体" | "microsoftjhenghei" => YAHEI,
         _ => return None,
     };
     Some(list)
@@ -155,6 +159,16 @@ mod tests {
         assert_eq!(substitutes("FZXiaoBiaoSong-B05S"), Some(XIAOBIAOSONG));
         assert_eq!(substitutes("黑体"), Some(HEI));
         assert_eq!(substitutes(" Microsoft YaHei "), Some(YAHEI));
+    }
+
+    #[test]
+    fn traditional_chinese_fonts_fall_back_as_wps_draws_them() {
+        assert_eq!(substitutes("標楷體"), Some(SONG));
+        assert_eq!(substitutes("DFKai-SB"), Some(SONG));
+        assert_eq!(substitutes("新細明體"), Some(SONG));
+        assert_eq!(substitutes("PMingLiU"), Some(SONG));
+        assert_eq!(substitutes("微軟正黑體"), Some(YAHEI));
+        assert_eq!(substitutes("Microsoft JhengHei"), Some(YAHEI));
     }
 
     #[test]

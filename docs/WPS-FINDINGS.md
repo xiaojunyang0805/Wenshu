@@ -147,6 +147,10 @@ Probe 34, a lines-only grid (no character pitch) and a 16 pt paragraph mark: `le
 all three count the pitch (F3). Patch 0010. Found through `dc-correspondence-195b80f877`, whose
 signature line only fits with F7's wider spaces when its `leftChars=100` is 10.5 pt, not 16.
 
+Addendum (2026-11-03): the same holds for a paragraph with `snapToGrid=0` on a line grid
+(`dc-policies-39de0888eb`: `leftChars=413` beside 13 pt text indents 49.55 pt = 4.13 × the
+12 pt Normal size). Patch 0021.
+
 ## F9. On a character grid, `w:w` and `w:spacing` still count
 
 Probe 35, the 公文 grid (pitch 15.79 pt for 16 pt, adjustment −0.21 pt): 16 pt 宋体 at `w:w` 50%
@@ -298,6 +302,37 @@ Without automatic spaces the same, less the spaces' share. **Rule (replaces F12'
 pool is half an em plus what the last unit is wider than an em (`《瑞`, `瑞。`: an em, as F12
 had; `《「瑞`: two; `120`: half an em; `1` or `瑞`: nothing). It gives every F12 sweep again. In
 mode 15 half that is assumed, as F12 measured for marks. Patch 0020.
+
+## F17. East Asian fonts take 1.3 times their height; missing Chinese fonts fall back to 宋体
+
+Probes (`corpus/tools/lh_probe_fonts.py`, `lh_probe_grid_mixed.py`, `lh_probe_traditional.py`; 10.5 and 16 pt, single and double spacing, no grid):
+WPS lays a line of 宋体, 黑体, 楷体 or 仿宋 out **1.30 em** tall, Microsoft YaHei 1.714 em,
+Microsoft JhengHei 1.726 em, DengXian 1.354 em. Each is **1.3 × usWinAscent + usWinDescent**
+(1.000, 1.320, 1.330, 1.042 em), and the extra 0.3 is split evenly: the first baseline sits
+win ascent + 0.15 × the height below the line top (宋体 16 pt: 16.13 pt; YaHei 20.09; DengXian
+15.41). It follows the font, not the text: 宋体 holding only Latin letters is 1.3 em too, and
+a line mixing Times New Roman and 宋体 takes 宋体's. Times New Roman and Calibri keep their usual
+heights. The faces it applies to carry an East Asian OS/2 code page (bits 17–21: JIS, GB2312,
+Wansung, Big5, Johab). On a line grid the 1.3 counts before snapping: 13 pt 宋体 takes two
+15.6 pt pitches. Wenshu used the hhea ascent + descent + line gap, 1.141 em for 宋体, so every
+off-grid Chinese line was 12% short. Patch 0022.
+
+Fallbacks, from the same probes and `dc-educational-b8de3ae296`, `dc-forms-56af470ee7`:
+Traditional Chinese document fonts this system lacks (標楷體, 新細明體, 細明體) are drawn as 宋体,
+glyphs and line height; Chinese text in a font without it (Times New Roman, or an empty theme
+East Asian font with an en-US language, `02_mixed_cjk`) is drawn in 宋体 too, where Wenshu took
+Microsoft YaHei. Wenshu's substitute table maps the Traditional names to the Song list and the
+system fallbacks try SimSun before YaHei (patch 0023).
+
+## F18. Grids in table cells and at the page foot
+
+Probes (`corpus/tools/lh_probe_tables.py`: 13 pt 宋体 on a 15.6 pt line grid, modes 14 and 15, with and without
+`adjustLineHeightInTable`): lines in a table cell **don't snap** to the line grid (16.9 pt, the
+font's 1.3 em; the body's lines take two pitches). The setting changes nothing. Patch 0024.
+
+At the page foot (`gov-mct-keji`): a 16 pt line on a 15.6 pt grid takes two pitches with its
+text centred, and stays on the page while its text ends 1 pt above the bottom margin and its
+pitches end 4.2 pt below it, as multiple spacing's leading may run into the margin. Patch 0025.
 
 ## Still to measure
 

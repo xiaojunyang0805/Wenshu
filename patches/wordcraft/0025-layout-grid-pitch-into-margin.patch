@@ -1,0 +1,65 @@
+Upstream: (not opened; WPS measurement: a single-spaced grid line's pitch below its text may run into the bottom margin, as multiple spacing's leading does; F18)
+diff --git a/crates/layout/src/flow.rs b/crates/layout/src/flow.rs
+index cdb9db2a..de485f12 100644
+--- a/crates/layout/src/flow.rs
++++ b/crates/layout/src/flow.rs
+@@ -628,12 +628,16 @@ fn notes_limit(pb: &PageBuilder, new_notes: &[NoteBox], line_notes: &[NoteBox])
+ /// bottom margin: only the text has to fit (observed: a double-spaced 12pt line stays on the page
+ /// while its text ends above the margin, about half a line lower than when the whole line must
+ /// fit). Only the bottom margin takes that leading: a footer taller than the margin, or
+-/// footnotes (`free` is false), keep the whole line clear of them.
++/// footnotes (`free` is false), keep the whole line clear of them. Single-spaced lines on a line
++/// grid, their text centred in whole pitches, let the pitch below the text run into the margin
++/// too (WPS, `gov-mct-keji`: a 16 pt line in two 15.6 pt pitches stays on the page with its
++/// text ending 1 pt above the margin and its pitches 4.2 pt below it). Other single-spaced
++/// lines end with their text, so this changes nothing for them.
+ fn fit_height(pb: &PageBuilder, l: &para::Line, rp: &wordcraft_doc::resolve::ResolvedPara, free: bool) -> f32 {
+     let at_margin = pb.bottom >= pb.sect.page_h - pb.sect.margin_bottom - 0.01;
+     match rp.line_spacing {
+         // `baseline` is from the paragraph's top; the text ends a descent below it.
+-        wordcraft_doc::props::LineSpacing::Multiple(m) if m > 1.0 && at_margin && free => (l.baseline - l.top + l.text_desc).clamp(0.0, l.height),
++        wordcraft_doc::props::LineSpacing::Multiple(m) if m >= 1.0 && at_margin && free => (l.baseline - l.top + l.text_desc).clamp(0.0, l.height),
+         _ => l.height,
+     }
+ }
+diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
+index d811dc58..7553d6c4 100644
+--- a/crates/layout/src/tests/grid.rs
++++ b/crates/layout/src/tests/grid.rs
+@@ -385,3 +385,36 @@ fn table_cells_do_not_snap_to_the_line_grid() {
+     assert!(cell < body - 1.0, "the cell's line keeps its own height ({cell}), the body's snaps ({body})");
+ }
+ 
++/// A single-spaced line on a line grid has its text centred in whole pitches, and the pitch
++/// below the text may run into the bottom margin, as multiple spacing's leading does (WPS,
++/// `gov-mct-keji`): on every page the last line's text ends within the margin, the next line's
++/// would not, and for some shifts the last line's pitches reach past the margin.
++#[test]
++fn a_grid_lines_pitch_below_its_text_may_run_into_the_bottom_margin() {
++    let mut past_margin = 0;
++    for shift in (0..18).step_by(2) {
++        let mut d = with_grid(&"Several words wrap onto many lines of a long paragraph. ".repeat(60), DocGridType::Lines, 0);
++        if let Some(Block::Para(p)) = d.body.get_mut(0).map(std::sync::Arc::make_mut) {
++            p.props.space_before = Some(shift as f32);
++            p.props.widow_control = Some(false);
++        }
++        let bottom = d.last_section.page_h - d.last_section.margin_bottom;
++        let l = lay(&d);
++        assert!(l.pages.len() >= 2, "shift {shift}: the paragraph should run onto a second page");
++        let Some(Placed::Lines { y, para, l0, l1, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { story: StoryRef::Body, .. }))
++        else {
++            panic!("shift {shift}: no body lines on page 1")
++        };
++        let (first, last, next) = (&para.lines[*l0], &para.lines[*l1 - 1], &para.lines[*l1]);
++        assert!(last.height > (last.baseline - last.top) + last.text_desc + 0.5, "shift {shift}: the grid leaves room below the text");
++        let top = y + last.top - first.top;
++        let text_end = top + (last.baseline - last.top) + last.text_desc;
++        assert!(text_end <= bottom + 0.01, "shift {shift}: the last line's text ends at {text_end}, below the margin at {bottom}");
++        let next_text_end = top + last.height + (next.baseline - next.top) + next.text_desc;
++        assert!(next_text_end > bottom + 0.01, "shift {shift}: the next line's text would end at {next_text_end}, within the margin at {bottom}");
++        if top + last.height > bottom + 0.01 {
++            past_margin += 1;
++        }
++    }
++    assert!(past_margin > 0, "some shift should leave the last line's pitch past the margin");
++}

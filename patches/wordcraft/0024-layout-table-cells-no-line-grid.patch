@@ -1,0 +1,54 @@
+Upstream: (not opened; WPS measurement, Word unmeasured (it documents adjustLineHeightInTable as snapping): lines in table cells don't snap to the line grid; F18)
+diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
+index e89cdc8d..2cc5ed44 100644
+--- a/crates/layout/src/para/lines.rs
++++ b/crates/layout/src/para/lines.rs
+@@ -200,7 +200,9 @@ impl<'e> Breaker<'e> {
+             hyph_limit: settings.consecutive_hyphen_limit as usize,
+             widths: word_widths(&pl.clusters, &pl.hyph_after),
+             rtl_para: rp.bidi,
+-            grid: Some(env.grid).filter(|g| g.line.is_some() && rp.snap_to_grid),
++            // Lines in table cells don't snap to the line grid in WPS, `adjustLineHeightInTable`
++            // or not (13 pt 宋体 on a 15.6 pt grid: 16.9 pt lines, modes 14 and 15).
++            grid: Some(env.grid).filter(|g| g.line.is_some() && rp.snap_to_grid && env.table.is_none()),
+             bidi: rp.bidi || !pl.bidi_levels.is_empty(),
+             est_h,
+             // Exact spacing fixes the table-contact boundary even when the mark has other metrics.
+diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
+index 00d83b30..d811dc58 100644
+--- a/crates/layout/src/tests/grid.rs
++++ b/crates/layout/src/tests/grid.rs
+@@ -355,3 +355,33 @@ fn a_character_grid_narrows_the_column_to_whole_pitches() {
+     // A line grid alone changes nothing.
+     assert!((right(&with_grid("x", DocGridType::Lines, 0)) - full).abs() < 0.01);
+ }
++
++/// Lines in a table cell keep their natural height on a line grid (WPS, modes 14 and 15,
++/// `adjustLineHeightInTable` or not): only the body's lines take whole pitches.
++#[test]
++fn table_cells_do_not_snap_to_the_line_grid() {
++    use wordcraft_doc::{Path, Table};
++    let mut d = with_grid("Grid line", DocGridType::Lines, 0);
++    let mut t = Table::new(1, 1, 300.0);
++    let mut p = wordcraft_doc::Paragraph::with_text("Cell line", Default::default());
++    p.props.space_before = Some(0.0);
++    p.props.space_after = Some(0.0);
++    p.props.line_spacing = Some(LineSpacing::Multiple(1.0));
++    t.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(p)];
++    d.insert_block(StoryRef::Body, &Path::top(1), Block::Table(t)).unwrap();
++    let l = lay(&d);
++    let height = |cell: bool| {
++        l.pages[0]
++            .items
++            .iter()
++            .find_map(|i| match i {
++                Placed::Lines { para, path, .. } if (path.0.len() > 1) == cell => para.lines.first().map(|line| line.height),
++                _ => None,
++            })
++            .unwrap()
++    };
++    let (body, cell) = (height(false), height(true));
++    assert!((body / 18.0 - (body / 18.0).round()).abs() < 1e-3, "body line {body} takes whole pitches");
++    assert!(cell < body - 1.0, "the cell's line keeps its own height ({cell}), the body's snaps ({body})");
++}
++

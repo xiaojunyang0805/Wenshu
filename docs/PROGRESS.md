@@ -2,6 +2,38 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-03 (3): East Asian line height (F17), grids in tables (F18), harness isolation
+
+- **Harness:** `wenshu fidelity` now lays each document out in a process of its own (hidden
+  `fidelity-doc` command). Twelve corpus documents embed fonts (subsets of 仿宋_GB2312,
+  方正小标宋简体…), and the embedded faces stayed loaded for every later document asking for the
+  family: `gov-mct-keji` after `gov-fj-gaoxin` drew its title in YaHei. The same leak exists in
+  the desktop app between documents of one session (`FontDb::add_document_fonts` is
+  process-wide); not fixed yet. `out/fidiso.py` scores older binaries the same way. Re-scored
+  isolated, the 0020 build is 137 / 200, mean **0.9117** (0.9085 in one process).
+- **0021 (F8 addendum):** line-grid `*Chars` side indents count the Normal size with
+  `snapToGrid=0` too (`dc-policies-39de0888eb`).
+- **Wenshu font table:** 標楷體, 新細明體, 細明體, PMingLiU, MingLiU → the Song list (WPS draws
+  them as 宋体); 微軟正黑體 → YaHei. `dc-policies-a5beccd773`'s digits now match.
+- **F17, patches 0022–0023:** East Asian faces take 1.3 × their win height, split evenly above
+  and below; Chinese text no font covers falls back to SimSun before YaHei. 40 line-height probe
+  cases match WPS within 0.1 pt.
+- **F18, patches 0024–0025:** no line-grid snapping in table cells; a grid line's pitch below its
+  text may run into the bottom margin.
+
+Re-scored, both isolated (0020 → 0025 + font table): page-count matches **137 → 144 / 200**,
+mean **0.9117 → 0.9227**, 117 documents better, 30 worse. 20 documents now match, 13 no longer
+do (`dc-forms-7abe5be4e9`, `dc-educational-92262161df`, `dc-administrative-f526989771` and
+`-f9e6e0e0e6`, `dc-educational-be4a26d95e`, `dc-policies-38bfeee828`, `-b6747d9df3`,
+`-ea10dc7972`, `-de24610147` a page or two long; `dc-administrative-bd6b721e4e` 12 → 8,
+`dc-reports-e1c1c56064`, `dc-educational-a9249ea5f3` short; `dc-educational-b8de3ae296` a
+page long). Layout 593 tests, fonts and cjk tests pass, fmt and clippy clean; the queue
+0001–0025 applies on the pin and reproduces the tested tree.
+
+**Next:** the 13 lost documents (start with `bd6b721e4e`, 4 pages short, and the table-heavy
+forms); 標楷體's baseline (0.9 pt lower in WPS); documents without `styles.xml` default to 1.15
+spacing where WPS uses single; scope embedded fonts to their document.
+
 ## 2026-11-03 (2): releases, upstream, spacing per byte (F15)
 
 - **v0.1.0** published as a pre-release. **v0.1.1** (Cargo 0.1.1, tag pushed): release.yml made

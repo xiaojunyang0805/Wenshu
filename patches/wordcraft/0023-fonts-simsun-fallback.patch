@@ -1,0 +1,32 @@
+Upstream: (not opened; WPS measurement: Chinese text no loaded font covers falls back to SimSun before Microsoft YaHei; F17)
+diff --git a/crates/fonts/src/fontdb/fallback_data.rs b/crates/fonts/src/fontdb/fallback_data.rs
+index 91ffb08b..109b1229 100644
+--- a/crates/fonts/src/fontdb/fallback_data.rs
++++ b/crates/fonts/src/fontdb/fallback_data.rs
+@@ -179,6 +179,9 @@ pub(super) const SYSTEM_FALLBACKS: &[&str] = &[
+     "Apple SD Gothic Neo",
+     "Heiti SC",
+     "STHeiti",
++    // Chinese text in a font without it (a Latin font, or an empty theme East Asian font) is
++    // drawn in 宋体 by WPS Office on Windows, which has both: SimSun before Microsoft YaHei.
++    "SimSun",
+     "Microsoft YaHei",
+     "Yu Gothic",
+     "Malgun Gothic",
+diff --git a/crates/fonts/src/fontdb/tests.rs b/crates/fonts/src/fontdb/tests.rs
+index a21221e4..aae0fcff 100644
+--- a/crates/fonts/src/fontdb/tests.rs
++++ b/crates/fonts/src/fontdb/tests.rs
+@@ -378,3 +378,12 @@ fn named_instances_and_collection_members_are_capped() {
+     // (under 0.1 s on a loaded machine) only backs up "read once", with room for a busy CI.
+     assert!(started.elapsed() < std::time::Duration::from_secs(10), "{:?}", started.elapsed());
+ }
++
++/// Chinese text no loaded font covers falls back to 宋体 before Microsoft YaHei, as WPS Office
++/// draws it on Windows (an empty theme East Asian font, Chinese in a Latin font).
++#[test]
++#[cfg(not(target_arch = "wasm32"))]
++fn chinese_falls_back_to_simsun_before_yahei() {
++    let at = |name: &str| fallback_data::SYSTEM_FALLBACKS.iter().position(|f| *f == name);
++    assert!(at("SimSun").zip(at("Microsoft YaHei")).is_some_and(|(s, y)| s < y));
++}

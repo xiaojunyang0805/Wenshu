@@ -1,0 +1,81 @@
+Upstream: (not opened; WPS measurement, Word unmeasured: faces with an East Asian OS/2 code page take 1.3 x their win ascent + descent, the extra split evenly above and below; F17)
+diff --git a/crates/fonts/src/word.rs b/crates/fonts/src/word.rs
+index 6330de95..87dee909 100644
+--- a/crates/fonts/src/word.rs
++++ b/crates/fonts/src/word.rs
+@@ -483,10 +483,62 @@ pub fn line_metrics(face: &crate::FontFace) -> (f64, f64) {
+     v
+ }
+ 
++/// The (ascent, descent) a line of text gives this face, in font units. A face made for
++/// Chinese, Japanese or Korean (an OS/2 code page among JIS, GB2312, Wansung, Big5 and Johab)
++/// takes 1.3 times its usWinAscent + usWinDescent, the extra split evenly above and below:
++/// measured in WPS Office for 宋体, 黑体, 楷体, 仿宋 (1.30 em), Microsoft YaHei (1.714 em),
++/// Microsoft JhengHei (1.726 em) and DengXian (1.354 em), at 10.5 to 16 pt, with Latin text
++/// in the face too. Other faces take [`line_metrics`].
++pub fn text_line_metrics(face: &crate::FontFace) -> (f64, f64) {
++    static CACHE: OnceLock<Mutex<HashMap<u32, Option<(f64, f64)>>>> = OnceLock::new();
++    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
++    let cached = cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner).get(&face.id()).copied();
++    let east_asian = match cached {
++        Some(v) => v,
++        None => {
++            let v = face.skrifa().and_then(|f| f.os2().ok()).and_then(|o| {
++                let pages = o.ul_code_page_range_1().unwrap_or(0);
++                east_asian_line(pages, f64::from(o.us_win_ascent()), f64::from(o.us_win_descent()), face.upem)
++            });
++            cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert(face.id(), v);
++            v
++        }
++    };
++    east_asian.unwrap_or_else(|| line_metrics(face))
++}
++
++/// [`text_line_metrics`] for an East Asian face: `None` for any other, or for win metrics that
++/// are missing or more than twice the em.
++fn east_asian_line(code_pages: u32, win_ascent: f64, win_descent: f64, upem: f64) -> Option<(f64, f64)> {
++    /// OS/2 ulCodePageRange1 bits 17–21: JIS/Japan, Chinese Simplified, Korean Wansung,
++    /// Chinese Traditional, Korean Johab.
++    const EAST_ASIAN: u32 = 0x003E_0000;
++    let total = win_ascent + win_descent;
++    if code_pages & EAST_ASIAN == 0 || win_ascent <= 0.0 || total > upem * 2.0 {
++        return None;
++    }
++    let extra = 0.15 * total;
++    Some((win_ascent + extra, win_descent + extra))
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn east_asian_faces_take_1_3_times_their_win_height() {
++        // SimSun (256 units: win 220 / 36, GB2312): 1.3 em, the extra 0.3 em split evenly.
++        let (a, d) = east_asian_line(0x0004_0001, 220.0, 36.0, 256.0).unwrap_or_default();
++        assert!(((a + d) / 256.0 - 1.3).abs() < 1e-9 && (a - (220.0 + 0.15 * 256.0)).abs() < 1e-9, "{a} {d}");
++        // Microsoft JhengHei (Big5 only), 1.33 em tall: 1.729 em.
++        let (a, d) = east_asian_line(0x0010_0009, 2179.0, 545.0, 2048.0).unwrap_or_default();
++        assert!(((a + d) / 2048.0 - 1.3 * 2724.0 / 2048.0).abs() < 1e-9);
++        // Latin faces (Times New Roman's code pages) and broken metrics keep the usual line.
++        assert_eq!(east_asian_line(0x4000_01ff, 1825.0, 443.0, 2048.0), None);
++        assert_eq!(east_asian_line(0x0004_0000, 0.0, 36.0, 256.0), None);
++        assert_eq!(east_asian_line(0x0004_0000, 600.0, 36.0, 256.0), None);
++    }
++
+     #[test]
+     fn the_line_gap_goes_above_the_ascent() {
+         // Times New Roman (hhea 1825 / -443, gap 87), and a font with a large gap: Word puts the
+diff --git a/crates/layout/src/para/builder.rs b/crates/layout/src/para/builder.rs
+index 1331e438..773cbbc0 100644
+--- a/crates/layout/src/para/builder.rs
++++ b/crates/layout/src/para/builder.rs
+@@ -123,7 +123,7 @@ impl<'a> Builder<'a> {
+         // the height Word gives it.
+         let (a, d) = match wordcraft_fonts::word::symbol_line(&rc.font, &r) {
+             Some((a, d)) => (a * face.upem, d * face.upem),
+-            None => wordcraft_fonts::word::line_metrics(&face),
++            None => wordcraft_fonts::word::text_line_metrics(&face),
+         };
+         let k = size as f64 / face.upem.max(1.0);
+         // A fallback face (letters the requested font lacks) is emboldened or slanted when it has

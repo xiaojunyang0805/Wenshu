@@ -1,0 +1,34 @@
+Upstream: (not opened; with 0010: *Chars side indents on a line grid count the Normal size even when the paragraph doesn't snap to the grid; F8)
+diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
+index c36524a6..b5549ae6 100644
+--- a/crates/layout/src/para/paragraph.rs
++++ b/crates/layout/src/para/paragraph.rs
+@@ -112,7 +112,9 @@ fn paragraph_props(p: &Paragraph, env: &ParaEnv) -> ResolvedPara {
+                 let cell = |size: f32| env.grid.advance(size).filter(|a| *a > 0.0).unwrap_or(pitch);
+                 rp.set_char_units(cell(text.max(size)), cell(text));
+             }
+-            (true, None, Some(_)) => rp.set_char_units(env.grid.font_size, size),
++            // Whether or not the paragraph snaps to the grid (`dc-policies-39de0888eb`: `snapToGrid=0`,
++            // `leftChars=413` beside 13 pt text is 4.13 × the 12 pt Normal size in WPS).
++            (_, None, Some(_)) => rp.set_char_units(env.grid.font_size, size),
+             _ => rp.set_char_unit(size),
+         }
+     }
+diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
+index aa7bff30..00d83b30 100644
+--- a/crates/layout/src/tests/grid.rs
++++ b/crates/layout/src/tests/grid.rs
+@@ -270,6 +270,13 @@ fn character_indents_on_a_line_grid_count_the_default_size_at_the_sides() {
+     let first = with(&|p| p.props.indent_first_chars = Some(2.0));
+     let indent = first.lines[0].xs[0] - first.lines[1].xs[0];
+     assert!((indent - 2.0 * mark).abs() < 0.01, "first-line indent {indent} for a {mark} pt mark");
++    // A paragraph that doesn't snap to the grid counts the same (WPS, `dc-policies-39de0888eb`).
++    let off = with(&|p| {
++        p.props.snap_to_grid = Some(false);
++        p.props.indent_left_chars = Some(2.0);
++    });
++    let off_base = with(&|p| p.props.snap_to_grid = Some(false));
++    assert!((off.lines[1].left - off_base.lines[1].left - 2.0 * normal).abs() < 0.01, "left without snapping {}", off.lines[1].left);
+ }
+ 
+ #[test]

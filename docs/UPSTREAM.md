@@ -52,6 +52,11 @@ longer applies, and running the fidelity corpus before and after.
 | 0018-layout-grid-whole-cells | wordcraft-layout | On a character grid a single-column section's text width is narrowed to whole pitches; a closing mark ending a line may reach into the rest (WPS, F14). Tests | not opened: WPS only so far; Word reference needed |
 | 0019-layout-balance-doubles-ea-spacing | wordcraft-layout | Under `balanceSingleByteDoubleByteWidth` an East Asian character counts `w:spacing` twice (per byte), a Latin letter once; on and off the character grid (WPS, F15). Test | not opened: belongs with 0009/0017 |
 | 0020-layout-squeeze-pool-last-unit-width | wordcraft-layout | The squeeze pool grows by what the last unit is wider than an em (mode 15: half that), instead of an em per mark in it: a line ending in `120` or `abc` squeezes an em (WPS, F16). Test | not opened: fold into #5006 |
+| 0021-layout-line-grid-chars-indent-snap-off | wordcraft-layout | On a line grid, `leftChars`/`rightChars` count the Normal size even when the paragraph has `snapToGrid=0` (WPS, F8 addendum). Test | not opened: with 0010 |
+| 0022-fonts-east-asian-line-height | wordcraft-fonts, -layout | Faces with an East Asian OS/2 code page take 1.3 × their win ascent + descent as a text line's height, the extra split evenly above and below (`word::text_line_metrics`; WPS, F17). Test | not opened: WPS measurement, Word unmeasured |
+| 0023-fonts-simsun-fallback | wordcraft-fonts | Chinese text no loaded font covers falls back to SimSun before Microsoft YaHei (WPS, F17). Test | not opened: WPS only |
+| 0024-layout-table-cells-no-line-grid | wordcraft-layout | Lines in table cells don't snap to the line grid, `adjustLineHeightInTable` or not (WPS, F18). Test | not opened: WPS measurement; Word documents the setting as snapping |
+| 0025-layout-grid-pitch-into-margin | wordcraft-layout | A single-spaced grid line's pitch below its text may run into the bottom margin, as multiple spacing's leading does (WPS, F18). Test | not opened: WPS only |
 
 All six apply in order on `3b7f7ed`; the `wordcraft-layout` (577), `-fonts` (102), `-doc` (242),
 `-docx` (500) and `-engine` (1094) suites pass with them, and fmt and clippy are clean.

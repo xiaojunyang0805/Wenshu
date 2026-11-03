@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 
 use image::{GrayImage, imageops::FilterType};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use wenshu_core::Doc;
 
 /// Luminance difference (0–255) below which two pixels count as equal (anti-aliasing noise).
@@ -19,7 +19,7 @@ pub const PIXEL_THRESHOLD: u8 = 48;
 
 const EXTENSIONS: &[&str] = &["docx", "doc", "odt", "rtf"];
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PageScore {
     pub page: usize,
     pub render: PathBuf,
@@ -27,7 +27,7 @@ pub struct PageScore {
     pub score: Option<f64>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct DocReport {
     pub file: PathBuf,
     pub pages: usize,
@@ -48,8 +48,22 @@ pub struct Report {
     pub failures: usize,
 }
 
-/// Run the corpus at `corpus` and write renders under `out`.
+/// Run the corpus at `corpus` and write renders under `out`, every document in this process.
 pub fn run(corpus: &Path, out: &Path, scale: f64) -> Result<Report, String> {
+    run_with(corpus, out, scale, run_one)
+}
+
+/// [`run`], laying each document out with `one` (file, reference folder, output folder, scale).
+/// A document's embedded fonts stay loaded for the rest of the process, where later documents
+/// asking for the same family would get the embedded subset; a caller that runs each document
+/// in a process of its own (as the `wenshu fidelity` command does) scores every document the
+/// way it renders when opened alone, as the references were made.
+pub fn run_with(
+    corpus: &Path,
+    out: &Path,
+    scale: f64,
+    one: impl Fn(&Path, &Path, &Path, f64) -> DocReport,
+) -> Result<Report, String> {
     let files_dir = corpus.join("files");
     let ref_dir = corpus.join("ref");
     let mut files: Vec<PathBuf> = std::fs::read_dir(&files_dir)
@@ -64,10 +78,7 @@ pub fn run(corpus: &Path, out: &Path, scale: f64) -> Result<Report, String> {
         .collect();
     files.sort();
     std::fs::create_dir_all(out).map_err(|e| e.to_string())?;
-    let documents: Vec<DocReport> = files
-        .iter()
-        .map(|f| run_one(f, &ref_dir, out, scale))
-        .collect();
+    let documents: Vec<DocReport> = files.iter().map(|f| one(f, &ref_dir, out, scale)).collect();
     let scores: Vec<f64> = documents
         .iter()
         .flat_map(|d| d.page_scores.iter().filter_map(|p| p.score))
@@ -88,7 +99,8 @@ pub fn run(corpus: &Path, out: &Path, scale: f64) -> Result<Report, String> {
     })
 }
 
-fn run_one(file: &Path, ref_dir: &Path, out: &Path, scale: f64) -> DocReport {
+/// Lay out, render and score one document (in this process).
+pub fn run_one(file: &Path, ref_dir: &Path, out: &Path, scale: f64) -> DocReport {
     let stem = file
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
