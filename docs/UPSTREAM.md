@@ -63,8 +63,9 @@ longer applies, and running the fidelity corpus before and after.
 | 0029-layout-grid-multiple-spacing | wordcraft-layout | Multiple spacing on a line grid takes the larger of the line's whole pitches and m pitches (`Grid::multiple_height`; WPS, F18). Test | not opened: WPS only |
 | 0030-fonts-missing-dfkai-line-box | wordcraft-fonts, -layout | DFKai-SB / 標楷體 not installed keeps its own 0.95 / 0.35 em line box under its substitute (`word::missing_font_line`; WPS, F17). Test | not opened: WPS only |
 
-All six apply in order on `3b7f7ed`; the `wordcraft-layout` (577), `-fonts` (102), `-doc` (242),
-`-docx` (500) and `-engine` (1094) suites pass with them, and fmt and clippy are clean.
+All 30 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-03); the
+`wordcraft-layout` (594), `-fonts` (108), `-doc` (242), `-docx` (370 + 134 integration) and
+`-engine` (1095) suites pass with them, and fmt and clippy are clean.
 
 **Review status (2026-10-31):** four CodeRabbit rounds; every thread resolved or answered, and the
 fourth round found nothing new. No human review yet: the PRs are still drafts. Upstream `main` is

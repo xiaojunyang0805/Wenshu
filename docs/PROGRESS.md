@@ -31,6 +31,15 @@ on the pin and reproduces the tested tree (0027 also builds without 0028).
 
 **Next:** the 7 documents above, by line-break diffs (`out/breakall.py`) against the 0030 build.
 
+**To resume:** build with `CARGO_TARGET_DIR=$PWD/eval/target/wordcraft cargo build --release -p
+wenshu-cli` (the current binary is `out/wenshu-o6.exe`, isolated scores in `out/fid-o6`); score
+with `wenshu fidelity corpus out/fid-X` (one process per document now) and compare with
+`python out/cmpfid.py fid-o6 fid-X`. Older binaries: `out/fidiso.py <absolute exe> corpus out/X`.
+Run one corpus score at a time (two at once ran the machine out of memory). WordCraft's own
+tests run from `upstream/wordcraft` with `CARGO_TARGET_DIR=…/eval/target/wc-up`. Probe
+generators for F17–F19 are in `corpus/tools/lh_probe_*.py`. Upstream PRs: 0019–0030 are not
+opened yet (see `docs/UPSTREAM.md`); 0027 is a plain bug fix worth offering first.
+
 ## 2026-11-03 (3): East Asian line height (F17), grids in tables (F18), harness isolation
 
 - **Harness:** `wenshu fidelity` now lays each document out in a process of its own (hidden
