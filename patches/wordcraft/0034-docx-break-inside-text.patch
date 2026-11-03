@@ -1,0 +1,65 @@
+Upstream: (not opened; reader fix: a w:br, w:cr or w:tab inside a w:t (against the schema, from some generators) breaks the line as WPS shows it; the text ran together)
+diff --git a/crates/docx/src/read/story/runs.rs b/crates/docx/src/read/story/runs.rs
+index 9dec4c5b..707fd4b9 100644
+--- a/crates/docx/src/read/story/runs.rs
++++ b/crates/docx/src/read/story/runs.rs
+@@ -166,6 +166,9 @@ impl Reader<'_> {
+             self.emit_obj(sc, pb, InlineObject::NoteRef { kind, id, custom: custom.unwrap_or_default() }, props);
+         }
+         match k.name.as_str() {
++            // A line break or tab inside the text element (`<w:t>苏州<w:br/>…</w:t>`, against the
++            // schema, from some generators) still breaks the line, as in WPS.
++            "w:t" | "w:delText" if has_inline_break(k) => self.emit_text_with_breaks(sc, pb, k, props),
+             "w:t" | "w:delText" => {
+                 let t = clean_text(&k.text());
+                 self.emit_text(sc, pb, &t, props);
+@@ -365,6 +368,22 @@ impl Reader<'_> {
+         self.emit_obj(sc, pb, obj, &bp);
+     }
+ 
++    /// A text element holding line breaks or tabs among its text (see [`has_inline_break`]):
++    /// its pieces in order. The breaks were dropped and the text ran together.
++    fn emit_text_with_breaks(&mut self, sc: &mut StoryCtx, pb: &mut PB, k: &El, props: &CharProps) {
++        for n in k.kids.iter().take(10_000) {
++            match n {
++                crate::xml::Node::Text(t) => self.emit_text(sc, pb, &clean_text(t), props),
++                crate::xml::Node::El(e) if matches!(e.name.as_str(), "w:br" | "w:cr") => self.emit_text(
++                    sc, pb, "
++", props,
++                ),
++                crate::xml::Node::El(e) if e.name == "w:tab" => self.emit_text(sc, pb, "	", props),
++                crate::xml::Node::El(_) => {}
++            }
++        }
++    }
++
+     pub(super) fn emit_text(&mut self, sc: &mut StoryCtx, pb: &mut PB, s: &str, props: &CharProps) {
+         match sink(sc) {
+             Some(f) => {
+@@ -387,3 +406,8 @@ impl Reader<'_> {
+         }
+     }
+ }
++
++/// Whether a text element holds a line break or tab among its text (`<w:t>a<w:br/>b</w:t>`).
++fn has_inline_break(k: &El) -> bool {
++    k.kids.iter().any(|n| matches!(n, crate::xml::Node::El(e) if matches!(e.name.as_str(), "w:br" | "w:cr" | "w:tab")))
++}
+diff --git a/crates/docx/tests/it/fixtures.rs b/crates/docx/tests/it/fixtures.rs
+index e51e0dda..c388b09f 100644
+--- a/crates/docx/tests/it/fixtures.rs
++++ b/crates/docx/tests/it/fixtures.rs
+@@ -4221,3 +4221,13 @@ fn vml_textbox_style_anchor_and_fit() {
+     assert_eq!(tb.body.anchor, wordcraft_doc::props::VAlign::Center);
+     assert!(tb.body.auto_fit);
+ }
++
++/// A line break or tab inside a text element (`<w:t>苏州-合肥<w:br/></w:t>`, against the schema,
++/// from a travel-itinerary generator) breaks the line as WPS shows it; the text ran together.
++#[test]
++fn a_break_inside_a_text_element_is_kept() {
++    let body = r#"<w:p><w:r><w:t xml:space="preserve">苏州-合肥<w:br/>早餐后<w:tab/>游览</w:t></w:r></w:p>"#;
++    let d = wordcraft_docx::read(&docx(body, &[], &[])).unwrap();
++    assert_eq!(paras(&d)[0].text, "苏州-合肥\n早餐后\t游览");
++}
++

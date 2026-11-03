@@ -1,0 +1,218 @@
+Upstream: (not opened; w:beforeLines / w:afterLines are read, written back and laid out: lines of the section line grid, 12 pt without one, overriding the spacing in points; 0 is ignored (WPS); they were dropped)
+diff --git a/crates/doc/src/props/para_props.rs b/crates/doc/src/props/para_props.rs
+index 29a8b868..e81a4319 100644
+--- a/crates/doc/src/props/para_props.rs
++++ b/crates/doc/src/props/para_props.rs
+@@ -281,6 +281,13 @@ pub struct ParaProps {
+     /// HTML-style automatic space after (`w:afterAutospacing`): 14 pt, none at the end of a cell.
+     #[serde(skip_serializing_if = "Option::is_none")]
+     pub space_after_auto: Option<bool>,
++    /// Space before in lines (`w:beforeLines`, hundredths of a line in the file): lines of the
++    /// section's line grid, or of 12 pt without one; it overrides `space_before` (WPS).
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub space_before_lines: Option<f32>,
++    /// Space after in lines (`w:afterLines`), like `space_before_lines`.
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub space_after_lines: Option<f32>,
+     #[serde(skip_serializing_if = "Option::is_none")]
+     pub line_spacing: Option<LineSpacing>,
+     /// Ignore space before/after between paragraphs of the same style.
+@@ -374,7 +381,7 @@ impl ParaProps {
+ 
+     fn overlay_layout(&mut self, patch: &ParaProps) {
+         overlay_fields!(self, patch; style, align, indent_left, indent_right, indent_first, indent_left_chars, indent_right_chars, indent_first_chars,
+-            space_before, space_after, space_before_auto, space_after_auto, line_spacing, contextual_spacing, mirror_indents, tabs, shading, borders);
++            space_before, space_after, space_before_auto, space_after_auto, space_before_lines, space_after_lines, line_spacing, contextual_spacing, mirror_indents, tabs, shading, borders);
+     }
+ 
+     fn overlay_pagination(&mut self, patch: &ParaProps) {
+diff --git a/crates/doc/src/resolve.rs b/crates/doc/src/resolve.rs
+index 012d32fc..5aaff432 100644
+--- a/crates/doc/src/resolve.rs
++++ b/crates/doc/src/resolve.rs
+@@ -174,6 +174,12 @@ pub struct ResolvedPara {
+     pub before_auto: bool,
+     #[serde(default)]
+     pub after_auto: bool,
++    /// `ParaProps::space_before_lines` / `space_after_lines`: the layout turns them into points
++    /// with the section's line pitch.
++    #[serde(default)]
++    pub before_lines: Option<f32>,
++    #[serde(default)]
++    pub after_lines: Option<f32>,
+     pub line_spacing: LineSpacing,
+     pub contextual_spacing: bool,
+     /// Left/right indents are inside/outside: they swap on even pages.
+@@ -265,6 +271,8 @@ impl ResolvedPara {
+             space_after: if p.space_after_auto == Some(true) { AUTO_SPACING } else { p.space_after.unwrap_or(0.0).clamp(0.0, 1584.0) },
+             before_auto: p.space_before_auto == Some(true),
+             after_auto: p.space_after_auto == Some(true),
++            before_lines: p.space_before_lines.filter(|v| v.is_finite()).map(|v| v.clamp(0.0, 100.0)),
++            after_lines: p.space_after_lines.filter(|v| v.is_finite()).map(|v| v.clamp(0.0, 100.0)),
+             line_spacing: match p.line_spacing.unwrap_or_default() {
+                 LineSpacing::Multiple(m) => LineSpacing::Multiple(if m.is_finite() { m.clamp(0.06, 132.0) } else { 1.0 }),
+                 LineSpacing::AtLeast(v) => LineSpacing::AtLeast(if v.is_finite() { v.clamp(0.0, 1584.0) } else { 0.0 }),
+diff --git a/crates/docx/src/read/props.rs b/crates/docx/src/read/props.rs
+index 26b3db8b..0e0eb53a 100644
+--- a/crates/docx/src/read/props.rs
++++ b/crates/docx/src/read/props.rs
+@@ -377,6 +377,16 @@ impl PropCtx {
+                     if let Some(v) = tw(k, "w:after") {
+                         p.space_after = Some(v.max(0.0));
+                     }
++                    // Spacing in hundredths of a line (`w:beforeLines`, `w:afterLines`).
++                    let lines = |name| {
++                        k.attr(name).and_then(|v| v.trim().parse::<f32>().ok()).filter(|v| v.is_finite()).map(|v| (v / 100.0).clamp(0.0, 100.0))
++                    };
++                    if let Some(v) = lines("w:beforeLines") {
++                        p.space_before_lines = Some(v);
++                    }
++                    if let Some(v) = lines("w:afterLines") {
++                        p.space_after_lines = Some(v);
++                    }
+                     // HTML-style automatic spacing; "0" switches an inherited one off.
+                     let auto = |name| k.attr(name).map(|v| matches!(v.trim(), "1" | "true" | "on"));
+                     if let Some(a) = auto("w:beforeAutospacing") {
+diff --git a/crates/docx/src/write/props.rs b/crates/docx/src/write/props.rs
+index 634ca39f..f238bbc1 100644
+--- a/crates/docx/src/write/props.rs
++++ b/crates/docx/src/write/props.rs
+@@ -377,6 +377,8 @@ fn write_text_flow(w: &mut W, p: &ParaProps) {
+ fn write_spacing(w: &mut W, p: &ParaProps) {
+     if p.space_before.is_some()
+         || p.space_after.is_some()
++        || p.space_before_lines.is_some()
++        || p.space_after_lines.is_some()
+         || p.line_spacing.is_some()
+         || p.space_before_auto.is_some()
+         || p.space_after_auto.is_some()
+@@ -388,16 +390,25 @@ fn write_spacing(w: &mut W, p: &ParaProps) {
+             LineSpacing::AtLeast(v) => (twips(v.abs()), "atLeast"),
+             LineSpacing::Exactly(v) => (twips(v.abs()), "exact"),
+         });
++        let lines = |v: Option<f32>| v.filter(|v| v.is_finite()).map(|v| n(round(v.clamp(0.0, 100.0) * 100.0)));
++        let (before_lines, after_lines) = (lines(p.space_before_lines), lines(p.space_after_lines));
+         let mut a: Vec<(&str, &str)> = Vec::new();
++        // CT_Spacing attribute order: before, beforeLines, beforeAutospacing, after, afterLines…
+         if let Some(b) = &before {
+             a.push(("w:before", b));
+         }
++        if let Some(b) = &before_lines {
++            a.push(("w:beforeLines", b));
++        }
+         if let Some(on) = p.space_before_auto {
+             a.push(("w:beforeAutospacing", if on { "1" } else { "0" }));
+         }
+         if let Some(x) = &after {
+             a.push(("w:after", x));
+         }
++        if let Some(x) = &after_lines {
++            a.push(("w:afterLines", x));
++        }
+         if let Some(on) = p.space_after_auto {
+             a.push(("w:afterAutospacing", if on { "1" } else { "0" }));
+         }
+diff --git a/crates/docx/tests/it/fixtures.rs b/crates/docx/tests/it/fixtures.rs
+index 44b65ab7..3fa782be 100644
+--- a/crates/docx/tests/it/fixtures.rs
++++ b/crates/docx/tests/it/fixtures.rs
+@@ -4255,3 +4255,17 @@ fn a_vml_text_box_with_empty_image_data_is_kept() {
+     assert_eq!(t2, t, "the text boxes survive a save");
+ }
+ 
++/// Spacing in lines (`w:beforeLines`/`w:afterLines`, hundredths of a line) is read and written
++/// back; it was dropped on save, and with it the space between WPS paragraphs that have no
++/// spacing in twips.
++#[test]
++fn spacing_in_lines_is_read_and_kept() {
++    let body =
++        r#"<w:p><w:pPr><w:spacing w:beforeLines="50" w:afterLines="25" w:line="300" w:lineRule="exact"/></w:pPr><w:r><w:t>x</w:t></w:r></w:p>"#;
++    let d = wordcraft_docx::read(&docx(body, &[], &[])).unwrap();
++    let p = &paras(&d)[0].props;
++    assert_eq!((p.space_before_lines, p.space_after_lines), (Some(0.5), Some(0.25)));
++    let again = wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap();
++    let q = &paras(&again)[0].props;
++    assert_eq!((q.space_before_lines, q.space_after_lines), (Some(0.5), Some(0.25)));
++}
+diff --git a/crates/docx/tests/it/roundtrip.rs b/crates/docx/tests/it/roundtrip.rs
+index f6466743..bf28f967 100644
+--- a/crates/docx/tests/it/roundtrip.rs
++++ b/crates/docx/tests/it/roundtrip.rs
+@@ -173,6 +173,8 @@ fn every_para_prop_round_trips() {
+         space_after: Some(12.0),
+         space_before_auto: Some(true),
+         space_after_auto: Some(false),
++        space_before_lines: Some(0.5),
++        space_after_lines: Some(0.25),
+         line_spacing: Some(LineSpacing::Multiple(1.5)),
+         contextual_spacing: Some(true),
+         mirror_indents: Some(true),
+diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
+index f8aa9822..52919a85 100644
+--- a/crates/layout/src/para/paragraph.rs
++++ b/crates/layout/src/para/paragraph.rs
+@@ -92,6 +92,17 @@ fn is_special(c: char) -> bool {
+ fn paragraph_props(p: &Paragraph, env: &ParaEnv) -> ResolvedPara {
+     let doc = env.doc;
+     let mut rp = doc.styles.resolve_para_in(&p.props, env.table.map(|t| &t.para));
++    // Spacing in lines (`w:beforeLines`/`w:afterLines`): lines of the section's line grid, 12 pt
++    // without one, in place of the spacing in points (WPS: `afterLines="100"` is 16.45 pt on a
++    // 329-twip grid, 31.2 on a 624-twip one, 12 pt with no grid, and overrides `w:after`).
++    let line = env.grid.line.filter(|l| l.is_finite() && *l > 0.0).unwrap_or(12.0);
++    // A count of 0 is ignored (WPS: `afterLines="0"` keeps the style's 20 pt after).
++    if let Some(n) = rp.before_lines.filter(|n| *n > 0.0 && !rp.before_auto) {
++        rp.space_before = (n * line).clamp(0.0, 1584.0);
++    }
++    if let Some(n) = rp.after_lines.filter(|n| *n > 0.0 && !rp.after_auto) {
++        rp.space_after = (n * line).clamp(0.0, 1584.0);
++    }
+     if let Some(spacing) = env.read_line_spacing.filter(|s| s.is_finite() && (1.0..=2.0).contains(s)) {
+         rp.line_spacing = wordcraft_doc::props::LineSpacing::Multiple(spacing);
+     }
+diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
+index 3ca9586c..c7632bf5 100644
+--- a/crates/layout/src/tests/grid.rs
++++ b/crates/layout/src/tests/grid.rs
+@@ -441,3 +441,42 @@ fn multiple_spacing_on_a_line_grid_takes_the_larger_of_the_pitches_and_m_pitches
+     assert!((height(30.0, 1.5) - big).abs() < 1e-3, "1.5 × 18 is less than its pitches: unchanged");
+     assert!((height(10.0, 2.5) - 45.0).abs() < 1e-3, "small text at 2.5 spacing takes 2.5 pitches ({})", height(10.0, 2.5));
+ }
++
++/// Spacing in lines is lines of the section's line grid, or of 12 pt without one, and overrides
++/// the spacing in points (WPS: `afterLines="100"` is 16.45 pt on a 329-twip grid, 12 pt without).
++#[test]
++fn spacing_in_lines_counts_grid_lines() {
++    let gap = |grid: bool| {
++        let mut d = if grid { with_grid("one\ntwo", DocGridType::Lines, 0) } else { with_grid("one\ntwo", DocGridType::Default, 0) };
++        if let Some(Block::Para(p)) = d.body.first_mut().map(std::sync::Arc::make_mut) {
++            p.props.space_after = Some(30.0);
++            p.props.space_after_lines = Some(1.0);
++        }
++        let l = lay(&d);
++        let ys: Vec<f32> = l.pages[0]
++            .items
++            .iter()
++            .filter_map(|i| if let Placed::Lines { y, para, l0, .. } = i { Some(y + para.lines[*l0].baseline - para.lines[*l0].top) } else { None })
++            .collect();
++        (ys[1] - ys[0], lines(&lay(&with_grid("one", if grid { DocGridType::Lines } else { DocGridType::Default }, 0))).1[0])
++    };
++    let (g, line) = gap(true);
++    assert!((g - line - 18.0).abs() < 0.01, "one grid line (18 pt) after, not 30: gap {g}, line {line}");
++    let (n, line) = gap(false);
++    assert!((n - line - 12.0).abs() < 0.01, "12 pt without a line grid: gap {n}, line {line}");
++    // A count of 0 leaves the spacing in points (WPS).
++    let mut d = with_grid(
++        "one
++two",
++        DocGridType::Lines,
++        0,
++    );
++    if let Some(Block::Para(p)) = d.body.first_mut().map(std::sync::Arc::make_mut) {
++        p.props.space_after = Some(30.0);
++        p.props.space_after_lines = Some(0.0);
++    }
++    let l = lay(&d);
++    let ps: Vec<_> =
++        l.pages[0].items.iter().filter_map(|i| if let Placed::Lines { para, .. } = i { Some(para.rp.space_after) } else { None }).collect();
++    assert!((ps[0] - 30.0).abs() < 0.01, "afterLines 0 keeps 30 pt: {}", ps[0]);
++}

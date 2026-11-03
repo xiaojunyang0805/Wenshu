@@ -64,9 +64,13 @@ longer applies, and running the fidelity corpus before and after.
 | 0030-fonts-missing-dfkai-line-box | wordcraft-fonts, -layout | DFKai-SB / 標楷體 not installed keeps its own 0.95 / 0.35 em line box under its substitute (`word::missing_font_line`; WPS, F17). Test | not opened: WPS only |
 | 0031-layout-wps-punctuation-rules | wordcraft-doc, -docx, -layout | Closing marks hang whole under `w:overflowPunct` in CJK-language text (off under `w:useAltKinsokuLineBreakRules`), adding to the squeeze; kerned text closes up adjacent full-width marks by half an em (`w:noPunctuationKerning` read); the middle dot binds its neighbours; `ResolvedChar::lang_ea` (WPS, F20). Tests | not opened: WPS measurements |
 | 0032-layout-wps-spacing-details | wordcraft-layout | Spaces take `w:spacing` twice under balance; a picture-only line has no descent; multiple spacing's leading may run into a tall footer (WPS, F21; two upstream tests now assert the WPS values). Tests | not opened: WPS measurements, Word differs on the last two |
+| 0033-fonts-embedded-names-scoped | wordcraft-fonts | Another document's embedded faces don't name families or styles for this one (`english_family`, the font lists); follows 0027. Test | not opened: bug fix, offer with 0027 |
+| 0034-docx-break-inside-text | wordcraft-docx | A `w:br`/`w:cr`/`w:tab` inside `w:t` breaks the line instead of being dropped. Test | not opened: reader robustness, a candidate upstream |
+| 0035-docx-vml-textbox-empty-imagedata | wordcraft-docx | A VML text box with an empty `v:imagedata` is read as a text box (it was dropped). Test | not opened: bug fix, a candidate upstream |
+| 0036-layout-spacing-in-lines | wordcraft-doc, -docx, -layout | `w:beforeLines`/`w:afterLines` read, written back and laid out in grid lines (12 pt without a grid), overriding points; 0 ignored (WPS, F22). Tests | not opened: read/write part is spec, the unit is WPS-measured |
 
-All 32 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-03); the
-`wordcraft-layout` (599), `-fonts` (108), `-doc` (242), `-docx` (370 + 134 integration) and
+All 36 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-03); the
+`wordcraft-layout` (600), `-fonts` (109), `-doc` (242), `-docx` (373 + 134 integration) and
 `-engine` (1095) suites pass with them, and fmt and clippy are clean.
 
 **Review status (2026-10-31):** four CodeRabbit rounds; every thread resolved or answered, and the

@@ -406,6 +406,18 @@ Patch 0031.
 
 Patch 0032.
 
+## F22. Spacing in lines; reader gaps the .docx round-trip exposed
+
+- `w:beforeLines` / `w:afterLines` (hundredths of a line) count lines of the section's line grid
+  (`afterLines="100"` is 16.45 pt on a 329-twip grid, 31.2 pt on 624) or 12 pt without one, and
+  override `w:before` / `w:after` (`after="400" afterLines="100"` is still 16.45 pt). A count of 0
+  is ignored (the style's spacing stays). They were neither read nor saved (patch 0036).
+- A `w:br` inside `w:t` (`<w:t>苏州-合肥<w:br/></w:t>`, against the schema, from a travel
+  itinerary generator) breaks the line in WPS (patch 0034). Three corpus documents gained their
+  missing page.
+- A VML text box carrying an empty `<v:imagedata o:title=""/>` (WPS writes one) is a text box; it
+  was dropped with its text, in groups too (patch 0035; `dc-policies-de24610147` had 220).
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

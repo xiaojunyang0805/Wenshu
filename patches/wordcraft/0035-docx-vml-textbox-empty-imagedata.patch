@@ -1,0 +1,51 @@
+Upstream: (not opened; reader fix: a VML text box carrying an empty v:imagedata (WPS writes one) is a text box; it was dropped with its text, in groups too, and lost on save)
+diff --git a/crates/docx/src/read/story/vml.rs b/crates/docx/src/read/story/vml.rs
+index 75faa2c9..a9ce7259 100644
+--- a/crates/docx/src/read/story/vml.rs
++++ b/crates/docx/src/read/story/vml.rs
+@@ -130,8 +130,11 @@ impl Reader<'_> {
+             }
+             None => vml_float(shape, style, sc.in_hf),
+         };
+-        if let Some(img) = shape.find("v:imagedata") {
+-            let id = img.attr("r:id").or_else(|| img.attr("r:pict"))?;
++        // A picture when its image data names one. WPS writes an empty `<v:imagedata o:title=""/>`
++        // in text boxes too: they are read as text boxes (they were dropped, text and all).
++        if let Some(img) = shape.find("v:imagedata")
++            && let Some(id) = img.attr("r:id").or_else(|| img.attr("r:pict"))
++        {
+             let media = self.media_for(rels, id)?;
+             let alt = shape.attr("alt").or_else(|| img.attr("o:title")).unwrap_or("").to_string();
+             return Some(InlineObject::Image { media, w, h, alt, float, crop: [0.0; 4], ole: None });
+diff --git a/crates/docx/tests/it/fixtures.rs b/crates/docx/tests/it/fixtures.rs
+index c388b09f..44b65ab7 100644
+--- a/crates/docx/tests/it/fixtures.rs
++++ b/crates/docx/tests/it/fixtures.rs
+@@ -4231,3 +4231,27 @@ fn a_break_inside_a_text_element_is_kept() {
+     assert_eq!(paras(&d)[0].text, "苏州-合肥\n早餐后\t游览");
+ }
+ 
++/// A VML text box that also carries an empty `<v:imagedata o:title=""/>` (WPS writes one) is a
++/// text box: it and its text were dropped, in a group too, and lost on save.
++#[test]
++fn a_vml_text_box_with_empty_image_data_is_kept() {
++    let group = r##"<w:p><w:r><w:pict><v:group style="width:200pt;height:50pt" coordsize="2000,500"><v:shape type="#_x0000_t202" style="position:absolute;left:0;top:0;width:2000;height:500" filled="f" stroked="f"><v:imagedata o:title=""/><v:textbox><w:txbxContent><w:p><w:r><w:t>国务院办公厅</w:t></w:r></w:p></w:txbxContent></v:textbox></v:shape></v:group></w:pict></w:r></w:p>"##;
++    let lone = r##"<w:p><w:r><w:pict><v:shape type="#_x0000_t202" style="width:100pt;height:30pt"><v:imagedata o:title=""/><v:textbox><w:txbxContent><w:p><w:r><w:t>单独文本框</w:t></w:r></w:p></w:txbxContent></v:textbox></v:shape></w:pict></w:r></w:p>"##;
++    let body = format!("{group}{lone}");
++    let texts = |d: &Document| -> Vec<String> {
++        d.parts
++            .values()
++            .filter(|p| p.kind == wordcraft_doc::PartKind::TextBox)
++            .flat_map(|p| p.blocks.iter().filter_map(|b| b.as_para()).map(|p| p.text.clone()))
++            .collect()
++    };
++    let d = wordcraft_docx::read(&docx(&body, &[], &[])).unwrap();
++    let mut t = texts(&d);
++    t.sort();
++    assert_eq!(t, ["单独文本框", "国务院办公厅"]);
++    let again = wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap();
++    let mut t2 = texts(&again);
++    t2.sort();
++    assert_eq!(t2, t, "the text boxes survive a save");
++}
++

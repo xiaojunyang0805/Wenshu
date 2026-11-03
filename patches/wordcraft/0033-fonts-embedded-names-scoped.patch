@@ -1,0 +1,77 @@
+Upstream: (not opened; bug fix, follows 0027: another document's embedded faces don't name families or styles for this one (an embedded 仿宋_GB2312 made the name look installed to the next document, which then drew it in the generic fallback))
+diff --git a/crates/fonts/src/fontdb/catalog.rs b/crates/fonts/src/fontdb/catalog.rs
+index 77da7697..0e0c4512 100644
+--- a/crates/fonts/src/fontdb/catalog.rs
++++ b/crates/fonts/src/fontdb/catalog.rs
+@@ -11,7 +11,7 @@ impl FontDb {
+     /// Word's font list, this holds each face's legacy family name too ("Roboto Light", "Inter
+     /// SemiBold"), which [`FontDb::face`] resolves to that face.
+     pub fn families(&self) -> Vec<String> {
+-        let mut v: Vec<String> = self.read_faces().iter().flat_map(|f| [f.family.clone(), f.legacy_family.clone()]).collect();
++        let mut v: Vec<String> = self.read_faces().iter().filter(|f| f.visible()).flat_map(|f| [f.family.clone(), f.legacy_family.clone()]).collect();
+         #[cfg(not(target_arch = "wasm32"))]
+         v.extend(self.read_catalog().iter().flat_map(|c| [c.family.clone(), c.legacy.clone()]));
+         v.sort_by_key(|a| a.to_lowercase());
+@@ -22,7 +22,7 @@ impl FontDb {
+     /// The installed Chinese, Japanese and Korean families (English names), for the Font dialog's
+     /// Asian text font list.
+     pub fn east_asian_families(&self) -> Vec<String> {
+-        let mut v: Vec<String> = self.read_faces().iter().filter(|f| f.is_east_asian()).map(|f| f.family.clone()).collect();
++        let mut v: Vec<String> = self.read_faces().iter().filter(|f| f.visible() && f.is_east_asian()).map(|f| f.family.clone()).collect();
+         #[cfg(not(target_arch = "wasm32"))]
+         v.extend(self.read_catalog().iter().filter(|c| c.east_asian).map(|c| c.family.clone()));
+         v.sort_by_key(|a| a.to_lowercase());
+@@ -42,7 +42,7 @@ impl FontDb {
+                 }
+             }
+         };
+-        for f in self.read_faces().iter() {
++        for f in self.read_faces().iter().filter(|f| f.visible()) {
+             add(&f.local_names);
+         }
+         #[cfg(not(target_arch = "wasm32"))]
+@@ -67,7 +67,9 @@ impl FontDb {
+     /// `family` as its English name. `None` for names no font has.
+     pub fn english_family(&self, family: &str) -> Option<String> {
+         let hit = |names: &[LocalName]| names.iter().find(|n| n.name.eq_ignore_ascii_case(family)).map(|n| n.english.clone());
+-        if let Some(e) = self.read_faces().iter().find_map(|f| hit(&f.local_names)) {
++        // Another document's embedded faces don't name families for this one (an embedded
++        // 仿宋_GB2312 made the name look installed to every later document).
++        if let Some(e) = self.read_faces().iter().filter(|f| f.visible()).find_map(|f| hit(&f.local_names)) {
+             return Some(e);
+         }
+         #[cfg(not(target_arch = "wasm32"))]
+@@ -95,7 +97,7 @@ impl FontDb {
+             v.extend(
+                 self.read_faces()
+                     .iter()
+-                    .filter(|f| named(&f.family, &f.legacy_family) && !f.style.contains('{'))
++                    .filter(|f| f.visible() && named(&f.family, &f.legacy_family) && !f.style.contains('{'))
+                     .map(|f| (f.italic, f.weight, f.style.clone())),
+             );
+             #[cfg(not(target_arch = "wasm32"))]
+diff --git a/crates/fonts/src/fontdb/tests/sysfonts.rs b/crates/fonts/src/fontdb/tests/sysfonts.rs
+index 95edb49d..628abf66 100644
+--- a/crates/fonts/src/fontdb/tests/sysfonts.rs
++++ b/crates/fonts/src/fontdb/tests/sysfonts.rs
+@@ -758,3 +758,20 @@ fn a_documents_copy_of_an_installed_font_does_not_stop_it_loading() {
+     }
+     let _ = std::fs::remove_dir_all(dir);
+ }
++
++/// A document's embedded font that has a localized name (an embedded 仿宋_GB2312) names that
++/// family only for its own document: to another, the localized name stays unknown, so the
++/// family is substituted as if nothing were embedded (it resolved to the generic fallback, and
++/// 仿宋_GB2312 text in a document opened next drew in a sans).
++#[test]
++fn an_embedded_fonts_localized_name_is_its_documents_only() {
++    let db = FontDb::with_font_dirs(Vec::new());
++    db.set_system_fallback(false);
++    let song = with_family_names("SourceSans3-Regular.ttf", &[(0x0409, "Songti Test"), (0x0804, "测试宋体")]);
++    let owner = crate::DocumentFonts::new_owner();
++    db.add_document_fonts(vec![(song, "测试宋体".to_string())], owner);
++    assert_eq!(db.english_family("测试宋体"), None, "another document doesn't see the embedded font's names");
++    assert!(!db.has_family("测试宋体"));
++    let _doc = crate::DocumentFonts::enter(owner);
++    assert!(db.has_family("测试宋体"), "its own document does");
++}

@@ -2,6 +2,31 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-03 (6): M2 — desktop smoke test, the .docx round-trip (J5)
+
+- **Desktop smoke test** (`corpus/tools/desktop_smoke.py`, control channel): five corpus
+  documents open in one session with the CLI's page counts, typing, Save As and reopen work. It
+  found an app bug the isolated CLI hid: after a document embedding 仿宋_GB2312 was opened,
+  another document's 仿宋_GB2312 text drew in a sans (the embedded face's localized name made the
+  family look installed). Fixed: patch 0033; the same document now renders identically before
+  and after.
+- **J5 measured** (`corpus/tools/roundtrip.py`): every corpus document saved by Wenshu, rendered
+  by WPS, compared with WPS's render of the original. Three reader gaps found and fixed on the
+  way, each also a fidelity gain: breaks inside `w:t` (0034), VML text boxes with an empty
+  `v:imagedata` (0035), spacing in lines `w:beforeLines`/`w:afterLines` (0036, F22).
+  Now: WPS opens all 200 saves; **page count unchanged 197 / 200**, mean page score saved vs
+  original **0.993**, 160 pixel-identical; tables kept 200 / 200; East Asian font names 199 / 200;
+  text identical 175 / 200 (most of the rest are hyperlink fields written as hyperlinks, which my
+  comparison counts as a change). The three page changes (`aa1a5e719d`, `29a7772dfb`,
+  `ef14cd2f88`) are documents Wenshu itself lays out a page off.
+- **Fidelity:** 163 → **166 / 200**, mean 0.9348 → 0.9354 (the three itinerary documents).
+
+Tests: layout 600, fonts 109, doc 242, docx 373 + 134, engine 1095; fmt and clippy clean; the
+queue 0001–0036 applies on the pin and reproduces the tested tree.
+
+**Next (M2):** J4 (PDF export across the corpus: embedded fonts, selectable text); release
+v0.1.2; offer 0027 + 0033 upstream; then the J5 text differences one by one.
+
 ## 2026-11-03 (5): the seven remaining documents (F20, F21)
 
 Line-break diffs against WPS (`out/breakdiff2.py`, tolerant of symbol and right-to-left text;
