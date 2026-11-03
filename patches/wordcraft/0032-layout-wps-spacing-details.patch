@@ -1,0 +1,175 @@
+Upstream: (not opened; WPS measurements, F21: under balanceSingleByteDoubleByteWidth a space counts w:spacing twice; a line of only pictures has no descent; multiple spacing's leading may run into a footer taller than the bottom margin)
+diff --git a/crates/layout/src/flow.rs b/crates/layout/src/flow.rs
+index de485f12..fe923259 100644
+--- a/crates/layout/src/flow.rs
++++ b/crates/layout/src/flow.rs
+@@ -634,10 +634,12 @@ fn notes_limit(pb: &PageBuilder, new_notes: &[NoteBox], line_notes: &[NoteBox])
+ /// text ending 1 pt above the margin and its pitches 4.2 pt below it). Other single-spaced
+ /// lines end with their text, so this changes nothing for them.
+ fn fit_height(pb: &PageBuilder, l: &para::Line, rp: &wordcraft_doc::resolve::ResolvedPara, free: bool) -> f32 {
+-    let at_margin = pb.bottom >= pb.sect.page_h - pb.sect.margin_bottom - 0.01;
++    // WPS lets the leading run into a footer taller than the bottom margin too (`dc-educational-
++    // be4a26d95e`: a double-spaced line whose text ends 5 pt above the footer's first line).
++    let _ = pb;
+     match rp.line_spacing {
+         // `baseline` is from the paragraph's top; the text ends a descent below it.
+-        wordcraft_doc::props::LineSpacing::Multiple(m) if m >= 1.0 && at_margin && free => (l.baseline - l.top + l.text_desc).clamp(0.0, l.height),
++        wordcraft_doc::props::LineSpacing::Multiple(m) if m >= 1.0 && free => (l.baseline - l.top + l.text_desc).clamp(0.0, l.height),
+         _ => l.height,
+     }
+ }
+diff --git a/crates/layout/src/para/builder.rs b/crates/layout/src/para/builder.rs
+index f7f0211f..4f22ff0c 100644
+--- a/crates/layout/src/para/builder.rs
++++ b/crates/layout/src/para/builder.rs
+@@ -340,9 +340,10 @@ impl<'a> Builder<'a> {
+                 });
+                 // `balanceSingleByteDoubleByteWidth`: a space is half an em, whatever its font.
+                 let adv = if s == " " && self.env.doc.settings.balance_sbcs_dbcs { st.size * 0.5 * hscale } else { adv };
+-                // It also counts character spacing (`w:spacing`) per byte: twice for an East
+-                // Asian (double-byte) character, once for the rest (WPS Office, F15).
+-                let doubled = self.env.doc.settings.balance_sbcs_dbcs && super::grid::is_east_asian(ch);
++                // It also counts character spacing (`w:spacing`) twice for an East Asian
++                // (double-byte) character and for a space, as wide as half of one, once for the
++                // rest (WPS Office, F15: at -1 pt a 14 pt space is 7 - 2 = 5 pt).
++                let doubled = self.env.doc.settings.balance_sbcs_dbcs && (super::grid::is_east_asian(ch) || s == " ");
+                 let adv = if kind == ClKind::Marker { 0.0 } else { adv + rc.spacing * if doubled { 2.0 } else { 1.0 } };
+                 // Clusters index the document text, never the displayed text.
+                 let (cs, ce) = if substituted { remap_range(&map_starts, &orig_of, sub.len(), gs, ge) } else { (gs, ge) };
+diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
+index cf03c5d5..f89cfd9c 100644
+--- a/crates/layout/src/para/lines.rs
++++ b/crates/layout/src/para/lines.rs
+@@ -415,7 +415,7 @@ impl<'e> Breaker<'e> {
+     /// tallest picture on it (which sits on the baseline).
+     fn extents(&self, pl: &ParaLayout, (c0, c1): (usize, usize)) -> Extents {
+         let rp = &self.rp;
+-        let mut ex = Extents { asc: 0.0, desc: 0.0, obj_asc: 0.0 };
++        let mut ex = Extents { asc: 0.0, desc: 0.0, obj_asc: 0.0, text: false };
+         let mut any = false;
+         let dropped = pl.drop_cap.map_or(0, |d| d.0);
+         for (k, c) in pl.clusters.get(c0..c1).into_iter().flatten().enumerate() {
+@@ -441,6 +441,7 @@ impl<'e> Breaker<'e> {
+                 }
+             } else {
+                 // `obj_h` is set on text clusters only under ruby text, which the line grows to fit.
++                ex.text = true;
+                 let (a, d) = st.line_extent();
+                 (a.max(c.obj_h + st.shift), d)
+             };
+@@ -460,7 +461,13 @@ impl<'e> Breaker<'e> {
+     /// The line's height, baseline and text extent.
+     fn measure(&self, pl: &ParaLayout, range: (usize, usize)) -> Measure {
+         let rp = &self.rp;
+-        let Extents { mut asc, mut desc, obj_asc } = self.extents(pl, range);
++        let Extents { mut asc, mut desc, obj_asc, text } = self.extents(pl, range);
++        // A line of only pictures is as tall as its tallest picture: nothing below the baseline
++        // (WPS: a 60 pt picture alone on a single-spaced line takes 60 pt, whatever the paragraph
++        // mark's font and size).
++        if !text && obj_asc > 0.0 {
++            desc = 0.0;
++        }
+         let text_natural = asc + desc;
+         let (text_asc, text_desc) = (asc.max(obj_asc), desc);
+         let text_pictures = if obj_asc > asc { obj_asc + desc } else { 0.0 };
+@@ -659,6 +666,8 @@ struct Extents {
+     asc: f32,
+     desc: f32,
+     obj_asc: f32,
++    /// The line has text, not only pictures.
++    text: bool,
+ }
+ 
+ /// A line's height and baseline, and the extent of its text.
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+index c52580c6..6deab289 100644
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -4816,9 +4816,9 @@ fn line_spacing_does_not_scale_pictures() {
+     let l = lay(&d);
+     let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
+     let line = &para.lines[0];
+-    let desc = para.styles[0].descent;
+-    // Word: the picture plus the font's descent, not (picture + descent) x 1.15.
+-    assert!((line.height - (144.0 + desc)).abs() < 0.01, "line {} for a 144pt picture (descent {desc})", line.height);
++    // WPS: a line of only a picture is the picture's height, not scaled by 1.15 and with no
++    // descent below it (Word adds the font's descent).
++    assert!((line.height - 144.0).abs() < 0.01, "line {} for a 144pt picture", line.height);
+     assert!((line.baseline - line.top - 144.0).abs() < 0.01, "the picture stands on the baseline");
+ }
+ 
+@@ -4875,8 +4875,8 @@ fn list_label_does_not_inflate_an_inline_picture_floor() {
+         let l = lay(&d);
+         let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
+         let line = &para.lines[0];
+-        let desc = para.styles[para.clusters[0].style as usize].descent;
+-        assert!((line.height - (144.0 + desc)).abs() < 0.01, "{spacing:?}: {}", line.height);
++        // The picture alone sets the line (WPS: no descent below it).
++        assert!((line.height - 144.0).abs() < 0.01, "{spacing:?}: {}", line.height);
+         assert!((line.baseline - line.top - 144.0).abs() < 0.01);
+     }
+ }
+@@ -12128,5 +12128,8 @@ fn balanced_single_byte_width_doubles_east_asian_character_spacing() {
+         let want = if balance { -0.6 } else { -0.3 };
+         assert!((cjk - want).abs() < 0.01, "balance {balance}: 中 changes by {cjk}");
+         assert!((latin + 0.3).abs() < 0.01, "balance {balance}: H changes by {latin}");
++        // A space, half an em under balance, counts it twice too (WPS: 7 - 2 = 5 pt at 14 pt, -1 pt).
++        let space = adv(" 中", -0.3, balance) - adv(" 中", 0.0, balance);
++        assert!((space - want).abs() < 0.01, "balance {balance}: a space changes by {space}");
+     }
+ }
+diff --git a/crates/layout/src/tests/pages.rs b/crates/layout/src/tests/pages.rs
+index c211f33c..93e410af 100644
+--- a/crates/layout/src/tests/pages.rs
++++ b/crates/layout/src/tests/pages.rs
+@@ -159,8 +159,14 @@ fn outside_floating_tables_swap_sides_on_even_pages() {
+ 
+ #[test]
+ fn a_tall_footer_pushes_the_body_up() {
+-    // #453: an eight-line footer reaches far above the 72pt bottom margin.
++    // #453: an eight-line footer reaches far above the 72pt bottom margin. Single-spaced body
++    // lines: multiple spacing's leading below the text may run into the footer (WPS).
+     let mut d = Document::from_text(&"Body line\n".repeat(60));
++    for b in d.body.iter_mut() {
++        if let Block::Para(p) = Arc::make_mut(b) {
++            p.props.line_spacing = Some(wordcraft_doc::props::LineSpacing::Multiple(1.0));
++        }
++    }
+     let id = d.add_part(PartKind::Footer, paras("Footer line", 8));
+     d.last_section.footers.default = Some(id);
+     let l = lay(&d);
+@@ -612,3 +618,34 @@ fn a_page_ends_when_a_multiple_spaced_lines_text_no_longer_fits() {
+         assert!(past_margin > 0, "{multiple}: some shift should leave the last line's leading past the margin");
+     }
+ }
++
++#[test]
++fn a_multiple_spaced_lines_leading_may_run_into_a_tall_footer() {
++    // WPS: with a footer taller than the bottom margin, a double-spaced page's last line stays
++    // while its text clears the footer, its leading reaching into it; its text never does.
++    use wordcraft_doc::props::LineSpacing;
++    let mut d = Document::from_text(&"Body line\n".repeat(60));
++    for b in d.body.iter_mut() {
++        if let wordcraft_doc::Block::Para(p) = Arc::make_mut(b) {
++            p.props.line_spacing = Some(LineSpacing::Multiple(2.0));
++            p.props.space_after = Some(0.0);
++        }
++    }
++    let id = d.add_part(PartKind::Footer, paras("Footer line", 8));
++    d.last_section.footers.default = Some(id);
++    let l = lay(&d);
++    let mut leading_in_footer = false;
++    for (i, p) in l.pages.iter().enumerate().take(l.pages.len().saturating_sub(1)) {
++        let (top, _) = extent(&p.footer, StoryRef::Part(id)).unwrap();
++        let Some(Placed::Lines { y, para, l0, l1, .. }) = p.items.iter().rev().find(|it| matches!(it, Placed::Lines { story: StoryRef::Body, .. }))
++        else {
++            panic!()
++        };
++        let last = &para.lines[*l1 - 1];
++        let line_top = y + last.top - para.lines[*l0].top;
++        let text_end = line_top + (last.baseline - last.top) + last.text_desc;
++        assert!(text_end <= top + 0.01, "page {i}: the text ends at {text_end}, below the footer at {top}");
++        leading_in_footer |= line_top + last.height > top + 0.01;
++    }
++    assert!(leading_in_footer, "some page's last line has its leading in the footer");
++}

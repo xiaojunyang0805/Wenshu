@@ -366,12 +366,59 @@ Probe (no `styles.xml`, no run formatting): WPS lays the text out single-spaced 
 after paragraphs, in 10.5 pt Calibri (Latin) and 宋体 (Chinese). Wenshu took a new document's
 styles (12 pt, 1.15 spacing, 8 pt after). Patch 0026.
 
+## F20. Hanging punctuation, punctuation kerning, the middle dot
+
+Found through the seven documents 0021–0025 had left a page or two off; each rule probed in WPS
+(16 pt 仿宋 / 12 pt 宋体 lines swept across widths, documents cut down to one paragraph and
+bisected by settings, styles and properties).
+
+- **Hanging:** under `w:overflowPunct` (on unless turned off), a closing mark ending a line of
+  text whose East Asian language is Chinese, Japanese or Korean hangs **whole** past the margin,
+  compressed or not (34 characters and a `，` fit 34 em; ，。、）」”：！ alike). The language may
+  come from the run, the paragraph or the document defaults; text tagged en-US (or untagged with
+  no default) keeps F1's half. `w:useAltKinsokuLineBreakRules` (in `w:compat`) turns hanging off.
+  The hang adds to what the line's other marks squeeze (`…协议、协调意见、`). F1's probes had no
+  language, which is why they never showed it. Cause of `dc-administrative-f9e6e0e0e6` and
+  `dc-policies-b6747d9df3` lines one character short.
+- **Punctuation kerning:** kerned text (`w:kern` at or below the size) closes up two adjacent
+  full-width marks by **half an em**, compressed or not, unless the document says
+  `w:noPunctuationKerning`: the first mark's blank right half (`》《` `）。` `，《` `。。`), else the
+  second's left half after an opening mark (`（《` `（（`). Curly quotes take no part (`）“`
+  `”《`). Compression may squeeze the pair further on a full line. F1's "pairs keep their full
+  advances" holds for unkerned text. (`b6747d9df3`'s Normal style kerns.)
+- **Middle dot:** U+00B7 between East Asian characters binds both neighbours (`艾布·达伍德`:
+  WPS moves `布·达` to the next line whole). With F16 that also widens the squeeze pool of a line
+  ending in such a name (`dc-educational-be4a26d95e`).
+
+Patch 0031.
+
+## F21. Spaces under balance, picture lines, leading into a tall footer
+
+- Under `balanceSingleByteDoubleByteWidth` a space (half an em, F7) takes `w:spacing` **twice**,
+  like an East Asian character (F15): at −1 pt a 14 pt space is 7 − 2 = 5 pt. A 版记 line with 21
+  spaces lost its last character to a new page (`b6747d9df3`).
+- A line of only pictures is the picture's height: no descent below it, whatever the paragraph
+  mark's font and size (a 60 pt picture alone takes 60 pt, where Word adds the font's descent).
+  `f9e6e0e0e6`'s title table had two such lines and ran 7 pt taller.
+- Multiple spacing's leading below the text may run into a **footer taller than the bottom
+  margin**, not only into the margin; only the text must clear the footer (probes with one- and
+  four-line footers, single and double spacing). Word keeps the whole line clear.
+
+Patch 0032.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).
 - How the squeeze interacts with justification (`jc=both`) and kinsoku.
 - `w:topLinePunct` (F5).
 - `*Chars` indents with no document grid at all (F8 covers line grids).
+- Whether an opening mark may overhang the margin with kinsoku off (`dc-policies-ea10dc7972`'s
+  `根据《` line ends 4 pt past where the line above stopped), and the curly quote “ breaking
+  after it with kinsoku off.
+- The automatic space beside Latin text and digits under `w:spacing` (WPS: about a quarter of
+  the size plus twice the spacing, 3.0 pt at −1 pt and 4.0 at +1 for 14 pt; Wenshu keeps 3.5).
+- Justified Chinese lines: WPS stretches every character; Wenshu leaves them unstretched (no
+  effect on breaks).
 - F12 on justified mode-15 lines beyond the line-end cases (the closing-opening line measured
   1.8 em there), and marks of mixed sizes on one line.
 - Where at-least spacing puts the baseline when the minimum is larger than the text (F6 covers

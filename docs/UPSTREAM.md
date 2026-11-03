@@ -62,9 +62,11 @@ longer applies, and running the fidelity corpus before and after.
 | 0028-fonts-cjk-fallback-prefers-simsun | wordcraft-fonts | Chinese characters a run's font lacks fall back to SimSun first, loading it when installed, before faces loaded for other reasons (WPS, F17). Test | not opened: WPS only |
 | 0029-layout-grid-multiple-spacing | wordcraft-layout | Multiple spacing on a line grid takes the larger of the line's whole pitches and m pitches (`Grid::multiple_height`; WPS, F18). Test | not opened: WPS only |
 | 0030-fonts-missing-dfkai-line-box | wordcraft-fonts, -layout | DFKai-SB / 標楷體 not installed keeps its own 0.95 / 0.35 em line box under its substitute (`word::missing_font_line`; WPS, F17). Test | not opened: WPS only |
+| 0031-layout-wps-punctuation-rules | wordcraft-doc, -docx, -layout | Closing marks hang whole under `w:overflowPunct` in CJK-language text (off under `w:useAltKinsokuLineBreakRules`), adding to the squeeze; kerned text closes up adjacent full-width marks by half an em (`w:noPunctuationKerning` read); the middle dot binds its neighbours; `ResolvedChar::lang_ea` (WPS, F20). Tests | not opened: WPS measurements |
+| 0032-layout-wps-spacing-details | wordcraft-layout | Spaces take `w:spacing` twice under balance; a picture-only line has no descent; multiple spacing's leading may run into a tall footer (WPS, F21; two upstream tests now assert the WPS values). Tests | not opened: WPS measurements, Word differs on the last two |
 
-All 30 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-03); the
-`wordcraft-layout` (594), `-fonts` (108), `-doc` (242), `-docx` (370 + 134 integration) and
+All 32 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-03); the
+`wordcraft-layout` (599), `-fonts` (108), `-doc` (242), `-docx` (370 + 134 integration) and
 `-engine` (1095) suites pass with them, and fmt and clippy are clean.
 
 **Review status (2026-10-31):** four CodeRabbit rounds; every thread resolved or answered, and the

@@ -1,0 +1,449 @@
+Upstream: (not opened; WPS measurements, F20: a closing mark ending a line of Chinese/Japanese/Korean text hangs whole under w:overflowPunct, beside what the marks before it squeeze, unless w:useAltKinsokuLineBreakRules; kerned text closes up adjacent full-width marks by half an em unless w:noPunctuationKerning; the middle dot of 艾布·达伍德 binds its neighbours)
+diff --git a/crates/doc/src/resolve.rs b/crates/doc/src/resolve.rs
+index aaa94017..012d32fc 100644
+--- a/crates/doc/src/resolve.rs
++++ b/crates/doc/src/resolve.rs
+@@ -68,6 +68,9 @@ pub struct ResolvedChar {
+     /// East Asian font (Chinese, Japanese and Korean text), when one is set.
+     #[serde(skip_serializing_if = "Option::is_none")]
+     pub font_ea: Option<String>,
++    /// The language of the run's East Asian text (`w:lang/@w:eastAsia`), when one is set.
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub lang_ea: Option<String>,
+     /// Characters of ambiguous script (curly quotes, dashes, ellipses…) use `font_ea`
+     /// (`w:hint="eastAsia"`).
+     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+@@ -117,6 +120,7 @@ impl ResolvedChar {
+             cs: c.cs.unwrap_or(false),
+             font_cs: c.font_cs.clone().or_else(|| c.font.clone()).unwrap_or_else(|| crate::styles::BODY_FONT.to_string()),
+             font_ea: c.font_ea.clone(),
++            lang_ea: c.lang_ea.clone(),
+             hint_ea: c.hint_ea.unwrap_or(false),
+             size_cs: c.size_cs.or(c.size).unwrap_or(crate::props::DEFAULT_FONT_SIZE).clamp(1.0, 1638.0),
+             bold_cs: c.bold_cs.or(c.bold).unwrap_or(false),
+diff --git a/crates/doc/src/settings.rs b/crates/doc/src/settings.rs
+index 3e4199ec..edc08131 100644
+--- a/crates/doc/src/settings.rs
++++ b/crates/doc/src/settings.rs
+@@ -139,6 +139,15 @@ pub struct Settings {
+     /// body's do; without it they keep their own heights (WPS Office, modes 14 and 15).
+     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+     pub adjust_line_height_in_table: bool,
++    /// `w:noPunctuationKerning`: kerned text (`w:kern`) leaves adjacent full-width punctuation
++    /// alone; without it WPS closes such pairs up by half an em. Read only: the settings merge
++    /// keeps the element on save.
++    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
++    pub no_punctuation_kerning: bool,
++    /// `w:useAltKinsokuLineBreakRules` (in `w:compat`): with it WPS hangs no closing mark past the
++    /// margin (`w:overflowPunct` does nothing). Read only: the settings merge keeps `w:compat`.
++    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
++    pub alt_kinsoku: bool,
+     /// Keep contextual paragraph spacing inside legacy table cells (`allowSpaceOfSameStyleInTable`).
+     /// Word ignores the layout override in compatibility mode 15, but the flag still round-trips.
+     pub allow_space_of_same_style_in_table: bool,
+@@ -350,6 +359,8 @@ impl Default for Settings {
+             do_not_expand_shift_return: false,
+             balance_sbcs_dbcs: false,
+             adjust_line_height_in_table: false,
++            no_punctuation_kerning: false,
++            alt_kinsoku: false,
+             allow_space_of_same_style_in_table: false,
+             grid_h: DEFAULT_GRID,
+             grid_v: DEFAULT_GRID,
+diff --git a/crates/docx/src/read/meta.rs b/crates/docx/src/read/meta.rs
+index c6d8d449..2a264324 100644
+--- a/crates/docx/src/read/meta.rs
++++ b/crates/docx/src/read/meta.rs
+@@ -41,9 +41,11 @@ impl Reader<'_> {
+                     s.do_not_expand_shift_return = k.children("w:doNotExpandShiftReturn").any(on_off);
+                     s.balance_sbcs_dbcs = k.children("w:balanceSingleByteDoubleByteWidth").any(on_off);
+                     s.adjust_line_height_in_table = k.children("w:adjustLineHeightInTable").any(on_off);
++                    s.alt_kinsoku = k.children("w:useAltKinsokuLineBreakRules").any(on_off);
+                 }
+                 "w:trackRevisions" => s.track_changes = on_off(k),
+                 "w:doNotTrackMoves" => s.track_moves = !on_off(k),
++                "w:noPunctuationKerning" => s.no_punctuation_kerning = on_off(k),
+                 "w:defaultTabStop" => {
+                     if let Some(v) = tw(k, "w:val").filter(|v| *v > 0.0) {
+                         s.default_tab = v.clamp(1.0, 1584.0);
+diff --git a/crates/layout/src/kinsoku.rs b/crates/layout/src/kinsoku.rs
+index c8e59847..2fbfcce3 100644
+--- a/crates/layout/src/kinsoku.rs
++++ b/crates/layout/src/kinsoku.rs
+@@ -20,12 +20,13 @@ use unicode_segmentation::UnicodeSegmentation;
+ /// East Asian characters a line may not start with: closing brackets and quotes (the curly ” ’
+ /// too: Unicode 15.1's LB19a lets a line break before them beside East Asian text), the
+ /// ideographic comma and full stop, fullwidth and halfwidth punctuation, the middle dot,
+-/// iteration and sound marks, and the per-mille and Celsius signs (GB/T 15834, W3C clreq).
+-const NO_START: &str = "、。，．・：；？！゛゜ヽヾゝゞ々〻〉》」』】〕〗〙〛〞〟）］｝｠｡｣､･ﾞﾟ％￠”’〃〆‰℃﹚﹜";
++/// iteration and sound marks, the per-mille and Celsius signs (GB/T 15834, W3C clreq), and the
++/// middle dot of transliterated names (`艾布·达伍德`: WPS keeps `布·达` together).
++const NO_START: &str = "、。，．・：；？！゛゜ヽヾゝゞ々〻〉》」』】〕〗〙〛〞〟）］｝｠｡｣､･ﾞﾟ％￠”’〃〆‰℃﹚﹜·";
+ 
+ /// East Asian characters a line may not end with: opening brackets and quotes (the curly “ ‘
+-/// too, as for [`NO_START`]), currency signs.
+-const NO_END: &str = "〈《「『【〔〖〘〚〝（［｛｟｢＄￡￥“‘﹙﹛";
++/// too, as for [`NO_START`]), currency signs, and the middle dot (see [`NO_START`]).
++const NO_END: &str = "〈《「『【〔〖〘〚〝（［｛｟｢＄￡￥“‘﹙﹛·";
+ 
+ /// Full-width marks whose blank right half may shrink under punctuation compression: closing
+ /// brackets and quotes, and the comma, full stop, colon, semicolon and exclamation mark. Measured
+@@ -39,6 +40,45 @@ const SQUEEZE_LEFT: &str = "（〔［｛〈《「『【〘〖〚〝｟“‘";
+ /// [`SQUEEZE_RIGHT`] but the curly quotes and the middle dot (measured in WPS).
+ const END_BLANK: &str = "。，、：；！．）〕］｝〉》」』】〙〗〛〞〟｠";
+ 
++/// Marks whose blank right half punctuation kerning takes when another mark follows: those of
++/// [`SQUEEZE_RIGHT`] but the curly quotes and the middle dot.
++const KERN_RIGHT: &str = "。，、：；！．）〕］｝〉》」』】〙〗〛〞〟｠";
++
++/// Marks whose blank left half punctuation kerning takes after an opening mark: those of
++/// [`SQUEEZE_LEFT`] but the curly quotes.
++const KERN_LEFT: &str = "（〔［｛〈《「『【〘〖〚〝｟";
++
++/// Which blank punctuation kerning (`w:kern` without `w:noPunctuationKerning`) closes up between
++/// adjacent full-width marks `a` and `b`, by half an em: `a`'s right half when it has one and `b`
++/// is a mark too (`》《` `）。` `，《` `。。`), else `b`'s left half after an opening mark (`（《`
++/// `（（`). Curly quotes take no part (`）“` `”《` stay). Measured in WPS.
++pub fn kern_side(a: char, b: char) -> Option<Side> {
++    let mark = |c: char| KERN_RIGHT.contains(c) || KERN_LEFT.contains(c);
++    if KERN_RIGHT.contains(a) && mark(b) {
++        Some(Side::Right)
++    } else if KERN_LEFT.contains(a) && KERN_LEFT.contains(b) {
++        Some(Side::Left)
++    } else {
++        None
++    }
++}
++
++/// Closing marks that may hang past the margin at a line's end under `w:overflowPunct` in
++/// Chinese, Japanese or Korean text: those of [`END_BLANK`] and the closing curly quotes
++/// (measured in WPS: ，。、）」”：！ all hang whole).
++const HANGING: &str = "。，、：；！．）〕］｝〉》」』】〙〗〛〞〟｠”’";
++
++/// Whether `c` ending a line may hang past the margin ([`HANGING`]).
++pub fn hangs(c: char) -> bool {
++    HANGING.contains(c)
++}
++
++/// Whether a `w:lang/@w:eastAsia` tag is Chinese, Japanese or Korean.
++pub fn cjk_lang(tag: &str) -> bool {
++    let primary = tag.split(['-', '_']).next().unwrap_or_default();
++    ["zh", "ja", "ko"].iter().any(|l| primary.eq_ignore_ascii_case(l))
++}
++
+ /// The side of a full-width mark whose blank may shrink.
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+ pub enum Side {
+@@ -234,4 +274,18 @@ mod tests {
+         let any = breaks("Hello café", true, false);
+         assert_eq!(any, ["e", "l", "l", "o", "c", "a", "f", "é"]);
+     }
++
++    #[test]
++    fn the_middle_dot_of_a_name_keeps_its_neighbours() {
++        // WPS keeps 布·达 of 艾布·达伍德 on one line; a dot between Latin words still breaks.
++        let text = "艾布·达伍德";
++        let dot = text.find('·').unwrap();
++        let mut opps = vec![dot, dot + '·'.len_utf8()];
++        apply(text, &mut opps, true, true);
++        assert!(opps.is_empty(), "{opps:?}");
++        let latin = "a · b";
++        let mut opps = vec![2, 5];
++        apply(latin, &mut opps, true, true);
++        assert_eq!(opps, [2, 5]);
++    }
+ }
+diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
+index f67393fd..1131a657 100644
+--- a/crates/layout/src/para.rs
++++ b/crates/layout/src/para.rs
+@@ -103,6 +103,10 @@ pub struct ParaLayout {
+     /// Closing marks whose blank half is free at a line's end ([`compress_punct`]), by cluster
+     /// index, sorted: a line ending in one may squeeze more.
+     pub end_marks: Vec<usize>,
++    /// Closing marks that may hang whole past the margin when they end a line
++    /// (`w:overflowPunct` in Chinese, Japanese or Korean text), by cluster index, sorted, with
++    /// their advances.
++    pub hang_marks: Vec<(usize, f32)>,
+ }
+ 
+ /// How much one line may take from its compressible marks in all, measured in WPS Office on
+@@ -167,6 +171,15 @@ impl ParaLayout {
+ 
+     /// The automatic space in cluster `k`'s advance ([`auto_space`]), 0 without one.
+     /// Whether a line of the clusters `c0..c1` ends in a closing mark whose blank half is free.
++    /// How far cluster `k` may reach past the margin when it ends a line ([`Self::hang_marks`]):
++    /// all of it, less the blank half it already needs no room for.
++    pub(crate) fn hang_at(&self, k: usize) -> f32 {
++        match self.hang_marks.binary_search_by_key(&k, |h| h.0) {
++            Ok(i) => self.hang_marks.get(i).map_or(0.0, |h| (h.1 - self.auto_space_after(k)).max(0.0)),
++            Err(_) => 0.0,
++        }
++    }
++
+     fn ends_in_free_mark(&self, c0: usize, c1: usize) -> bool {
+         c1 > c0 && self.end_marks.binary_search(&(c1 - 1)).is_ok()
+     }
+diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
+index c3256198..1a0816b0 100644
+--- a/crates/layout/src/para/grid.rs
++++ b/crates/layout/src/para/grid.rs
+@@ -169,7 +169,36 @@ pub(super) fn auto_space(b: &mut Builder, text: &str, de: bool, dn: bool) -> Vec
+ /// line takes no room for its blank half ([`crate::kinsoku::end_blank`]). Returns the squeeze
+ /// room and the line-end room by cluster index; a mark is full-width when it is one character
+ /// whose advance is at least 0.9 em, so a proportional (Latin) quote is left alone.
+-pub(super) fn compress_punct(b: &Builder, text: &str) -> (Vec<Squeeze>, Vec<(usize, f32)>) {
++/// Punctuation kerning: kerned text (`w:kern`, at or above its threshold size) closes up adjacent
++/// full-width marks by half an em ([`crate::kinsoku::kern_side`]), whether or not punctuation is
++/// compressed (WPS: `中》《中` advances 》 by 8 pt at 16 pt). The earlier mark's advance shrinks;
++/// returns the blank sides taken, (cluster, left side), which compression then leaves alone.
++pub(super) fn kern_punct(b: &mut Builder, text: &str) -> Vec<(usize, bool)> {
++    let mark = |b: &Builder, k: usize| -> Option<(char, f32)> {
++        let c = b.clusters.get(k).filter(|c| c.kind == ClKind::Text)?;
++        let mut chars = text.get(c.start..c.end).unwrap_or_default().chars();
++        let (Some(ch), None) = (chars.next(), chars.next()) else { return None };
++        let st = b.styles.get(c.style as usize)?;
++        let kerned = st.rc.kern > 0.0 && st.size >= st.rc.kern;
++        (kerned && st.size.is_finite() && st.size > 0.0 && c.adv >= 0.9 * st.size).then_some((ch, st.size))
++    };
++    let mut taken = Vec::new();
++    for k in 0..b.clusters.len().saturating_sub(1) {
++        let (Some((a, size)), Some((c, _))) = (mark(b, k), mark(b, k + 1)) else { continue };
++        let side = match crate::kinsoku::kern_side(a, c) {
++            Some(crate::kinsoku::Side::Right) => (k, false),
++            Some(crate::kinsoku::Side::Left) => (k + 1, true),
++            None => continue,
++        };
++        if let Some(cl) = b.clusters.get_mut(k) {
++            cl.adv = (cl.adv - (size / 2.0).min(200.0)).max(0.0);
++            taken.push(side);
++        }
++    }
++    taken
++}
++
++pub(super) fn compress_punct(b: &Builder, text: &str, kerned: &[(usize, bool)]) -> (Vec<Squeeze>, Vec<(usize, f32)>) {
+     let (mut squeeze, mut end) = (Vec::new(), Vec::new());
+     for (k, c) in b.clusters.iter().enumerate() {
+         if c.kind != ClKind::Text {
+@@ -182,9 +211,13 @@ pub(super) fn compress_punct(b: &Builder, text: &str) -> (Vec<Squeeze>, Vec<(usi
+             continue;
+         }
+         if let Some(side) = crate::kinsoku::squeeze_side(ch) {
+-            squeeze.push(Squeeze { k, room: (size / 2.0).min(200.0), left: side == crate::kinsoku::Side::Left, em: size.min(400.0), gap: false });
++            let left = side == crate::kinsoku::Side::Left;
++            // A blank half kerning took is gone.
++            if !kerned.contains(&(k, left)) {
++                squeeze.push(Squeeze { k, room: (size / 2.0).min(200.0), left, em: size.min(400.0), gap: false });
++            }
+         }
+-        if crate::kinsoku::end_blank(ch) {
++        if crate::kinsoku::end_blank(ch) && !kerned.contains(&(k, false)) {
+             end.push((k, (size / 2.0).min(200.0)));
+         }
+     }
+diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
+index ad9b371e..cf03c5d5 100644
+--- a/crates/layout/src/para/lines.rs
++++ b/crates/layout/src/para/lines.rs
+@@ -510,13 +510,20 @@ impl<'e> Breaker<'e> {
+         let c0 = sc.c0;
+         let last_tab = (c0..c1).rev().find(|k| pl.clusters.get(*k).is_some_and(|c| c.kind == ClKind::Tab));
+         let display = pl.displays.iter().find(|(ci, _)| *ci >= c0 && *ci < c1).map(|d| d.1);
++        // A closing mark ending the line may hang past the last grid pitch instead, or whole past
++        // the margin under `w:overflowPunct`.
++        let hang = if display.is_none() && last_tab.is_none() && c1 > c0 {
++            if pl.end_marks.binary_search(&(c1 - 1)).is_ok() { self.grid_hang } else { 0.0 }.max(pl.hang_at(c1 - 1))
++        } else {
++            0.0
++        };
+         if display.is_none() && last_tab.is_none() {
+-            // A closing mark ending the line may hang past the last grid pitch instead.
+-            let hang = if c1 > c0 && pl.end_marks.binary_search(&(c1 - 1)).is_ok() { self.grid_hang } else { 0.0 };
+             squeeze_line(pl, sc, c1, hang);
+         }
+         let content_end = content_end(pl, sc, c1);
+-        let slack = sc.right_edge - content_end;
++        // A mark hanging into the margin leaves no slack, and the line isn't shrunk for it.
++        let raw_slack = sc.right_edge - content_end;
++        let slack = if raw_slack < 0.0 && -raw_slack <= hang + 0.01 { 0.0 } else { raw_slack };
+         let align_from = last_tab.map(|k| k + 1).unwrap_or(c0);
+         let shift = match (display, rp.align) {
+             (Some(MathJc::Left), _) => 0.0,
+@@ -869,8 +876,12 @@ impl Scan {
+         let squeeze = pl.squeeze_room(c0, j + 1);
+         // On a character grid a closing mark ending the line may reach past the last pitch.
+         let hang = if pl.end_marks.binary_search(&j).is_ok() { bk.grid_hang } else { 0.0 };
++        // So may a closing mark under `w:overflowPunct`, whole, beside what the marks before it
++        // squeeze (WPS: `…意见、` fits by squeezing an earlier 、 and hanging the last).
++        let overflow = pl.hang_at(j);
++        let room = if overflow > 0.0 { (pl.squeeze_room(c0, j) + overflow).max(squeeze.max(hang)) } else { squeeze.max(hang) };
+         let fits = absorbs
+-            || self.x + advance - pl.auto_space_after(j) <= self.right_edge + shrink + squeeze.max(hang) + 0.01
++            || self.x + advance - pl.auto_space_after(j) <= self.right_edge + shrink + room + 0.01
+             || c.kind == ClKind::Space
+             || c.kind == ClKind::Marker;
+         if !fits && pl.is_edit_boundary(c.start) && (c0..j).any(|k| pl.clusters.get(k).is_some_and(takes_room)) {
+diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
+index b5549ae6..f8aa9822 100644
+--- a/crates/layout/src/para/paragraph.rs
++++ b/crates/layout/src/para/paragraph.rs
+@@ -587,6 +587,12 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+     if rp.snap_to_grid {
+         snap_chars(&mut sh.b, &p.text, &env.grid);
+     }
++    // Kerned text closes up adjacent full-width marks, off a character grid (WPS).
++    let kerned = if doc.settings.no_punctuation_kerning || (rp.snap_to_grid && env.grid.chars.is_some()) {
++        Vec::new()
++    } else {
++        super::grid::kern_punct(&mut sh.b, &p.text)
++    };
+     // Text on a character grid keeps to its cells; compression applies there too (WPS).
+     let mut auto_space =
+         if rp.snap_to_grid && env.grid.chars.is_some() { Vec::new() } else { auto_space(&mut sh.b, &p.text, rp.auto_space_de, rp.auto_space_dn) };
+@@ -598,7 +604,7 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+     let compresses = doc.settings.char_spacing.compresses_punctuation() && (justified || squeeze_rule == super::SqueezeRule::HalfEm);
+     let mut end_marks = Vec::new();
+     let squeeze = if compresses {
+-        let (mut squeeze, end_blank) = compress_punct(&sh.b, &p.text);
++        let (mut squeeze, end_blank) = compress_punct(&sh.b, &p.text, &kerned);
+         // Mode 14 and older squeeze an automatic space by up to half on an overflowing line, in
+         // the same pool as the marks (WPS, F13).
+         if squeeze_rule == super::SqueezeRule::HalfEm {
+@@ -620,6 +626,29 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+     } else {
+         Vec::new()
+     };
++    // Closing marks that may hang whole past the margin at a line's end: under
++    // `w:overflowPunct` (on unless turned off) in runs whose East Asian language is Chinese,
++    // Japanese or Korean (WPS; text tagged en-US gets only the blank half of
++    // `end_marks`, and only under compression), unless `w:useAltKinsokuLineBreakRules` is set.
++    let mut hang_marks = Vec::new();
++    if rp.overflow_punct && !doc.settings.alt_kinsoku {
++        let cjk: Vec<std::ops::Range<usize>> = p
++            .run_ranges()
++            .filter(|(_, props)| cx.res.char(props).lang_ea.as_deref().is_some_and(crate::kinsoku::cjk_lang))
++            .map(|(range, _)| range)
++            .collect();
++        for (k, c) in sh.b.clusters.iter().enumerate() {
++            if c.kind != ClKind::Text || c.adv <= 0.0 || !cjk.iter().any(|r| r.contains(&c.start)) {
++                continue;
++            }
++            let mut chars = p.text.get(c.start..c.end).unwrap_or_default().chars();
++            if let (Some(ch), None) = (chars.next(), chars.next())
++                && crate::kinsoku::hangs(ch)
++            {
++                hang_marks.push((k, c.adv.min(1e4)));
++            }
++        }
++    }
+     let mut skip = sh.left.clone();
+     skip.extend(sh.bare.iter().cloned());
+     let bt = BreakText::new(&p.text, skip);
+@@ -655,6 +684,7 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+         squeeze,
+         squeeze_rule,
+         end_marks,
++        hang_marks,
+     };
+     let auto = env.doc.settings.auto_hyphenation && !pl.rp.suppress_hyphens;
+     pl.hyph_after = hyphenation_points(&bt.text, |i| bt.to_para(i), &pl, auto, env.doc.settings.hyphenate_caps, &runs);
+diff --git a/crates/layout/src/tests/compress.rs b/crates/layout/src/tests/compress.rs
+index 0770eb54..53db67c1 100644
+--- a/crates/layout/src/tests/compress.rs
++++ b/crates/layout/src/tests/compress.rs
+@@ -27,6 +27,9 @@ fn doc(text: &str, mode: CharSpacing, width_em: Option<f32>) -> Document {
+     let mut d = Document::from_text(text);
+     d.settings.char_spacing = mode;
+     d.settings.compat_mode = 14;
++    // The measurements these tests model were made without punctuation kerning (the built-in
++    // styles kern from 1 pt).
++    d.settings.no_punctuation_kerning = true;
+     let probe = first_para(&lay(&Document::from_text("x")));
+     let full = probe.lines[0].right - probe.lines[0].left;
+     if let Some(Block::Para(p)) = d.body.first_mut().map(Arc::make_mut) {
+@@ -316,3 +319,84 @@ fn a_last_unit_wider_than_an_em_enlarges_the_pool() {
+         }
+     }
+ }
++
++/// Under `w:overflowPunct` (on unless turned off), a closing mark ending a line of Chinese,
++/// Japanese or Korean text (`w:lang/@w:eastAsia`) hangs whole past the margin, with or without
++/// compression (WPS: 34 characters and a `，` fit 34 em). Text tagged with another East Asian
++/// language, or with the switch off, keeps the usual rule.
++#[test]
++fn a_closing_mark_in_chinese_text_hangs_whole_under_overflow_punct() {
++    if !full_width_marks() {
++        return;
++    }
++    let text = format!("{}，下一行", "中".repeat(10));
++    let first_alt = |lang: Option<&str>, overflow: Option<bool>, alt: bool| {
++        let mut d = doc(&text, CharSpacing::DoNotCompress, Some(10.0));
++        d.settings.alt_kinsoku = alt;
++        if let Some(Block::Para(p)) = d.body.first_mut().map(Arc::make_mut) {
++            p.props.overflow_punct = overflow;
++            for r in &mut p.runs {
++                r.props.lang_ea = lang.map(str::to_string);
++            }
++        }
++        let g = first_para(&lay(&d));
++        g.lines[0].c1 - g.lines[0].c0
++    };
++    let first = |lang: Option<&str>, overflow: Option<bool>| first_alt(lang, overflow, false);
++    assert_eq!(first(Some("zh-CN"), None), 11, "the comma hangs");
++    assert_eq!(first(Some("ja-JP"), None), 11, "in Japanese text too");
++    assert_eq!(first(Some("zh-CN"), Some(false)), 9, "switched off, the comma needs room: 中， moves down");
++    assert_eq!(first(Some("en-US"), None), 9, "text tagged en-US keeps the usual rule");
++    assert_eq!(first(None, None), 9, "untagged text too");
++    assert_eq!(first_alt(Some("zh-CN"), None, true), 9, "useAltKinsokuLineBreakRules turns hanging off");
++}
++
++/// Kerned text (`w:kern`) closes up adjacent full-width marks by half an em, compressed or not,
++/// unless the document says `w:noPunctuationKerning`; curly quotes take no part (WPS: `中》《中`
++/// advances 》 by 8 pt at 16 pt, `中）“中` keeps 16).
++#[test]
++fn kerned_text_closes_up_adjacent_marks_by_half_an_em() {
++    if !full_width_marks() {
++        return;
++    }
++    let adv = |text: &str, kern: Option<f32>, no_kerning: bool| {
++        let mut d = doc(text, CharSpacing::DoNotCompress, None);
++        d.settings.no_punctuation_kerning = no_kerning;
++        if let Some(Block::Para(p)) = d.body.first_mut().map(Arc::make_mut) {
++            for r in &mut p.runs {
++                r.props.kern = kern;
++            }
++        }
++        first_para(&lay(&d)).clusters.get(1).map(|c| c.adv).unwrap_or_default()
++    };
++    assert!((adv("中》《中", Some(1.0), false) - SIZE / 2.0).abs() < 0.01, "》《 closes up");
++    assert!((adv("中（《中", Some(1.0), false) - SIZE / 2.0).abs() < 0.01, "（《 closes up");
++    assert!((adv("中》《中", Some(0.0), false) - SIZE).abs() < 0.01, "not kerned");
++    assert!((adv("中》《中", Some(1.0), true) - SIZE).abs() < 0.01, "noPunctuationKerning");
++    assert!((adv("中》《中", Some(20.0), false) - SIZE).abs() < 0.01, "below the kerning threshold");
++    assert!(adv("中）“中", Some(1.0), false) > SIZE * 0.9, "curly quotes stay");
++}
++
++/// A hanging closing mark and the squeeze of the marks before it add up: the line's other marks
++/// make room for its last characters and the closing mark hangs past the margin (WPS:
++/// `…协议、协调意见、` squeezes the first 、 and hangs the second).
++#[test]
++fn a_hanging_mark_adds_to_what_the_marks_before_it_squeeze() {
++    if !full_width_marks() {
++        return;
++    }
++    // 8 + 1 + 2 = 11 em before the last 、, in 10.5 em: the first 、 gives up half an em.
++    let text = format!("{}、中中、下一行", "中".repeat(8));
++    let first = |lang: Option<&str>| {
++        let mut d = doc(&text, CharSpacing::CompressPunctuation, Some(10.5));
++        if let Some(Block::Para(p)) = d.body.first_mut().map(Arc::make_mut) {
++            for r in &mut p.runs {
++                r.props.lang_ea = lang.map(str::to_string);
++            }
++        }
++        let g = first_para(&lay(&d));
++        g.lines[0].c1 - g.lines[0].c0
++    };
++    assert_eq!(first(Some("zh-CN")), 12, "squeeze and hang together");
++    assert!(first(None) < 12, "without the hang the line breaks earlier");
++}

@@ -2,6 +2,29 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-03 (5): the seven remaining documents (F20, F21)
+
+Line-break diffs against WPS (`out/breakdiff2.py`, tolerant of symbol and right-to-left text;
+`out/pagelines.py` for page ends), each cause cut down to one paragraph and probed in WPS.
+
+- **F20, patch 0031:** closing marks hang whole under `w:overflowPunct` in Chinese/Japanese/
+  Korean text, adding to the squeeze (off under `w:useAltKinsokuLineBreakRules`); kerned text
+  closes up adjacent full-width marks by half an em (unless `w:noPunctuationKerning`); the middle
+  dot of transliterated names binds its neighbours.
+- **F21, patch 0032:** spaces take `w:spacing` twice under balance; a picture-only line has no
+  descent; multiple spacing's leading may run into a footer taller than the margin.
+
+Re-scored (isolated): **156 → 163 / 200**, mean **0.9329 → 0.9348**; no document lost its match
+in any step. Of the seven, `b6747d9df3`, `be4a26d95e`, `f9e6e0e0e6` and `b8de3ae296` now match,
+and `9e27fa4072`, `7380cfbea3` and `43c2246cf6` matched on the way. Still off: `92262161df`, `7abe5be4e9` (a converted form) and
+`ea10dc7972` (an opening mark overhanging with kinsoku off, unmeasured). Tests: layout 599, fonts
+108, doc 242, docx 370 + 134, engine 1095; fmt and clippy clean; the queue 0001–0032 applies on
+the pin and reproduces the tested tree (0031 also builds without 0032).
+
+**Next:** `ea10dc7972`'s opening-mark overhang; the automatic space under `w:spacing`; stretching
+justified Chinese lines (visual only); then the remaining 37 mismatched documents by line-break
+diff.
+
 ## 2026-11-03 (4): the open items: embedded fonts per document, grids, defaults (F17–F19)
 
 Each rule measured in WPS first; scores are isolated (one process per document).
