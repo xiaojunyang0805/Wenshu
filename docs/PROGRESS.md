@@ -16,9 +16,10 @@ Newest first. One entry per working session: what landed, what was verified, wha
 - **F24, patch 0039:** a WPS tracing watermark (VML WordArt with fill opacity 0, names and phone
   numbers) was drawn, and after a save WPS showed it across the page. The fill opacity now carries
   over as a transparent `w14:textFill`. WPS's render of the saved page: 0.99995 (was 0.984).
-- **Upstream:** 0037 prepared as a branch on upstream `main` (`fix/field-result-fonts`, tests
-  pass except three hyphenation tests that fail on clean `main` here); opening the PR is waiting
-  for the user (out/pr-0037.md has the description).
+- **Upstream:** 0037 and 0039 opened as drafts on upstream `main` `ae5c65b9`:
+  [#5462](https://github.com/storytold/wordcraft/pull/5462) and
+  [#5463](https://github.com/storytold/wordcraft/pull/5463) (layout tests pass except three
+  hyphenation tests that fail on clean `main` here too). **v0.1.2** published as a pre-release.
 
 Tests: docx 373 + 134; fmt and clippy clean; the queue 0001–0039 applies on the pin and reproduces
 the tested tree.
@@ -27,7 +28,7 @@ the tested tree.
 so it is read as a picture and its text dropped: the last J5 text and font loss); the three page
 changes of J5 (documents Wenshu itself lays out a page off).
 
-**Next:** open the 0037 PR (user); offer 0027 + 0033 + 0039; picture fills for shapes; the 34
+**Next:** offer 0027 + 0033; picture fills for shapes; the 34
 documents still a page off WPS.
 
 ## 2026-11-03 (7): M2 — PDF export measured (J4); field results in two fonts (F23)
