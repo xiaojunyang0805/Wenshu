@@ -21,3 +21,6 @@
 # Release packages (packaging/windows/package.ps1)
 /dist/
 __pycache__/
+
+# Business plan: kept local, not published
+BP/
