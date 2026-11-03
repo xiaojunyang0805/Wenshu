@@ -1,4 +1,4 @@
-Upstream: (not opened; fold into #5006 with 0005: WPS's squeeze limit is per line, not 0.1 em per mark: ½ em in compatibility mode 14 and older, 1 − 1/(2k) em on justified mode-15 lines, ½ em more for a line ending in a closing mark and per two closing-opening meetings; mode 15 leaves other lines alone; F10)
+Upstream: folded into #5006 as 0ac59db8 (https://github.com/storytold/wordcraft/pull/5006); the squeeze limit is per line (WPS, F10)
 diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
 index e3e3554..1d636ec 100644
 --- a/crates/layout/src/para/grid.rs

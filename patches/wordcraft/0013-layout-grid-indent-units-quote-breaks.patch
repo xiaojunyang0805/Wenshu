@@ -1,4 +1,4 @@
-Upstream: (not opened; WPS measurements: on a character grid *Chars indents count the text's advance, first line the first run's size, sides the larger of it and the mark's (probe 36); Unicode 15.1 LB19a breaks beside curly quotes between East Asian characters, which unicode-linebreak 0.1.5 lacks (fold into #5004); the mark ending a line is never squeezed (F10 sweeps))
+Upstream: LB19a quote breaks in #5004 as db13aa60, the never-squeezed line-end mark in #5006 as 0ac59db8; the *Chars grid indents stay here (they need 0010)
 diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
 index 089b41e..c46755b 100644
 --- a/crates/layout/src/para/paragraph.rs

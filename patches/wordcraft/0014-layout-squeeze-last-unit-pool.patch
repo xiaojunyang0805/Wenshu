@@ -1,4 +1,4 @@
-Upstream: (not opened; fold into #5006 with 0005/0012: the line's squeeze pool is half an em plus an em per compressible mark in its last unit (mode 15 justified: 1 - 1/(2k) plus half an em per mark); a closing mark's free line-end half comes out of it; replaces 0012's line-end and closing-opening bonuses; F12)
+Upstream: folded into #5006 as 0ac59db8; the pool grows with the marks in the last unit (WPS, F12)
 diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
 index 484bc2d..f6dd278 100644
 --- a/crates/layout/src/para.rs

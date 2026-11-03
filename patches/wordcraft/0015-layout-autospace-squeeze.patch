@@ -1,4 +1,4 @@
-Upstream: (not opened; fold into #5006 with 0005/0012/0014: in compatibility mode 14 and older an automatic space beside digits or Latin text shares the line's squeeze pool, giving up at most half itself; F13)
+Upstream: folded into #5006 as 0ac59db8; automatic spaces share the squeeze pool (WPS, F13)
 diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
 --- a/crates/layout/src/para.rs
 +++ b/crates/layout/src/para.rs

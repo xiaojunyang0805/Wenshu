@@ -1,4 +1,4 @@
-Upstream: (not opened; fold into #5003 with 0002: on a character grid, w:w scales the size the grid adjustment is added to and w:spacing adds on top, as WPS measures, probe 35)
+Upstream: folded into #5003 as 902f8efe (https://github.com/storytold/wordcraft/pull/5003); w:w scales the size the grid adjustment is added to, w:spacing on top (WPS, probe 35)
 diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
 index 845816e..e3e3554 100644
 --- a/crates/layout/src/para/grid.rs

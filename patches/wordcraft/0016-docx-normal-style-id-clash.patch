@@ -1,4 +1,4 @@
-Upstream: (not opened; a general reader fix, its own PR: a custom style with the id Normal beside a default paragraph style with another id no longer takes the default's place)
+Upstream: https://github.com/storytold/wordcraft/pull/5327 (draft); a custom style with the id Normal no longer replaces the default paragraph style
 diff --git a/crates/docx/src/read/styles.rs b/crates/docx/src/read/styles.rs
 --- a/crates/docx/src/read/styles.rs
 +++ b/crates/docx/src/read/styles.rs
