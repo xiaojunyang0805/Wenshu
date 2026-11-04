@@ -185,7 +185,7 @@ Architecture: $DEB_ARCH
 Maintainer: ${WENSHU_MAINTAINER:-The Wenshu authors <https://github.com/xiaojunyang0805/Wenshu>}
 Installed-Size: $(du -sk "$STAGE" | cut -f1)
 Depends: libc6 (>= $GLIBC_MIN), libgcc-s1, libxkbcommon0, libxkbcommon-x11-0, libvulkan1 | libegl1
-Recommends: libwayland-client0, libx11-6, libx11-xcb1, libxcursor1, libxi6, libxrandr2, mesa-vulkan-drivers, xdg-desktop-portal, fonts-noto-cjk
+Recommends: libwayland-client0, libx11-6, libx11-xcb1, libxcursor1, libxi6, libxrandr2, mesa-vulkan-drivers, xdg-desktop-portal, fonts-noto-cjk, fonts-liberation2, fonts-crosextra-carlito, fonts-crosextra-caladea
 Section: editors
 Priority: optional
 Homepage: https://github.com/xiaojunyang0805/Wenshu

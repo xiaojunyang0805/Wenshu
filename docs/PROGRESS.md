@@ -2,6 +2,29 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-04 (2): Linux fidelity measured: 115 → 167 / 200
+
+Decided with the user: the page-count chase on Windows is in maintenance mode at 186 / 200 (J1
+asks 80%); the next unknown was Linux, the 国产 OS target. Measured in WSL Ubuntu 22.04 with
+the current queue (Noto CJK, DejaVu, the packaged 朱雀仿宋 and 霞鹜文楷 GB, no Windows fonts), the
+same corpus and WPS references, `WENSHU_FONTS_DIR=/usr/share/wenshu/fonts` (a dev build doesn't
+find the packaged fonts without it):
+
+| Setup | Page matches | Mean |
+|---|---|---|
+| Windows (reference) | 186 | 0.943 |
+| Linux, packaged fonts | 115 | 0.911 |
+| + 0064: missing Windows Chinese faces keep their line box | 150 | 0.915 |
+| + Liberation 2, Carlito, Caladea (now `.deb` Recommends) | 167 | 0.921 |
+
+70 of the first 72 losses ran long: Noto CJK's East Asian line (1.3 × its win metrics) is far
+taller than 宋体's, so every line grew. Patch 0064 gives 宋体, 黑体, 仿宋, 楷体 (and their _GB2312
+names), 微软雅黑, 微軟正黑體 and 等线 their own Windows line box when missing (Windows unchanged:
+r30 identical to r29). WordCraft already prefers the metric-compatible Latin fonts; Ubuntu lacks
+them by default. Next on Linux: fonts named in English (SimSun 5 / 10 lost, Microsoft YaHei 3 / 3:
+Latin text in a proportional substitute instead of SimSun's half-width glyphs), Cambria Math,
+bundling the Latin fonts in the tar.gz and AppImage, and a Linux run in the regression gate.
+
 ## 2026-11-03 (10): the 30 documents a page off: empty pages at section ends, 華康 fonts: 174 / 200
 
 - **Triage** (`out/triage.py`): of the 30, nine had an empty page in Wenshu's layout. Their causes,

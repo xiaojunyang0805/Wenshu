@@ -47,8 +47,14 @@ beyond what upstream offers.
    Linux packages ship 朱雀仿宋 Zhuque Fangsong and 霞鹜文楷 GB (OFL-1.1, unmodified,
    `/usr/share/wenshu/fonts`); Windows uses its own FangSong and KaiTi. Still open: no open 小标宋
    (titles fall back to Noto Serif CJK), and Zhuque's `×` and curly quotes are narrower than
-   Windows FangSong's full-width ones. Fidelity is measured on Windows with its system fonts;
-   the Linux packages' scores are unmeasured.
+   Windows FangSong's full-width ones. **Linux measured 2026-11-04** (WSL Ubuntu 22.04: Noto
+   CJK, DejaVu, the packaged 朱雀仿宋 and 霞鹜文楷 GB, no Windows fonts; same corpus and WPS
+   references): 115 / 200 page matches at first (mean 0.911; Windows 186, 0.943), nearly all
+   documents running long. Patch 0064 keeps the missing Windows Chinese faces' own line box
+   (Noto CJK's is taller): 150 / 200. With the metric-compatible Latin fonts (Liberation 2,
+   Carlito, Caladea), now Recommends of the .deb: **167 / 200, mean 0.921**. Still open: Latin
+   text in fonts named in English (SimSun, Microsoft YaHei: proportional substitutes for SimSun's
+   half-width Latin), Cambria Math, and bundling the Latin fonts in the tar.gz and AppImage.
 3. **Governance:** work as a CJK working group inside the storytold/ArtCraft community, or as a
    separate organisation? This affects branding and CLA.
 4. **Engine risk:** WordCraft is 3 weeks old. If upstream stalls, the patch queue becomes a fork.
