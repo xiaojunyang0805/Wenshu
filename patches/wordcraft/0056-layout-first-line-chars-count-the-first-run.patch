@@ -1,0 +1,108 @@
+Upstream: (not opened; WPS measurement, departs from Word: off a character grid a first-line indent in characters counts the first run with text, its size plus twice its character spacing, not the paragraph mark size)
+diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
+index ab715965..6172de06 100644
+--- a/crates/layout/src/para/paragraph.rs
++++ b/crates/layout/src/para/paragraph.rs
+@@ -112,12 +112,23 @@ fn paragraph_props(p: &Paragraph, env: &ParaEnv) -> ResolvedPara {
+     // the mark's, each plus the grid's adjustment (WPS Office: with a 10.5 pt Normal style and
+     // 16 pt text, `firstLineChars=200` is 2 × 15.54 pt, not two 10.05 pt cells). On a line grid
+     // without a character pitch, the left and right indents count the grid's default font size
+-    // (the Normal style's) and the first line the mark's size (`leftChars=100` is 10.5 pt and
+-    // `firstLineChars=200` 32 pt beside a 16 pt mark).
++    // (the Normal style's) and the first line the first run's size (`leftChars=100` is 10.5 pt
++    // and `firstLineChars=200` 32 pt for 16 pt text).
+     if rp.indent_chars.iter().any(|c| *c != 0.0) {
+         let resolve = |props| doc.styles.resolve_char_in(p.props.style.as_deref(), env.table.map(|t| &t.chr), props).size;
+         let size = resolve(&p.mark);
+-        let text = p.runs.iter().find(|r| r.len > 0).map_or(size, |r| resolve(&r.props));
++        // The first run with text: a bookmark or comment range before it is an object character
++        // in a run of no properties of its own.
++        let first_run = p.run_ranges().find(|(r, _)| p.text.get(r.clone()).is_some_and(|t| t.chars().any(|c| c != OBJ))).map(|(_, props)| props);
++        let text = first_run.map_or(size, resolve);
++        // Off a character grid, WPS Office counts a first-line character as the first run's size
++        // plus twice its character spacing, whatever the mark's size (`firstLineChars=1000` beside
++        // a 22 pt mark, 15 pt text spaced 2 pt: 190 pt; 15 pt unspaced: 150; on a line grid or none).
++        let first_unit = first_run.map_or(size, |props| {
++            let rc = doc.styles.resolve_char_in(p.props.style.as_deref(), env.table.map(|t| &t.chr), props);
++            let spacing = if rc.spacing.is_finite() { rc.spacing } else { 0.0 };
++            rc.size + 2.0 * spacing
++        });
+         match (rp.snap_to_grid, env.grid.chars, env.grid.line) {
+             (true, Some(pitch), _) => {
+                 let cell = |size: f32| env.grid.advance(size).filter(|a| *a > 0.0).unwrap_or(pitch);
+@@ -125,8 +136,8 @@ fn paragraph_props(p: &Paragraph, env: &ParaEnv) -> ResolvedPara {
+             }
+             // Whether or not the paragraph snaps to the grid (`dc-policies-39de0888eb`: `snapToGrid=0`,
+             // `leftChars=413` beside 13 pt text is 4.13 × the 12 pt Normal size in WPS).
+-            (_, None, Some(_)) => rp.set_char_units(env.grid.font_size, size),
+-            _ => rp.set_char_unit(size),
++            (_, None, Some(_)) => rp.set_char_units(env.grid.font_size, first_unit),
++            _ => rp.set_char_units(size, first_unit),
+         }
+     }
+     list_indents(&mut rp, p, env);
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+index cde8a802..9d4650b1 100644
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -5972,11 +5972,14 @@ fn a_page_break_at_the_bottom_of_a_full_page_leaves_no_blank_page() {
+     assert!(last_on_2, "the text after the break is on page 2");
+ }
+ 
+-/// #534: indents in characters (`w:firstLineChars`) are measured in the paragraph mark's font
+-/// size and win over the indent in points.
++/// #534: indents in characters win over the indent in points. The left indent (`w:leftChars`)
++/// counts the paragraph mark's font size; the first line (`w:firstLineChars`) the first run's size
++/// plus twice its character spacing (WPS Office, probed 2026-11-04: 15 pt text spaced 2 pt beside a
++/// 22 pt mark indents 19 pt a character).
+ #[test]
+ fn character_indents_use_the_paragraph_mark_size() {
+-    let mut p = wordcraft_doc::Paragraph::with_text(&"字".repeat(80), Default::default());
++    let text = wordcraft_doc::props::CharProps { size: Some(15.0), spacing: Some(2.0), ..Default::default() };
++    let mut p = wordcraft_doc::Paragraph::with_text(&"字".repeat(80), text);
+     p.props.indent_first = Some(5.0);
+     p.props.indent_first_chars = Some(2.0);
+     p.props.indent_left_chars = Some(1.0);
+@@ -5985,8 +5988,17 @@ fn character_indents_use_the_paragraph_mark_size() {
+     d.body = vec![wordcraft_doc::para_block(p)];
+     let l = lay(&d);
+     let para = l.pages[0].items.iter().find_map(|it| if let Placed::Lines { para, .. } = it { Some(para.clone()) } else { None }).unwrap();
+-    assert!((para.lines[0].left - 60.0).abs() < 0.01, "first line at {}", para.lines[0].left);
++    assert!((para.lines[0].left - (20.0 + 2.0 * 19.0)).abs() < 0.01, "first line at {}", para.lines[0].left);
+     assert!((para.lines[1].left - 20.0).abs() < 0.01, "second line at {}", para.lines[1].left);
++    // A bookmark before the text (an object in a run of no properties) doesn't count as the
++    // first run.
++    let mut d = d.clone();
++    if let Some(wordcraft_doc::Block::Para(p)) = d.body.first_mut().map(std::sync::Arc::make_mut) {
++        p.insert_object(0, wordcraft_doc::InlineObject::BookmarkStart { name: "b".into() }, &Default::default()).unwrap();
++    }
++    let l = lay(&d);
++    let para = l.pages[0].items.iter().find_map(|it| if let Placed::Lines { para, .. } = it { Some(para.clone()) } else { None }).unwrap();
++    assert!((para.lines[0].left - (20.0 + 2.0 * 19.0)).abs() < 0.01, "after a bookmark the first line at {}", para.lines[0].left);
+ }
+ 
+ #[test]
+diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
+index 06e47e87..21190757 100644
+--- a/crates/layout/src/tests/grid.rs
++++ b/crates/layout/src/tests/grid.rs
+@@ -271,7 +271,8 @@ fn character_grid_places_east_asian_text_on_the_pitch() {
+ #[test]
+ fn character_indents_on_a_line_grid_count_the_default_size_at_the_sides() {
+     // A line grid has no character pitch: the left and right indents count the Normal style's
+-    // size (the grid's default), the first-line indent the paragraph mark's (WPS Office).
++    // size (the grid's default), the first-line indent the first run's size, not the paragraph
++    // mark's (WPS Office).
+     let d = with_grid(&"中".repeat(200), DocGridType::Lines, 0);
+     let normal = para::Grid::of(&d, &d.last_section).font_size;
+     let mark = normal + 6.0;
+@@ -290,7 +291,8 @@ fn character_indents_on_a_line_grid_count_the_default_size_at_the_sides() {
+     assert!((base.lines[1].right - right.lines[1].right - 2.0 * normal).abs() < 0.01, "right {}", right.lines[1].right);
+     let first = with(&|p| p.props.indent_first_chars = Some(2.0));
+     let indent = first.lines[0].xs[0] - first.lines[1].xs[0];
+-    assert!((indent - 2.0 * mark).abs() < 0.01, "first-line indent {indent} for a {mark} pt mark");
++    let text = d.styles.resolve_char(None, &Default::default()).size;
++    assert!((indent - 2.0 * text).abs() < 0.01, "first-line indent {indent} for {text} pt text beside a {mark} pt mark");
+     // A paragraph that doesn't snap to the grid counts the same (WPS, `dc-policies-39de0888eb`).
+     let off = with(&|p| {
+         p.props.snap_to_grid = Some(false);

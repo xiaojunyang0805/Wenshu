@@ -633,6 +633,19 @@ there were no distance. Values past `i32::MAX` now read as no distance (patch 00
 document in the corpus has one. With F37: page counts 180 → 182 / 200, mean 0.9419 → 0.9420; no
 losses (`a598d05be9` 0.919 → 0.915, page count unchanged).
 
+## F39. A first-line indent in characters counts the first run, spacing twice
+
+Measured 2026-11-04 (A4 landscape, 宋体 22 pt paragraph mark, 仿宋 text; with a line grid and
+without one). Off a character grid, WPS measures `w:firstLineChars` in the first run with text:
+its size plus twice its character spacing, whatever the paragraph mark's size. 15 pt text beside a
+22 pt mark: `firstLineChars=1000` is 150 pt; spaced 0.4 pt, 158; spaced 2 pt, 190; spaced −1 pt,
+130; 22 pt text beside a 16 pt mark, 220. No clamping: 37 characters (584.6 pt) put a six-character
+line near the right margin (`dc-administrative-1f522d22f6`'s "金额单位：元"; Wenshu's 37 × 22 pt
+mark sent it off the page and the table under it a line down). Word measures these in the mark's
+size (WordCraft's #534 test), so this departs from Word. A bookmark or comment range before the
+text doesn't count as the first run. Patch 0056; probes match. Page counts 182 → 183 / 200,
+mean 0.9420 → 0.9423; no losses.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).
