@@ -2,6 +2,18 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-04 (4): Song fallback bundled; editing pass 18 / 18
+
+- **Song fallback** in the Linux packages: Noto Serif SC Regular and Bold (OFL, Noto CJK Serif
+  2.003, SHA-256-pinned). On a system with no Chinese fonts (the LoongArch qemu root) 宋体 text
+  no longer falls back to 霞鹜文楷: `cd82c17bf5` 30 → 28 pages, as on x86_64.
+- **Editing pass** on the desktop app through the control channel (the commands the keyboard and
+  ribbon use): 18 / 18. A Chinese blank document saves with WPS's settings (Calibri / 宋体,
+  compression, mode 14); typing with Enter and Backspace, undo, redo, undo back to empty; bold,
+  黑体, 16 pt and centring change only the selection; the 通知 template edited (title replaced, a
+  paragraph added) still passes 检查公文格式 in the app and in the CLI, and WPS opens the saved
+  file with the app's page count (2). Typing through a real IME still needs a person.
+
 ## 2026-11-04 (3): M2 re-checked; v0.1.3 built and install-tested; blank documents as WPS's
 
 - **M2 re-checked on the current code** (desktop driven through the control channel): 13 / 13:
