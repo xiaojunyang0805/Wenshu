@@ -80,25 +80,27 @@ scores; fixed before committing.
 height in WPS (`e67370879a`: Normal style lowered 0.5 pt). Tests: layout 612, docx 375 + 134,
 engine 1095; the queue 0001-0057 reproduces the tested tree.
 
-**Where the 16 stand (2026-11-04):**
-- `29a7772dfb` (+2): cut down to 16 blocks (`out/bis/reduce2.py … 第二部分2023`); WPS keeps a
-  break-only paragraph after text ending at y 724, Wenshu (725) sends it over (empty page). Probe:
-  on a 312-twip grid WPS needs the full grid line for that paragraph (Wenshu fits 13.6 pt in 14),
-  so Wenshu must lose more than 2 pt of room above it, in its exact 30 pt lines: trace line boxes.
-  Traced (2026-11-04): every baseline on page 3 matches WPS within 0.05 pt; Wenshu's body ends at
-  the footer top (734.9: a footer of two empty 11 pt paragraphs runs above the 745.5 margin), its
-  break line is 31.2 pt (16 pt 仿宋 on the grid), so 7.9 pt of room. WPS keeps the line. Not
-  settings (minimal settings: same), not the header, the first-page footer or the page-number text
-  box; removing the table of contents before it changes the page boundaries altogether. Probes
-  with the same geometry, footer and room push the line over in WPS too, so the cause is still
-  unknown.
-- `8f343b7812` (−1), `9c189a35a9` (−1): floats with top-and-bottom wrap (in table cells; under a
-  chart); WPS's offsets vary with how rows split / where the float sits, non-monotonically.
-- `cd82c17bf5`, `228229e95c`, `82eb70e86d`: the empty page is a symptom of earlier line-height or
-  break differences.
-- `f7d3afdfdb` (−1): Latin text in Arial Unicode MS drawn by WPS in a font of its own (widths).
-- The rest not yet traced: `a9f763a2b4`, `a180b9d578`, `2d6a9da333`, `7abe5be4e9`, `1403def07e`, `39de0888eb`,
-  `a5beccd773`, `85cb8e4b30`, `9c1f3849ea`.
+**Where the 16 stand (2026-11-04, analysed before fixing; `out/triage2.py`, `out/pagestarts.py`,
+`out/linecmp.py`):** each document's first divergence from WPS, traced to a cause. "Probe" marks a
+cause seen in the document but not yet confirmed with WPS probes.
+
+| Group | Documents | Cause | Status |
+|---|---|---|---|
+| A. Punctuation squeeze in Traditional Chinese | `8f343b7812` (−1), `cd82c17bf5` (+1), `39de0888eb` (+1), `a9f763a2b4` (−1) | On line-grid zh-TW documents WPS doesn't squeeze `，。：」` at all; Wenshu squeezes up to ⅓ em and fits a character more | probe: language, grid type |
+| A'. Same, character grid | `2d6a9da333` (−1) | The reverse: on a `linesAndChars` grid WPS squeezes `：、` to half to fit `成？`; Wenshu doesn't | probe with A |
+| B. Semicolon doesn't hang | `a5beccd773` (+1) | WPS breaks before `件；`; Wenshu hangs `；` past the margin (F20's list has no `；`) | probe |
+| C. Closing pair at line end | `228229e95c` (+1) | WPS fits `策）。` about 1 em past the margin; Wenshu breaks before `策` | probe |
+| D. Gutter on even pages | `85cb8e4b30` (+1) | With `evenAndOddHeaders`, WPS leaves the 14.2 pt gutter off even pages (wider column); one line spills in Wenshu | probe (`9c1f3849ea`, without it, keeps the gutter) |
+| E. Section-end paragraph at the page bottom | `9c1f3849ea` (+1) | Two empty paragraphs after a table, the second ending a next-page section: Wenshu moves it over and breaks again (blank page); removing the first empty paragraph fixes it | probe |
+| F. Missing Arial Unicode MS | `f7d3afdfdb` (−1) | WPS draws its Latin text in 宋体 widths; Wenshu in Arial | probe |
+| G. Table autofit | `1403def07e` (+1) | WPS keeps the grid widths (`tcW` add up to `tblW`); Wenshu's autofit narrows the first column 108 → 68 pt, so cells wrap more | trace autofit |
+| H. Row split across a page | `a180b9d578` (−1) | A title row (empty paragraph + title, at-least height, centred) split by the page break: the part on page 10 is 5 pt taller in WPS | trace |
+| I. Centred cell content | `82eb70e86d` (+2) | Text in centred cells of a 63 pt row sits 7.8 pt lower in Wenshu (content height); more differences later | trace |
+| J. Known, open | `29a7772dfb` (+2), `7abe5be4e9` (+1), `9c189a35a9` (−1) | Break-only paragraph kept by WPS (cause unknown) and charts; OLE header preview; float wrap under a chart | as before |
+
+Seen on the way, no page-count effect: framed paragraphs in table cells on the GB-standard covers
+(`85cb8e4b30`, `9c1f3849ea`: WPS places them at the frame), a line of only a URL 24 pt tall in
+Wenshu against a 32.9 pt grid line (`a9f763a2b4`).
 
 **Next:** continue down that list (`cd82c17bf5`, `228229e95c`, `ea10dc7972`,
 `82eb70e86d`: tables and trailing empty paragraphs), then line-height differences.
