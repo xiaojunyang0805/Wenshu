@@ -613,6 +613,26 @@ from Word: Wenshu follows WPS (patch 0053, not for upstream as it stands). Befor
 after a page break in every mode and never after a column break. The probes match in all three
 modes. Page counts unchanged at 180 / 200; `ffe3dc89e6` scores higher (0.940 → 0.946), no losses.
 
+## F37. An empty paragraph after a nested table takes no room
+
+Measured 2026-11-04 (a borderless outer table whose cell holds a 3×3 nested table, then a body
+paragraph; with and without the line grid and `adjustLineHeightInTable`, floating and not). When a
+cell ends with a nested table followed by one empty paragraph, WPS ends the cell at the nested
+table's bottom: the paragraph takes no room. A paragraph with text there takes its line, and with
+two empty paragraphs after the table both count. Wenshu gave the empty one its line (two grid
+pitches for a 16 pt one). Patch 0054; the probes match. `dc-forms-40991f97da` (a landscape form
+whose title and floating table sit in such a cell) now keeps its note on the page: 4 pages, as WPS.
+
+## F38. A wrap distance of 4294967295 is none
+
+`dc-educational-aa1a5e719d`'s first-page footer holds a rule (a line shape with top-and-bottom
+wrap) whose `distT`/`distB` are `4294967295`, the unsigned form of −1 (VML's
+`mso-wrap-distance-top:-3e-5mm`). Wenshu read 4.3 × 10⁹ EMU (clamped to 1584 pt), so the rule's
+wrap took the whole page and pushed the body after the DOI line to page 2; WPS lays the page as if
+there were no distance. Values past `i32::MAX` now read as no distance (patch 0055). Only this
+document in the corpus has one. With F37: page counts 180 → 182 / 200, mean 0.9419 → 0.9420; no
+losses (`a598d05be9` 0.919 → 0.915, page count unchanged).
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

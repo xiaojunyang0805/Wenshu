@@ -85,9 +85,11 @@ longer applies, and running the fidelity corpus before and after.
 | 0051-doc-hanging-from-character-left-indent | wordcraft-doc | A hanging indent beside `leftChars`/`hangingChars` hangs from the character left indent, whatever `w:left` says (F34). Test | not opened: WPS-measured (Word's `w:left` agrees) |
 | 0052-layout-first-line-after-leading-break | wordcraft-layout | Text after leading page or column breaks keeps the first-line or hanging indent (F35). Test | not opened: WPS-measured |
 | 0053-layout-space-before-after-leading-break | wordcraft-layout | The space before of a paragraph opening with page or column breaks applies on the new page or column up to mode 14, not in mode 15 (WPS, F36). Tests | not opened: departs from Word in mode 15 (one Word-measured assertion changed) |
+| 0054-layout-empty-paragraph-after-nested-table | wordcraft-layout | An empty last paragraph right after a nested table takes no room (WPS, F37). Test | not opened: WPS-measured |
+| 0055-docx-unsigned-minus-one-wrap-distance | wordcraft-docx | A wrap distance stored as the unsigned form of −1 (`4294967295`) is no distance (F38). Test | could go upstream: a reader robustness fix |
 
-All 53 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-04); the
-`wordcraft-layout` (611), `-fonts` (109), `-doc` (242), `-docx` (374 + 134 integration) and
+All 55 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-04); the
+`wordcraft-layout` (612), `-fonts` (109), `-doc` (242), `-docx` (375 + 134 integration) and
 `-engine` (1095) suites pass with them, and fmt and clippy are clean.
 
 **Review status (2026-10-31):** four CodeRabbit rounds; every thread resolved or answered, and the

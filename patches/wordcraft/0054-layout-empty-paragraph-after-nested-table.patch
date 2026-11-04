@@ -1,0 +1,61 @@
+Upstream: (not opened; WPS measurement: an empty last paragraph right after a nested table takes no room, the cell ends at the nested table bottom; two empty paragraphs both count)
+diff --git a/crates/layout/src/table.rs b/crates/layout/src/table.rs
+index 644b345e..92f837c9 100644
+--- a/crates/layout/src/table.rs
++++ b/crates/layout/src/table.rs
+@@ -648,10 +648,18 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
+                     layout_box(ctx, BoxInput::cell(story, &cell.blocks, &cpath, cw, text, depth));
+                 // A hidden end-of-cell mark: an empty last paragraph takes no room (Word for
+                 // Windows: a row of empty such cells is only its borders).
+-                if cell.props.hide_mark && cell.blocks.last().and_then(|b| b.as_para()).is_some_and(|p| p.text.is_empty()) {
++                let empty_last = cell.blocks.last().and_then(|b| b.as_para()).is_some_and(|p| p.text.is_empty());
++                if cell.props.hide_mark && empty_last {
+                     height = last_top;
+                 } else {
+                     collapsed = false;
++                    // An empty last paragraph right after a nested table takes no room either
++                    // (WPS Office: the cell ends at the nested table's bottom; with two empty
++                    // paragraphs after it, both count).
++                    let n = cell.blocks.len();
++                    if empty_last && n >= 2 && cell.blocks.get(n - 2).is_some_and(|b| b.as_table().is_some()) {
++                        height = last_top;
++                    }
+                 }
+                 for it in &mut items {
+                     it.translate(x0 + margins[1], margins[0] + band_t);
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+index cd5f2286..cde8a802 100644
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -8447,6 +8447,31 @@ fn a_hidden_cell_mark_takes_no_room() {
+     assert!((text - line).abs() < 0.5, "text stays, the empty mark after it goes: {text} vs {line}");
+ }
+ 
++/// An empty last paragraph right after a nested table takes no room: the cell ends at the nested
++/// table's bottom (WPS Office, probed 2026-11-04 with and without the line grid). With text, or
++/// with a second empty paragraph, the paragraphs count.
++#[test]
++fn an_empty_paragraph_after_a_nested_table_takes_no_room() {
++    let below = |tail: &[&str]| {
++        let mut d = Document::from_text("Above");
++        let mut t = Table::new(2, 1, 300.0);
++        let mut blocks = vec![wordcraft_doc::Block::Table(Table::new(2, 1, 200.0)).into()];
++        for text in tail {
++            blocks.push(wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text(text, Default::default())));
++        }
++        t.rows[0].cells[0].blocks = blocks;
++        t.rows[1].cells[0].blocks = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text("R2", Default::default()))];
++        d.insert_block(StoryRef::Body, &Path::top(1), wordcraft_doc::Block::Table(t)).unwrap();
++        let l = lay(&d);
++        let at = |r: u32| l.caret(&Pos { story: StoryRef::Body, path: Path(vec![1, r, 0, 0]), off: 0 }).unwrap().top;
++        at(1)
++    };
++    let (none, empty, text, two) = (below(&[]), below(&[""]), below(&["Tx"]), below(&["", ""]));
++    assert!((empty - none).abs() < 0.05, "an empty last paragraph adds nothing: {empty} vs {none}");
++    assert!(text > empty + 5.0, "text adds a line: {text} vs {empty}");
++    assert!(two > text - 0.05, "two empty paragraphs both count: {two} vs {text}");
++}
++
+ /// A text frame in a header, footer or cell (NIH's footers put the page number in one, centred,
+ /// with the footer text wrapping around it) is placed apart: it takes no room in the flow, sits
+ /// where its alignment says, and the text beside it keeps clear of it. WordCraft laid it out as

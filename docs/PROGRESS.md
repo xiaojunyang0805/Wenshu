@@ -65,7 +65,13 @@ not in mode 15 (Word keeps it in 15: this patch departs from Word). Probes in mo
 `ffe3dc89e6` scores higher, no losses. Tests: layout 611, engine 1095; the queue 0001-0053
 reproduces the tested tree.
 
-**Where the 20 stand (2026-11-04):**
+**Then (F37-F38, patches 0054-0055): 182 / 200, mean 0.9420.** `40991f97da`: an empty paragraph
+closing a cell right after a nested table takes no room in WPS (probed). `aa1a5e719d`: a footer
+rule's wrap distance `4294967295` (unsigned −1) read as 1584 pt pushed the body to page 2. No
+losses. Tests: layout 612, docx 375 + 134, engine 1095; the queue 0001-0055 reproduces the tested
+tree.
+
+**Where the 18 stand (2026-11-04):**
 - `29a7772dfb` (+2): cut down to 16 blocks (`out/bis/reduce2.py … 第二部分2023`); WPS keeps a
   break-only paragraph after text ending at y 724, Wenshu (725) sends it over (empty page). Probe:
   on a 312-twip grid WPS needs the full grid line for that paragraph (Wenshu fits 13.6 pt in 14),
@@ -83,7 +89,7 @@ reproduces the tested tree.
   break differences.
 - `f7d3afdfdb` (−1): Latin text in Arial Unicode MS drawn by WPS in a font of its own (widths).
 - The rest not yet traced: `a9f763a2b4`, `a180b9d578`, `2d6a9da333`, `1f522d22f6`,
-  `e67370879a`, `aa1a5e719d`, `40991f97da`, `7abe5be4e9`, `1403def07e`, `39de0888eb`,
+  `e67370879a`, `7abe5be4e9`, `1403def07e`, `39de0888eb`,
   `a5beccd773`, `85cb8e4b30`, `9c1f3849ea`.
 
 **Next:** continue down that list (`cd82c17bf5`, `228229e95c`, `ea10dc7972`,

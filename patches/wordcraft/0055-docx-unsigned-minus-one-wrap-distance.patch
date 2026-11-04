@@ -1,0 +1,47 @@
+Upstream: (not opened; a wrap distance stored as the unsigned form of -1, distT="4294967295", is no distance: WPS Office lays a footer rule with it as none)
+diff --git a/crates/docx/src/read/story/drawing.rs b/crates/docx/src/read/story/drawing.rs
+index f8cd0773..3aaeede3 100644
+--- a/crates/docx/src/read/story/drawing.rs
++++ b/crates/docx/src/read/story/drawing.rs
+@@ -621,7 +621,18 @@ fn anchor_float(c: &El) -> Float {
+             _ => {}
+         }
+     }
+-    let dist = |n: &str| c.attr(n).and_then(|v| measure(v, 12_700.0)).unwrap_or(0.0).clamp(0.0, 1584.0);
++    // Writers store −1 as the unsigned 32-bit 4294967295 (`distT="4294967295"`, from VML's
++    // `mso-wrap-distance-top:-3e-5mm`): read past `i32::MAX` as negative, so no distance
++    // (WPS Office lays such a footer rule's top-and-bottom wrap with none).
++    let dist = |n: &str| {
++        c.attr(n)
++            .and_then(|v| match v.trim().parse::<i64>() {
++                Ok(e) if e > i64::from(i32::MAX) => Some(0.0),
++                _ => measure(v, 12_700.0),
++            })
++            .unwrap_or(0.0)
++            .clamp(0.0, 1584.0)
++    };
+     f.dist = dist("distL").max(dist("distR"));
+     f.dist_top = dist("distT");
+     f.dist_bottom = dist("distB");
+diff --git a/crates/docx/tests/it/fixtures.rs b/crates/docx/tests/it/fixtures.rs
+index 7b3d5196..a6890e3f 100644
+--- a/crates/docx/tests/it/fixtures.rs
++++ b/crates/docx/tests/it/fixtures.rs
+@@ -1176,6 +1176,17 @@ fn anchor_alignment_reference_areas_and_distances() {
+     assert_eq!((b.dist, b.dist_top, b.dist_bottom), (0.0, 0.0, 0.0));
+ }
+ 
++/// A wrap distance written as the unsigned form of −1 (`distT="4294967295"`, common in footer
++/// rules converted from VML) is no distance (WPS Office); a large signed one is still clamped.
++#[test]
++fn unsigned_minus_one_wrap_distance_is_none() {
++    let body = r#"<w:p><w:r><w:drawing><wp:anchor behindDoc="0" distT="4294967295" distB="2147483647" distL="114300" distR="114300"><wp:positionH relativeFrom="margin"><wp:posOffset>0</wp:posOffset></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:extent cx="127000" cy="0"/><wp:wrapTopAndBottom/><wp:docPr id="1" name="L"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:spPr><a:prstGeom prst="line"/></wps:spPr></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r></w:p>"#;
++    let d = read_body(body);
++    let p = paras(&d);
++    let Some(InlineObject::Shape { float, .. }) = p[0].objects.first() else { panic!("{:?}", p[0].objects) };
++    assert_eq!((float.dist_top, float.dist_bottom, float.dist), (0.0, 1584.0, 9.0));
++}
++
+ #[test]
+ fn anchor_stacking_order_is_read_and_kept() {
+     let shape = |z: &str| {
