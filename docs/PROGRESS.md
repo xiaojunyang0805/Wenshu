@@ -2,6 +2,19 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-04 (5): v0.1.3 published; where to start next
+
+- **v0.1.3 published** as a pre-release (patches through 0064; Windows zip + MSI, Linux tar.gz,
+  .deb, AppImage, LoongArch tar.gz + .deb), after the install tests in (3).
+- **On `main`, not yet released:** Chinese blank documents as WPS's own (Calibri, compression,
+  mode 14) and the bundled Song fallback (Noto Serif SC). They go into the next release.
+- **State:** J1 186 / 200 on Windows, 173 / 200 on Linux; J2–J4 met; J5 199 / 200; M1 and M2
+  done (M2: real LoongArch hardware and a hand test with a Chinese IME still open).
+- **Next session: M3, OFD export** (`wenshu-ofd`, GB/T 33190): start from the PDF writer's page
+  model (fonts embedded and subset, text kept selectable), check the output with an OFD reader,
+  and add it to `wenshu convert` and the desktop's export. Then the regression gate (Windows and
+  Linux fidelity before each release).
+
 ## 2026-11-04 (4): Song fallback bundled; editing pass 18 / 18
 
 - **Song fallback** in the Linux packages: Noto Serif SC Regular and Bold (OFL, Noto CJK Serif
