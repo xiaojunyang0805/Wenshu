@@ -59,6 +59,12 @@ break keeps the first-line indent in WPS (probed; Wenshu matches the probes now,
 preview WPS draws (body pushed to ~19.3 pt; Wenshu draws the embedded document's text and keeps the
 15 pt margin), and a 45-shape drawing group (bars, checkboxes) Wenshu doesn't draw.
 
+**Then (F36, patch 0053): still 180 / 200, mean 0.9419.** The space before of a paragraph opening
+with a page or column break applies on the new page or column in WPS up to compatibility mode 14,
+not in mode 15 (Word keeps it in 15: this patch departs from Word). Probes in modes 12/14/15 match;
+`ffe3dc89e6` scores higher, no losses. Tests: layout 611, engine 1095; the queue 0001-0053
+reproduces the tested tree.
+
 **Where the 20 stand (2026-11-04):**
 - `29a7772dfb` (+2): cut down to 16 blocks (`out/bis/reduce2.py … 第二部分2023`); WPS keeps a
   break-only paragraph after text ending at y 724, Wenshu (725) sends it over (empty page). Probe:

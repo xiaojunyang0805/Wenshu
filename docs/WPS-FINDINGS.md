@@ -603,6 +603,16 @@ probes match. No corpus change: found in `dc-forms-7abe5be4e9`, a form converted
 page count differs for other reasons (a header holding an OLE object's EMF preview that pushes the
 body down in WPS; a 45-shape drawing group that Wenshu doesn't draw).
 
+## F36. Space before after a leading page or column break, by compatibility mode
+
+Measured 2026-11-04 (one- and two-column probes, 9 pt 宋体, `w:before="400"`, compatibility modes
+12, 14 and 15). A paragraph that opens with a page or column break gets its space before at the top
+of the new page or column in modes up to 14 (text at y 101.09, not 81.05), and not in mode 15.
+Word keeps it in mode 15 too (WordCraft's test, measured in Word, expected it), so this departs
+from Word: Wenshu follows WPS (patch 0053, not for upstream as it stands). Before, Wenshu kept it
+after a page break in every mode and never after a column break. The probes match in all three
+modes. Page counts unchanged at 180 / 200; `ffe3dc89e6` scores higher (0.940 → 0.946), no losses.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

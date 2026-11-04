@@ -1,0 +1,94 @@
+Upstream: (not opened; WPS measurement, diverges from Word in mode 15: the space before of a paragraph starting with page or column breaks applies at the top of the new page or column in compatibility modes up to 14, and not in mode 15)
+diff --git a/crates/layout/src/flow.rs b/crates/layout/src/flow.rs
+index 0f8fa507..3fadddf1 100644
+--- a/crates/layout/src/flow.rs
++++ b/crates/layout/src/flow.rs
+@@ -562,10 +562,14 @@ impl<'a> Flow<'a> {
+     /// Start the next page or column if the lines just placed end one, or are not the last.
+     fn after_lines(&mut self, ctx: &mut Ctx, pb: &mut PageBuilder, forced: Option<LineEnd>, mark_with_break: bool) {
+         let (block, body_top) = (self.block, self.body_top);
+-        // A paragraph that starts with a page break starts on the new page, its space before
+-        // there (Word).
+-        let starts_with_break =
+-            self.l0 == 1 && self.pl.lines.first().is_some_and(|l| only_breaks(self.p, l.start..l.stop, |c| c == wordcraft_doc::para::PAGE_BREAK));
++        // A paragraph that starts with page or column breaks starts on the new page or column,
++        // its space before there in compatibility modes before 15; from mode 15 it has none there
++        // (WPS Office, both breaks; Word suppresses it the same way after a page break before).
++        let starts_with_break = self.l0 == 1
++            && ctx.doc.settings.compat_mode < 15
++            && self.pl.lines.first().is_some_and(|l| {
++                only_breaks(self.p, l.start..l.stop, |c| c == wordcraft_doc::para::PAGE_BREAK || c == wordcraft_doc::para::COLUMN_BREAK)
++            });
+         match forced {
+             Some(LineEnd::PageBreak) if mark_with_break => {
+                 pb.new_page(block, body_top);
+@@ -579,6 +583,9 @@ impl<'a> Flow<'a> {
+             Some(LineEnd::ColumnBreak) => {
+                 pb.col_break_page = Some(pb.pages.len().saturating_sub(1));
+                 pb.advance(block, body_top);
++                if starts_with_break && !pb.web {
++                    pb.y += self.pl.rp.space_before.max(0.0);
++                }
+                 self.rewidth_after_column_break(ctx, pb);
+             }
+             _ if self.l0 < self.n() => pb.advance(block, body_top),
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+index c8c7d418..cd5f2286 100644
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -9080,13 +9080,17 @@ fn space_before_at_the_top_of_a_page_like_word() {
+         }
+         assert_eq!(table_top(vec![after(&text)]), (1, alone), "{text:?}: a table after the break");
+     }
+-    // A paragraph starting with a page break: its space before on the new page.
+-    let mut d = Document::new();
+-    d.body = vec![para("first", 0.0, false), para(&format!("{brk}PROBE"), 24.0, false)];
+-    let l = lay(&d);
+-    let c = l.caret(&Pos::body(1, brk.len_utf8())).unwrap();
+-    assert_eq!(c.page, 1);
+-    assert!((c.top - plain_top - 24.0).abs() < 0.05, "{} vs {}", c.top, plain_top + 24.0);
++    // A paragraph starting with a page break: its space before on the new page up to mode 14; in
++    // mode 15 none there (WPS Office; Word keeps it in mode 15 too).
++    for (mode, want) in [(14, 24.0), (15, 0.0)] {
++        let mut d = Document::new();
++        d.settings.compat_mode = mode;
++        d.body = vec![para("first", 0.0, false), para(&format!("{brk}PROBE"), 24.0, false)];
++        let l = lay(&d);
++        let c = l.caret(&Pos::body(1, brk.len_utf8())).unwrap();
++        assert_eq!(c.page, 1);
++        assert!((c.top - plain_top - want).abs() < 0.05, "mode {mode}: {} vs {}", c.top, plain_top + want);
++    }
+     // Page break before: kept up to mode 14, dropped in 15.
+     let (_, kept) = probe_top(vec![para("first", 0.0, false), para("PROBE", 24.0, true)], 14);
+     let (_, dropped) = probe_top(vec![para("first", 0.0, false), para("PROBE", 24.0, true)], 15);
+@@ -12343,3 +12347,30 @@ fn text_after_a_leading_page_break_keeps_the_first_line_indent() {
+     let mid = lefts(format!("Lead{COLUMN_BREAK}"));
+     assert!((mid[2] - mid[1]).abs() < 0.01, "after text and a column break {mid:?}");
+ }
++
++/// A paragraph that starts with a column break has its space before at the top of the next
++/// column in compatibility modes before 15, and none there in mode 15 (WPS Office).
++#[test]
++fn space_before_after_a_leading_column_break_by_mode() {
++    use wordcraft_doc::para::COLUMN_BREAK;
++    let top = |mode: u32, before: f32| {
++        let mut d = Document::new();
++        d.settings.compat_mode = mode;
++        let mut first = Paragraph::with_text("first", Default::default());
++        first.props.space_after = Some(0.0);
++        let mut p = Paragraph::with_text(&format!("{COLUMN_BREAK}PROBE"), Default::default());
++        p.props.space_before = Some(before);
++        p.props.space_after = Some(0.0);
++        d.body = vec![wordcraft_doc::para_block(first), wordcraft_doc::para_block(p)];
++        let l = lay(&d);
++        let c = l.caret(&Pos::body(1, COLUMN_BREAK.len_utf8())).unwrap();
++        (c.page, c.top)
++    };
++    for mode in [12, 14, 15] {
++        let (page, plain) = top(mode, 0.0);
++        let (_, spaced) = top(mode, 24.0);
++        assert_eq!(page, 1, "one column: the break starts the next page");
++        let want = if mode < 15 { 24.0 } else { 0.0 };
++        assert!((spaced - plain - want).abs() < 0.05, "mode {mode}: {spaced} vs {}", plain + want);
++    }
++}
