@@ -646,6 +646,17 @@ size (WordCraft's #534 test), so this departs from Word. A bookmark or comment r
 text doesn't count as the first run. Patch 0056; probes match. Page counts 182 → 183 / 200,
 mean 0.9420 → 0.9423; no losses.
 
+## F40. A line all lowered keeps its height
+
+Measured 2026-11-04 (12 pt 宋体, `w:position` −1 to −20 half-points and +6, +20; whole lines and a
+two-character run among plain text). Text lowered with `w:position` moves its box down: a line
+whose text is all lowered 0.5 to 10 pt is as tall as an unlowered one, and its glyphs sit where
+unlowered ones would; beside unlowered text the line grows by the lowering (Wenshu already matched
+that). Wenshu grew every lowered line, so `dc-creative-e67370879a` (its Normal style lowers all text
+0.5 pt: 16.1 pt lines for WPS's 15.6) ran a page long. Patch 0057; probes match. Page counts
+183 → 184 / 200, mean 0.9423 → 0.9424; no other change. Still different: a whole line raised
+(3 pt: no growth in WPS, 10 pt: 6.5 pt) and lowered text with `w:textAlignment="top"`.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

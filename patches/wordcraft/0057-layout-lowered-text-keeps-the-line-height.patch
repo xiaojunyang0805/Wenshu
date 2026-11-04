@@ -1,0 +1,43 @@
+Upstream: (not opened; WPS measurement: text lowered with w:position moves its box down, so a line all lowered 0.5 to 10 pt is as tall as an unlowered one; beside unlowered text the line still grows by the lowering)
+diff --git a/crates/layout/src/para/model.rs b/crates/layout/src/para/model.rs
+index 294350df..5745446e 100644
+--- a/crates/layout/src/para/model.rs
++++ b/crates/layout/src/para/model.rs
+@@ -87,7 +87,11 @@ impl StyleRun {
+         let draw = self.rc.draw_size();
+         let k = if draw > 0.0 { self.rc.size / draw } else { 1.0 };
+         let raise = self.rc.position;
+-        (self.ascent * k + raise.max(0.0), self.descent * k + (-raise).max(0.0))
++        // Lowered text moves its box down: below the baseline by as much as it gives up above
++        // (WPS Office: a line all lowered 0.5–10 pt is as tall as an unlowered one and its glyphs
++        // sit where they would; beside unlowered text it grows by the lowering).
++        let lower = (-raise).max(0.0);
++        ((self.ascent * k + raise.max(0.0) - lower).max(0.0), self.descent * k + lower)
+     }
+ }
+ 
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+index 9d4650b1..c1d6d9a5 100644
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -7612,7 +7612,7 @@ fn superscript_and_subscript_lines_are_as_tall_as_full_size_text() {
+     use wordcraft_doc::props::VertAlign;
+     // Word sizes the line at the full font size and leaves out the raise or drop (Word for Mac:
+     // an 11pt subscript beside 11pt text keeps the 12.675pt line; 24pt subscript alone makes the
+-    // 27.6pt line of plain 24pt text). A `w:position` lowering still counts.
++    // 27.6pt line of plain 24pt text). A `w:position` lowering beside unlowered text still counts.
+     let height = |runs: &[(&str, f32, VertAlign, f32)]| {
+         let mut p = wordcraft_doc::Paragraph::new();
+         p.props.line_spacing = Some(wordcraft_doc::props::LineSpacing::Multiple(1.0));
+@@ -7641,6 +7641,11 @@ fn superscript_and_subscript_lines_are_as_tall_as_full_size_text() {
+     }
+     let lowered = height(&[("Hxg ", 11.0, VertAlign::Baseline, 0.0), ("max", 11.0, VertAlign::Subscript, -6.0)]);
+     assert!((lowered - plain - 6.0).abs() < 0.01, "lowered {lowered} vs plain {plain}");
++    // A line all lowered is as tall as an unlowered one (WPS Office, 0.5 to 10 pt).
++    for drop in [-0.5, -3.0, -10.0] {
++        let all = height(&[("Hxg", 11.0, VertAlign::Baseline, drop)]);
++        assert!((all - plain).abs() < 0.01, "all lowered {drop}: {all} vs plain {plain}");
++    }
+ }
+ 
+ #[test]

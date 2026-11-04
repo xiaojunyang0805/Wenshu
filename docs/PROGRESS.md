@@ -74,10 +74,13 @@ tree.
 **Then (F39, patch 0056): 183 / 200, mean 0.9423.** `1f522d22f6`: a first-line indent of 37
 characters is counted in the first run's size plus twice its spacing in WPS (15.8 pt), not the
 22 pt mark. A first try that counted bookmark markers as the first run lowered four documents'
-scores; fixed before committing. Next measured (not yet in): WPS keeps a line all lowered by
-`w:position` as tall as an unlowered one (`e67370879a`, Normal style lowered 0.5 pt).
+scores; fixed before committing.
 
-**Where the 17 stand (2026-11-04):**
+**Then (F40, patch 0057): 184 / 200, mean 0.9424.** A line all lowered by `w:position` keeps its
+height in WPS (`e67370879a`: Normal style lowered 0.5 pt). Tests: layout 612, docx 375 + 134,
+engine 1095; the queue 0001-0057 reproduces the tested tree.
+
+**Where the 16 stand (2026-11-04):**
 - `29a7772dfb` (+2): cut down to 16 blocks (`out/bis/reduce2.py … 第二部分2023`); WPS keeps a
   break-only paragraph after text ending at y 724, Wenshu (725) sends it over (empty page). Probe:
   on a 312-twip grid WPS needs the full grid line for that paragraph (Wenshu fits 13.6 pt in 14),
@@ -94,8 +97,6 @@ scores; fixed before committing. Next measured (not yet in): WPS keeps a line al
 - `cd82c17bf5`, `228229e95c`, `82eb70e86d`: the empty page is a symptom of earlier line-height or
   break differences.
 - `f7d3afdfdb` (−1): Latin text in Arial Unicode MS drawn by WPS in a font of its own (widths).
-- `e67370879a` (+1): its Normal style lowers all text 0.5 pt (`w:position="-1"`); WPS keeps the
-  lines 15.6 pt, Wenshu 16.1 (probed; fix in progress).
 - The rest not yet traced: `a9f763a2b4`, `a180b9d578`, `2d6a9da333`, `7abe5be4e9`, `1403def07e`, `39de0888eb`,
   `a5beccd773`, `85cb8e4b30`, `9c1f3849ea`.
 
