@@ -173,6 +173,27 @@ mod tests {
         assert_eq!(en.last_section.doc_grid, plain.last_section.doc_grid);
     }
 
+    /// A missing font Wenshu draws as a Windows Chinese face keeps that face's line box, not its
+    /// substitute's (Linux: 新細明體 as 宋体 there is Noto Serif CJK, whose line is far taller).
+    #[test]
+    fn a_missing_font_drawn_as_simsun_keeps_simsuns_line() {
+        super::init();
+        let mut r = wordcraft_fonts::word::resolve("Arial", false, false);
+        r.substituted = true;
+        let simsun = Some((258.0 / 256.0, 74.0 / 256.0));
+        for name in ["新細明體", "华文宋体", "方正黑体", "华文楷体"] {
+            assert_eq!(
+                wordcraft_fonts::word::missing_font_line(name, &r),
+                simsun,
+                "{name}"
+            );
+        }
+        assert_eq!(
+            wordcraft_fonts::word::missing_font_line("No Such Font", &r),
+            None
+        );
+    }
+
     #[test]
     fn init_is_idempotent() {
         super::init();

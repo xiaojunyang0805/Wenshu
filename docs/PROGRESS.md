@@ -16,13 +16,15 @@ find the packaged fonts without it):
 | Linux, packaged fonts | 115 | 0.911 |
 | + 0064: missing Windows Chinese faces keep their line box | 150 | 0.915 |
 | + Liberation 2, Carlito, Caladea (now `.deb` Recommends) | 167 | 0.921 |
+| + 0064 extended: missing fonts drawn as a Windows face take its box | 173 | 0.923 |
 
 70 of the first 72 losses ran long: Noto CJK's East Asian line (1.3 × its win metrics) is far
 taller than 宋体's, so every line grew. Patch 0064 gives 宋体, 黑体, 仿宋, 楷体 (and their _GB2312
 names), 微软雅黑, 微軟正黑體 and 等线 their own Windows line box when missing (Windows unchanged:
 r30 identical to r29). WordCraft already prefers the metric-compatible Latin fonts; Ubuntu lacks
-them by default. Next on Linux: fonts named in English (SimSun 5 / 10 lost, Microsoft YaHei 3 / 3:
-Latin text in a proportional substitute instead of SimSun's half-width glyphs), Cambria Math,
+them by default. The "English-named fonts" lead was this: their East Asian text was in 新細明體 (drawn as 宋体,
+so on Linux in Noto Serif CJK's tall box); six documents gained, none lost, Windows identical
+(r31). Next on Linux: Cambria Math, the 12 documents still running long,
 bundling the Latin fonts in the tar.gz and AppImage, and a Linux run in the regression gate.
 
 ## 2026-11-03 (10): the 30 documents a page off: empty pages at section ends, 華康 fonts: 174 / 200

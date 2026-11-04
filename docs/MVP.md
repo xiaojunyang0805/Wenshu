@@ -52,9 +52,10 @@ beyond what upstream offers.
    references): 115 / 200 page matches at first (mean 0.911; Windows 186, 0.943), nearly all
    documents running long. Patch 0064 keeps the missing Windows Chinese faces' own line box
    (Noto CJK's is taller): 150 / 200. With the metric-compatible Latin fonts (Liberation 2,
-   Carlito, Caladea), now Recommends of the .deb: **167 / 200, mean 0.921**. Still open: Latin
-   text in fonts named in English (SimSun, Microsoft YaHei: proportional substitutes for SimSun's
-   half-width Latin), Cambria Math, and bundling the Latin fonts in the tar.gz and AppImage.
+   Carlito, Caladea), now Recommends of the .deb: 167 / 200; with missing fonts drawn as a Windows
+   face (新細明體 as 宋体) taking that face's box too: **173 / 200, mean 0.923** (Windows 186).
+   Still open: Cambria Math, the other 12 documents running long, and bundling the Latin fonts
+   in the tar.gz and AppImage.
 3. **Governance:** work as a CJK working group inside the storytold/ArtCraft community, or as a
    separate organisation? This affects branding and CLA.
 4. **Engine risk:** WordCraft is 3 weeks old. If upstream stalls, the patch queue becomes a fork.
