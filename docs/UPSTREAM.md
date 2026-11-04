@@ -94,9 +94,10 @@ longer applies, and running the fidelity corpus before and after.
 | 0060-layout-punctuation-kerning-on-a-character-grid | wordcraft-layout | Kerned text closes up adjacent full-width marks on a character grid too, by half the cell (WPS, F42). Test | not opened: WPS-measured |
 | 0061-layout-even-pages-gutter-with-odd-even-headers | wordcraft-layout | With different odd and even headers (margins not mirrored) the gutter moves to the right of even pages (WPS, F42). Test | not opened: WPS-measured |
 | 0062-layout-bookmark-only-section-end-stays | wordcraft-layout | A section-closing paragraph of nothing but markers (a bookmark) counts as empty and stays at the bottom of a full page (F42). Test | could go upstream: generalises an existing rule |
+| 0063-layout-empty-paragraph-indent-takes-no-column-room | wordcraft-layout | An empty paragraph's indents don't widen a column fitted to its contents (WPS, F43). Test | not opened: WPS-measured |
 
-All 62 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-04); the
-`wordcraft-layout` (612), `-fonts` (109), `-doc` (242), `-docx` (375 + 134 integration) and
+All 63 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-04); the
+`wordcraft-layout` (613), `-fonts` (109), `-doc` (242), `-docx` (375 + 134 integration) and
 `-engine` (1095) suites pass with them, and fmt and clippy are clean.
 
 **Review status (2026-10-31):** four CodeRabbit rounds; every thread resolved or answered, and the

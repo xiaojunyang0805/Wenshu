@@ -86,6 +86,11 @@ held only at 20 units. Implemented; `8f343b7812`'s line breaks now match. Still 
 hanging end marks, automatic spaces beside digits (`cd82c17bf5`, `39de0888eb`), the character
 grid (`2d6a9da333`) and `a9f763a2b4`'s kerned pairs.
 
+**Then (F43, patch 0063): 186 / 200.** Group G: an empty paragraph's indents don't widen a column
+fitted to its contents (`1403def07e` matches). Group H (`a180b9d578`) probed (row splits with
+minimum heights, centred cells, no borders, empty first paragraphs: all match WPS); its cause is
+still unknown and needs the page position it occurs at.
+
 **Then (patches 0060–0062): 185 / 200, mean 0.9430.** Kerning on character grids (C), the gutter on
 even pages under `evenAndOddHeaders` (D) and a bookmark-only section-end paragraph (E) rescored:
 `9c1f3849ea` matches, three more score higher, no losses (`228229e95c` and `85cb8e4b30` still a

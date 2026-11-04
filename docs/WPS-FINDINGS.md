@@ -710,6 +710,18 @@ Not implemented: r has no rule yet, and documents often have a real space beside
 (`20 年`), which the sweep doesn't cover. Also: without `tblCellMar`
 or a table style WPS uses almost no cell margins (0.47 pt).
 
+## F43. An empty paragraph's indents take no column room
+
+Measured 2026-11-04 (one-row tables, fixed and automatic preferred widths, `tcW` given): when
+WPS fits a table's columns to their contents, an empty paragraph's indents (a 270 pt first-line
+indent, or a 270 pt left indent) don't widen its column; the same indent before text does.
+`dc-policies-1403def07e`'s form has an empty paragraph with `w:firstLine="5400"` in its narrow
+last column (a copy of the signature paragraphs); Wenshu widened that column to 238 pt and
+narrowed the others, so the cells wrapped and the form ran a page long. Patch 0063. Page counts
+185 → 186 / 200, mean 0.9430 → 0.9430; no other change. Also measured, not changed: a table
+with a fixed width and no cell widths fits its columns to their contents in WPS (Wenshu keeps
+the grid).
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).
