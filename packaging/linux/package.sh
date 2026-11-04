@@ -19,7 +19,8 @@
 # (pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev
 # libgtk-3-dev libfontconfig1-dev), curl, unzip, dpkg-deb for the .deb, and
 # `scripts/sync-upstream.sh` run first. Every package carries two open 公文 fonts (朱雀仿宋,
-# 霞鹜文楷 GB), downloaded once at pinned versions and checked by SHA-256. The AppImage downloads appimagetool and its runtime at pinned versions, checked by SHA-256
+# 霞鹜文楷 GB) and metric-compatible Latin fonts (Liberation 2, Carlito, Caladea), downloaded once
+# at pinned versions and checked by SHA-256. The AppImage downloads appimagetool and its runtime at pinned versions, checked by SHA-256
 # (the same pins as WordCraft's packaging/linux/package.sh). Build on an old distro (Ubuntu 22.04,
 # glibc 2.35) so the binaries run on newer ones. Optional: desktop-file-validate, appstreamcli.
 #
@@ -142,11 +143,30 @@ fetch_font_file https://github.com/lxgw/LxgwWenkaiGB/releases/download/v1.530/LX
   5561d48097d92e5ab99fe7b1459d381bbcdff533bfc479207b089c6860c3990e LXGWWenKaiGB-Regular.ttf
 fetch_font_file https://raw.githubusercontent.com/lxgw/LxgwWenkaiGB/v1.530/OFL.txt \
   a8aa32c38a3402ba4e40fb6d39c913300dd4a0336290dce5c14e3a2f9308d092 OFL-LXGWWenKaiGB.txt
+# Metric-compatible Latin fonts for Times New Roman / Arial / Courier New (Liberation 2), Calibri
+# (Carlito) and Cambria (Caladea): WordCraft draws those names in them when installed, keeping
+# line breaks; distributions often don't install them (Linux corpus run: 150 -> 167 / 200).
+fetch_font_file https://github.com/liberationfonts/liberation-fonts/files/7261482/liberation-fonts-ttf-2.1.5.tar.gz   7191c669bf38899f73a2094ed00f7b800553364f90e2637010a69c0e268f25d0 liberation-fonts-ttf-2.1.5.tar.gz
+GF=https://raw.githubusercontent.com/google/fonts/f60b457bc90062c17f9bf80a882da25a86f56200/ofl
+fetch_font_file "$GF/carlito/Carlito-Regular.ttf" f6418f708baede9789daef5d458c0f53d2a888af9820e8062934e504fedc6595 Carlito-Regular.ttf
+fetch_font_file "$GF/carlito/Carlito-Bold.ttf" bb5d20f79b82599ec72983597437373a80f2d2085fa91fc144fd74e876a594db Carlito-Bold.ttf
+fetch_font_file "$GF/carlito/Carlito-Italic.ttf" 0b019225e58d702bfedcbd35c21696769f8ee115cb6343f84c2f240312450d1c Carlito-Italic.ttf
+fetch_font_file "$GF/carlito/Carlito-BoldItalic.ttf" b32928186c119599e03ca6a1ffc680fdcb7fac95772f4b95d989cf6cd3861517 Carlito-BoldItalic.ttf
+fetch_font_file "$GF/carlito/OFL.txt" 58402f82a7c332a700294988fe7554fbb0a63a8d27ccc1ee3bbc640311990a00 OFL-Carlito.txt
+fetch_font_file "$GF/caladea/Caladea-Regular.ttf" f1e899278b7b4491aba5b6a8253c4b04c050cc59b21865be5c37559a775153cd Caladea-Regular.ttf
+fetch_font_file "$GF/caladea/Caladea-Bold.ttf" ae3cb2dcbc925809dd29d2a44e9802211cab66be541bacbfc9c08c74b27c3742 Caladea-Bold.ttf
+fetch_font_file "$GF/caladea/Caladea-Italic.ttf" 4359a8e24f748b6447b1ff6d7a174febe70961d29f8bb8634b56dacd740a3deb Caladea-Italic.ttf
+fetch_font_file "$GF/caladea/Caladea-BoldItalic.ttf" ccabaa7b7e2fdf253d2b1a5fa699dd8a3df8d835a9eb285ad82631a677eb76c0 Caladea-BoldItalic.ttf
+fetch_font_file "$GF/caladea/OFL.txt" ccdab61d371d8c8683a128a92cd7d498dbdb1d37689f7cb21f1bf6b16658d213 OFL-Caladea.txt
 FONTS="$STAGE/usr/share/wenshu/fonts"
 mkdir -p "$FONTS"
 unzip -q -o -j "$FONT_CACHE/ZhuqueFangsong-v0.212.zip" 'ZhuqueFangsong-Regular.ttf' -d "$FONTS"
 install -m644 "$FONT_CACHE/LXGWWenKaiGB-Regular.ttf" "$FONTS/"
 install -m644 "$FONT_CACHE/OFL-ZhuqueFangsong.txt" "$FONT_CACHE/OFL-LXGWWenKaiGB.txt" "$DOC/notices/"
+tar -xzf "$FONT_CACHE/liberation-fonts-ttf-2.1.5.tar.gz" -C "$FONTS" --strip-components=1 --wildcards 'liberation-fonts-ttf-2.1.5/*.ttf'
+tar -xzf "$FONT_CACHE/liberation-fonts-ttf-2.1.5.tar.gz" -O liberation-fonts-ttf-2.1.5/LICENSE > "$DOC/notices/OFL-Liberation.txt"
+install -m644 "$FONT_CACHE"/Carlito-*.ttf "$FONT_CACHE"/Caladea-*.ttf "$FONTS/"
+install -m644 "$FONT_CACHE/OFL-Carlito.txt" "$FONT_CACHE/OFL-Caladea.txt" "$DOC/notices/"
 chmod 644 "$FONTS"/*
 
 if command -v desktop-file-validate >/dev/null; then
@@ -185,7 +205,7 @@ Architecture: $DEB_ARCH
 Maintainer: ${WENSHU_MAINTAINER:-The Wenshu authors <https://github.com/xiaojunyang0805/Wenshu>}
 Installed-Size: $(du -sk "$STAGE" | cut -f1)
 Depends: libc6 (>= $GLIBC_MIN), libgcc-s1, libxkbcommon0, libxkbcommon-x11-0, libvulkan1 | libegl1
-Recommends: libwayland-client0, libx11-6, libx11-xcb1, libxcursor1, libxi6, libxrandr2, mesa-vulkan-drivers, xdg-desktop-portal, fonts-noto-cjk, fonts-liberation2, fonts-crosextra-carlito, fonts-crosextra-caladea
+Recommends: libwayland-client0, libx11-6, libx11-xcb1, libxcursor1, libxi6, libxrandr2, mesa-vulkan-drivers, xdg-desktop-portal, fonts-noto-cjk
 Section: editors
 Priority: optional
 Homepage: https://github.com/xiaojunyang0805/Wenshu
