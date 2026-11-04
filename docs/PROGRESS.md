@@ -18,8 +18,9 @@ Newest first. One entry per working session: what landed, what was verified, wha
   pages there (28 on x86_64) because the emulated root has only DejaVu, so 宋体 / 新細明體 text
   falls back to the bundled 霞鹜文楷 (the LoongArch CLI gives 30 in the same root; documents in
   bundled fonts match); the quit check's 20 s wait is too short under emulation. A first run
-  "stalled" only because WSL had wiped `/tmp`, where the comparison CLI was. Open: a Song-style
-  fallback for systems without Chinese fonts (the tar.gz can't recommend fonts-noto-cjk).
+  "stalled" only because WSL had wiped `/tmp`, where the comparison CLI was. Then bundled a Song
+  fallback (Noto Serif SC Regular + Bold, OFL, pinned to Noto CJK Serif 2.003): the LoongArch
+  root without Chinese fonts gives `cd82c17bf5` 28 pages again (fonts folder 41 → 64 MB).
 - **Chinese blank documents** now match WPS's own (created in WPS through COM, saved, read):
   Calibri for Latin text (not Times New Roman), punctuation compression on, compatibility mode
   14, header and footer 851 / 992 twips; WPS also shows the Latin font and en-US language for a

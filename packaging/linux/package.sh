@@ -19,7 +19,8 @@
 # (pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev
 # libgtk-3-dev libfontconfig1-dev), curl, unzip, dpkg-deb for the .deb, and
 # `scripts/sync-upstream.sh` run first. Every package carries two open 公文 fonts (朱雀仿宋,
-# 霞鹜文楷 GB) and metric-compatible Latin fonts (Liberation 2, Carlito, Caladea), downloaded once
+# 霞鹜文楷 GB), a Song fallback (Noto Serif SC) and metric-compatible Latin fonts (Liberation 2,
+# Carlito, Caladea), downloaded once
 # at pinned versions and checked by SHA-256. The AppImage downloads appimagetool and its runtime at pinned versions, checked by SHA-256
 # (the same pins as WordCraft's packaging/linux/package.sh). Build on an old distro (Ubuntu 22.04,
 # glibc 2.35) so the binaries run on newer ones. Optional: desktop-file-validate, appstreamcli.
@@ -158,6 +159,13 @@ fetch_font_file "$GF/caladea/Caladea-Bold.ttf" ae3cb2dcbc925809dd29d2a44e9802211
 fetch_font_file "$GF/caladea/Caladea-Italic.ttf" 4359a8e24f748b6447b1ff6d7a174febe70961d29f8bb8634b56dacd740a3deb Caladea-Italic.ttf
 fetch_font_file "$GF/caladea/Caladea-BoldItalic.ttf" ccabaa7b7e2fdf253d2b1a5fa699dd8a3df8d835a9eb285ad82631a677eb76c0 Caladea-BoldItalic.ttf
 fetch_font_file "$GF/caladea/OFL.txt" ccdab61d371d8c8683a128a92cd7d498dbdb1d37689f7cb21f1bf6b16658d213 OFL-Caladea.txt
+# A Song (宋体) design for systems without Chinese fonts of their own (the tar.gz can't pull in
+# fonts-noto-cjk): Noto Serif SC, Regular and Bold (OFL), from Noto CJK Serif 2.003. Without it
+# 宋体 text fell back to 霞鹜文楷 (a LoongArch root with only DejaVu: 28 -> 30 pages).
+NCJK=https://raw.githubusercontent.com/notofonts/noto-cjk/Serif2.003/Serif
+fetch_font_file "$NCJK/SubsetOTF/SC/NotoSerifSC-Regular.otf" e8f396decc1f0963a016a989c3d8852e863d1350996f573860a80767c83a1cd3 NotoSerifSC-Regular.otf
+fetch_font_file "$NCJK/SubsetOTF/SC/NotoSerifSC-Bold.otf" 24693d48bdb9152f0a06b02af625638a1097abd6de4010ebba027f6e82710527 NotoSerifSC-Bold.otf
+fetch_font_file "$NCJK/LICENSE" 6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2 OFL-NotoSerifCJK.txt
 FONTS="$STAGE/usr/share/wenshu/fonts"
 mkdir -p "$FONTS"
 unzip -q -o -j "$FONT_CACHE/ZhuqueFangsong-v0.212.zip" 'ZhuqueFangsong-Regular.ttf' -d "$FONTS"
@@ -167,6 +175,8 @@ tar -xzf "$FONT_CACHE/liberation-fonts-ttf-2.1.5.tar.gz" -C "$FONTS" --strip-com
 tar -xzf "$FONT_CACHE/liberation-fonts-ttf-2.1.5.tar.gz" -O liberation-fonts-ttf-2.1.5/LICENSE > "$DOC/notices/OFL-Liberation.txt"
 install -m644 "$FONT_CACHE"/Carlito-*.ttf "$FONT_CACHE"/Caladea-*.ttf "$FONTS/"
 install -m644 "$FONT_CACHE/OFL-Carlito.txt" "$FONT_CACHE/OFL-Caladea.txt" "$DOC/notices/"
+install -m644 "$FONT_CACHE/NotoSerifSC-Regular.otf" "$FONT_CACHE/NotoSerifSC-Bold.otf" "$FONTS/"
+install -m644 "$FONT_CACHE/OFL-NotoSerifCJK.txt" "$DOC/notices/"
 chmod 644 "$FONTS"/*
 
 if command -v desktop-file-validate >/dev/null; then
