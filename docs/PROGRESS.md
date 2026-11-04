@@ -2,6 +2,22 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-04 (3): M2 re-checked; v0.1.3 built and install-tested; blank documents as WPS's
+
+- **M2 re-checked on the current code** (desktop driven through the control channel): 13 / 13:
+  zh-Hans start-up, the five 公文 templates seeded and each passing all 8 GB/T 9704 checks in
+  检查公文格式, three corpus documents with the app's page count equal to the CLI's, typing, Save
+  As .docx, reopen, clean quit.
+- **v0.1.3** (patches through 0064, the Linux packages with the metric-compatible Latin fonts):
+  tagged, CI built all 8 assets into a draft, checksums verified; the same 13 checks pass on the
+  Windows portable zip and MSI (installed per user, then uninstalled) and on the Linux .deb,
+  tar.gz and AppImage in WSL; the LoongArch CLI runs under qemu with the x86_64 result. Draft
+  awaiting publication.
+- **Chinese blank documents** now match WPS's own (created in WPS through COM, saved, read):
+  Calibri for Latin text (not Times New Roman), punctuation compression on, compatibility mode
+  14, header and footer 851 / 992 twips; WPS also shows the Latin font and en-US language for a
+  blank document, so those weren't bugs. On `main` after v0.1.3.
+
 ## 2026-11-04 (2): Linux fidelity measured: 115 → 167 / 200
 
 Decided with the user: the page-count chase on Windows is in maintenance mode at 186 / 200 (J1
