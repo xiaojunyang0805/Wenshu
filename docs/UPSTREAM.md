@@ -89,8 +89,9 @@ longer applies, and running the fidelity corpus before and after.
 | 0055-docx-unsigned-minus-one-wrap-distance | wordcraft-docx | A wrap distance stored as the unsigned form of −1 (`4294967295`) is no distance (F38). Test | could go upstream: a reader robustness fix |
 | 0056-layout-first-line-chars-count-the-first-run | wordcraft-layout | Off a character grid a first-line indent in characters counts the first run with text: size plus twice its spacing (WPS, F39). Tests | not opened: departs from Word (#534 test changed) |
 | 0057-layout-lowered-text-keeps-the-line-height | wordcraft-layout | A line all lowered by `w:position` is as tall as an unlowered one (WPS, F40). Test | not opened: WPS-measured |
+| 0058-layout-squeeze-limit-shrinks-with-line-length | wordcraft-layout | In mode 15 a justified line squeezes each of k marks at most 1/(k + n/32) em, n its length before the last unit (WPS, F41; replaces F10's 1 − 1/(2k)). Test | not opened: WPS-measured |
 
-All 57 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-04); the
+All 58 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-04); the
 `wordcraft-layout` (612), `-fonts` (109), `-doc` (242), `-docx` (375 + 134 integration) and
 `-engine` (1095) suites pass with them, and fmt and clippy are clean.
 

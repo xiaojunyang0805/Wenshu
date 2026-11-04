@@ -657,6 +657,25 @@ that). Wenshu grew every lowered line, so `dc-creative-e67370879a` (its Normal s
 183 → 184 / 200, mean 0.9423 → 0.9424; no other change. Still different: a whole line raised
 (3 pt: no growth in WPS, 10 pt: 6.5 pt) and lowered text with `w:textAlignment="top"`.
 
+## F41. The squeeze limit shrinks as the line grows (supersedes F10's mode-15 base)
+
+Measured 2026-11-04 (`out/sqz3`–`sqz12`: 宋体 and 仿宋, 12 and 16 pt, zh-TW and no language,
+6- to 46-unit justified lines with 1–4 commas, 0.1 pt width steps; 2,700 renders). F10's
+1 − 1/(2k) em held only for the 20-unit lines it was measured on. In mode 15 a justified line may
+squeeze each of its k marks at most **1 / (k + n/32) em** (and at most its blank half), n being
+the line's length in em before its last unit: two commas give up 0.94 em on a 6-unit line,
+0.77 on 20, 0.73 on 26, 0.59 on 46; one comma its half until about 37 units, then less. Font,
+size and language don't change it. Wenshu follows this (patch 0058); the plain-ending sweeps match
+in 713 of 720 cases. `dc-creative-8f343b7812`'s line breaks now all match WPS (its page count is
+still off, for a later cause on page 3). Corpus: 184 / 200, no losses.
+
+Still open, measured: (1) a line ending in a hanging closing mark squeezes less, increasingly so
+on long lines, and long such lines take the other fit (the end mark inside the margin, the inner
+marks squeezed to their full half); (2) automatic spaces beside digits are not squeezed but cut
+what the marks may give (two commas: 0.31 em instead of 0.38 on a 20-unit line), which is what
+keeps `cd82c17bf5` and `39de0888eb` one character short; (3) on a character grid WPS squeezes
+`：、` by half a pitch where Wenshu doesn't (`2d6a9da333`).
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

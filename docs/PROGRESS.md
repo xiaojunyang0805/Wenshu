@@ -80,13 +80,19 @@ scores; fixed before committing.
 height in WPS (`e67370879a`: Normal style lowered 0.5 pt). Tests: layout 612, docx 375 + 134,
 engine 1095; the queue 0001-0057 reproduces the tested tree.
 
+**Then (F41, patch 0058): still 184 / 200.** Group A probed: not the language. WPS's squeeze limit
+on justified mode-15 lines falls with line length, k / (k + n/32) em for k marks; F10's 1 − 1/(2k)
+held only at 20 units. Implemented; `8f343b7812`'s line breaks now match. Still open in group A:
+hanging end marks, automatic spaces beside digits (`cd82c17bf5`, `39de0888eb`), the character
+grid (`2d6a9da333`) and `a9f763a2b4`'s kerned pairs.
+
 **Where the 16 stand (2026-11-04, analysed before fixing; `out/triage2.py`, `out/pagestarts.py`,
 `out/linecmp.py`):** each document's first divergence from WPS, traced to a cause. "Probe" marks a
 cause seen in the document but not yet confirmed with WPS probes.
 
 | Group | Documents | Cause | Status |
 |---|---|---|---|
-| A. Punctuation squeeze in Traditional Chinese | `8f343b7812` (−1), `cd82c17bf5` (+1), `39de0888eb` (+1), `a9f763a2b4` (−1) | On line-grid zh-TW documents WPS doesn't squeeze `，。：」` at all; Wenshu squeezes up to ⅓ em and fits a character more | probe: language, grid type |
+| A. Punctuation squeeze (not the language: F41) | `8f343b7812` (−1), `cd82c17bf5` (+1), `39de0888eb` (+1), `a9f763a2b4` (−1) | On line-grid zh-TW documents WPS doesn't squeeze `，。：」` at all; Wenshu squeezes up to ⅓ em and fits a character more | probe: language, grid type |
 | A'. Same, character grid | `2d6a9da333` (−1) | The reverse: on a `linesAndChars` grid WPS squeezes `：、` to half to fit `成？`; Wenshu doesn't | probe with A |
 | B. Semicolon doesn't hang | `a5beccd773` (+1) | WPS breaks before `件；`; Wenshu hangs `；` past the margin (F20's list has no `；`) | probe |
 | C. Closing pair at line end | `228229e95c` (+1) | WPS fits `策）。` about 1 em past the margin; Wenshu breaks before `策` | probe |
