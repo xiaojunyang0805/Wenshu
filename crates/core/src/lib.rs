@@ -61,8 +61,11 @@ pub fn blank_defaults(region: &wordcraft_engine::Region, d: &mut wordcraft_doc::
         return;
     }
     let traditional = matches!(region.territory.as_str(), "TW" | "HK" | "MO");
+    // As WPS Office's own blank document (2026-11-04, created through COM and saved): Latin text
+    // in Calibri (Carlito on Linux), 宋体, 10.5 pt, English proofing for Latin text, punctuation
+    // compression on, compatibility mode 14, header 1.5 cm and footer 1.75 cm.
     let c = &mut d.styles.default_chr;
-    c.font = Some("Times New Roman".into());
+    c.font = Some("Calibri".into());
     c.font_ea = Some(
         if traditional {
             "新細明體"
@@ -78,8 +81,12 @@ pub fn blank_defaults(region: &wordcraft_engine::Region, d: &mut wordcraft_doc::
     p.space_after = Some(0.0);
     p.line_spacing = Some(wordcraft_doc::props::LineSpacing::Multiple(1.0));
     p.align = Some(wordcraft_doc::Align::Justify);
+    d.settings.char_spacing = wordcraft_doc::CharSpacing::CompressPunctuation;
+    d.settings.compat_mode = 14;
     let s = &mut d.last_section;
     (s.margin_top, s.margin_bottom, s.margin_left, s.margin_right) = (72.0, 72.0, 90.0, 90.0);
+    (s.header, s.footer) = (42.55, 49.6);
+    s.columns.space = 21.25;
     s.doc_grid = Some(wordcraft_doc::section::DocGrid {
         kind: wordcraft_doc::section::DocGridType::Lines,
         line_pitch: 15.6,
@@ -163,6 +170,17 @@ mod tests {
         );
         assert!((zh.last_section.page_w - 595.3).abs() < 1.0, "A4");
         assert!(zh.last_section.doc_grid.is_some());
+        // WPS's own blank document: Calibri for Latin text, compression on, mode 14.
+        assert_eq!(zh.styles.default_chr.font.as_deref(), Some("Calibri"));
+        assert_eq!(
+            zh.settings.char_spacing,
+            wordcraft_doc::CharSpacing::CompressPunctuation
+        );
+        assert_eq!(zh.settings.compat_mode, 14);
+        assert!(
+            (zh.last_section.header - 42.55).abs() < 0.01
+                && (zh.last_section.footer - 49.6).abs() < 0.01
+        );
         let tw = blank_document(&Region::from_tag("zh-TW"));
         assert_eq!(tw.styles.default_chr.font_ea.as_deref(), Some("新細明體"));
         // English stays a first-class function: an English region's blank document is WordCraft's.

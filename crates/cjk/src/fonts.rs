@@ -133,8 +133,9 @@ pub fn substitutes(family: &str) -> Option<&'static [&'static str]> {
         // DynaComware names WPS maps to Microsoft JhengHei (measured; 華康圓體, 華康楷書體W5 and
         // the display faces fall back to 宋体 there, as Wenshu does without an entry).
         "華康細圓體" | "华康细圆体" | "華康中圓體" | "华康中圆体" | "華康粗圓體" | "华康粗圆体"
-        | "華康中黑體" | "华康中黑体" | "華康粗黑體" | "华康粗黑体" | "華康標楷體" | "华康标楷体"
-        | "華康細明體" | "华康细明体" | "華康中明體" | "华康中明体" | "華康隸書體" | "华康隶书体" => JHENGHEI,
+        | "華康中黑體" | "华康中黑体" | "華康粗黑體" | "华康粗黑体" | "華康標楷體"
+        | "华康标楷体" | "華康細明體" | "华康细明体" | "華康中明體" | "华康中明体"
+        | "華康隸書體" | "华康隶书体" => JHENGHEI,
         "標楷體" | "标楷体" | "新細明體" | "細明體" | "新细明体" | "细明体" | "pmingliu"
         | "mingliu" => SONG,
         "宋体" | "simsun" | "新宋体" | "nsimsun" | "华文宋体" | "stsong" | "方正书宋"
@@ -151,7 +152,9 @@ pub fn substitutes(family: &str) -> Option<&'static [&'static str]> {
         "黑体" | "simhei" | "方正黑体" | "fzhei" | "fzhei-b01s" | "华文黑体" | "stheiti"
         | "华文细黑" | "stxihei" => HEI,
         // Traditional Chinese Hei faces WPS draws in SimHei (measured).
-        "華康儷中黑" | "华康俪中黑" | "華康黑體" | "华康黑体" | "文鼎粗黑" => HEI,
+        "華康儷中黑" | "华康俪中黑" | "華康黑體" | "华康黑体" | "文鼎粗黑" => {
+            HEI
+        }
         "微软雅黑" | "microsoftyahei" | "等线" | "dengxian" | "苹方" | "pingfangsc"
         | "微軟正黑體" | "微软正黑体" | "microsoftjhenghei" => YAHEI,
         _ => return None,
@@ -198,7 +201,17 @@ mod tests {
     fn dynacomware_names_follow_wps() {
         // Measured in WPS: each of these drawn in Microsoft JhengHei, these in SimHei, the rest
         // (no entry) in 宋体.
-        for name in ["華康細圓體", "華康中圓體", "華康粗圓體", "華康中黑體", "華康粗黑體", "華康標楷體", "華康細明體", "華康中明體", "華康隸書體"] {
+        for name in [
+            "華康細圓體",
+            "華康中圓體",
+            "華康粗圓體",
+            "華康中黑體",
+            "華康粗黑體",
+            "華康標楷體",
+            "華康細明體",
+            "華康中明體",
+            "華康隸書體",
+        ] {
             assert_eq!(substitutes(name), Some(JHENGHEI), "{name}");
         }
         for name in ["華康儷中黑", "華康黑體", "文鼎粗黑"] {
