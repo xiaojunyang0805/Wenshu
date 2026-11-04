@@ -1,0 +1,48 @@
+Upstream: (not opened; WPS measurement: a hanging indent beside leftChars or hangingChars hangs from the character left indent, the first line at leftChars (0 without it) and the others a hanging further in, whatever w:left says; Word writes w:left as that sum)
+diff --git a/crates/doc/src/resolve.rs b/crates/doc/src/resolve.rs
+index 5aaff432..62876218 100644
+--- a/crates/doc/src/resolve.rs
++++ b/crates/doc/src/resolve.rs
+@@ -252,6 +252,13 @@ impl ResolvedPara {
+                 *pts = (chars * size).clamp(-MAX_INDENT, MAX_INDENT);
+             }
+         }
++        // A hanging indent beside `leftChars` or `hangingChars` hangs from the character left
++        // indent: the first line starts there (at 0 without `leftChars`) and the other lines a
++        // hanging further in, whatever `w:left` says (WPS Office; Word writes `w:left` as that
++        // sum: `leftChars=250 hangingChars=274` at 12 pt beside `w:left=1258`).
++        if (l != 0.0 || f < 0.0) && self.indent_first < 0.0 {
++            self.indent_left = ((l * sides).clamp(-MAX_INDENT, MAX_INDENT) - self.indent_first).clamp(-MAX_INDENT, MAX_INDENT);
++        }
+     }
+ }
+ 
+diff --git a/crates/docx/tests/it/char_units.rs b/crates/docx/tests/it/char_units.rs
+index 03d99c5a..122abff2 100644
+--- a/crates/docx/tests/it/char_units.rs
++++ b/crates/docx/tests/it/char_units.rs
+@@ -80,3 +80,24 @@ fn automatic_spacing_reads_and_round_trips() {
+     let again = wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap();
+     assert_eq!(props(&again)[..3], p[..3]);
+ }
++
++/// A hanging indent beside `leftChars` or `hangingChars` hangs from the character left indent:
++/// the first line starts at `leftChars` (0 without it), the others a hanging further in, whatever
++/// `w:left` says (WPS Office: `leftChars=250 hangingChars=274` at 12 pt starts the first line at
++/// 30 pt and the rest at 62.9 pt, Word's `w:left=1258`). Twips alone keep the usual rule.
++#[test]
++fn a_hanging_indent_hangs_from_the_character_left_indent() {
++    let body = r#"<w:p><w:pPr><w:ind w:leftChars="100" w:left="9999"/></w:pPr><w:r><w:t>一</w:t></w:r></w:p>
++        <w:p><w:pPr><w:ind w:leftChars="250" w:left="1258" w:hangingChars="274" w:hanging="658"/></w:pPr><w:r><w:t>二</w:t></w:r></w:p>
++        <w:p><w:pPr><w:ind w:left="1258" w:hangingChars="274" w:hanging="658"/></w:pPr><w:r><w:t>三</w:t></w:r></w:p>
++        <w:p><w:pPr><w:ind w:leftChars="250" w:left="1258" w:hanging="100"/></w:pPr><w:r><w:t>四</w:t></w:r></w:p>
++        <w:p><w:pPr><w:ind w:left="1258" w:hanging="658"/></w:pPr><w:r><w:t>五</w:t></w:r></w:p>"#;
++    let d = wordcraft_docx::read(&docx(body)).unwrap();
++    let rp: Vec<_> = props(&d).iter().map(|p| d.styles.resolve_para(p)).collect();
++    let unit = rp[0].indent_left;
++    let near = |a: f32, b: f32| (a - b).abs() < 0.01;
++    assert!(near(rp[1].indent_left, 5.24 * unit) && near(rp[1].indent_first, -2.74 * unit), "{:?}", rp[1]);
++    assert!(near(rp[2].indent_left, 2.74 * unit) && near(rp[2].indent_first, -2.74 * unit), "{:?}", rp[2]);
++    assert!(near(rp[3].indent_left, 2.5 * unit + 5.0) && near(rp[3].indent_first, -5.0), "{:?}", rp[3]);
++    assert!(near(rp[4].indent_left, 62.9) && near(rp[4].indent_first, -32.9), "{:?}", rp[4]);
++}

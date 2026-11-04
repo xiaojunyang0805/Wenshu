@@ -579,6 +579,19 @@ snapped at least 0 as well (patch 0050). Page counts 177 → 179 / 200, mean 0.9
 WPS's 18 pt pitch, but WPS wraps the text in its narrow table cells at 6 characters a line where
 Wenshu fits 10 to 12 (to trace).
 
+## F34. A hanging indent in characters hangs from `leftChars`
+
+Measured 2026-11-04 (probes built on `dc-legal-a18e0d6d84`'s package, 12 pt 標楷體, in the body
+and in a table cell, on a line grid, a character grid and no grid; compatibility settings varied
+without effect). When a paragraph has `w:leftChars` or `w:hangingChars` and a hanging indent, WPS
+starts the first line at the character left indent (at 0 without `leftChars`) and the other lines
+a hanging further in; `w:left` is not used. `leftChars=250 hangingChars=274` at 12 pt: first line
+30 pt, the rest 62.9 pt (Wenshu had −2.9 and 30); `leftChars=250` with `w:hanging="100"`: 30 and
+35; `hangingChars=274` with `w:left="1258"`: 0 and 32.9. Word writes `w:left` as that same sum
+(1258 twips = 30 + 32.9 pt), so Word reads it the same way. Twips alone keep the usual rule (first
+line at left − hanging). Patch 0051. Page counts 179 → 180 / 200 (`a18e0d6d84`, whose table cells
+F33 left wrapping wide), mean 0.9408 → 0.9419; eight more score higher, no losses.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

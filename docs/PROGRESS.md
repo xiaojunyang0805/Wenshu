@@ -48,7 +48,12 @@ w:lineRule="atLeast"`) is no rule to WPS: natural line height, off the grid. Gai
 lucky match (WPS wraps its narrow table cells at 6 characters a line, Wenshu at 10-12: trace).
 Tests: layout 609; fmt and clippy clean; the queue 0001-0050 reproduces the tested tree.
 
-**Where the 21 stand (2026-11-04):**
+**Then (F34, patch 0051): 180 / 200, mean 0.9419.** A hanging indent beside `leftChars` or
+`hangingChars` hangs from the character left indent in WPS (`w:left` unused); `a18e0d6d84`
+matches again, eight more score higher (`cd82c17bf5` 0.902 → 0.946), no losses. Tests: doc 242,
+docx 374 + 134, layout 609, engine 1095; the queue 0001-0051 reproduces the tested tree.
+
+**Where the 20 stand (2026-11-04):**
 - `29a7772dfb` (+2): cut down to 16 blocks (`out/bis/reduce2.py … 第二部分2023`); WPS keeps a
   break-only paragraph after text ending at y 724, Wenshu (725) sends it over (empty page). Probe:
   on a 312-twip grid WPS needs the full grid line for that paragraph (Wenshu fits 13.6 pt in 14),
@@ -65,12 +70,11 @@ Tests: layout 609; fmt and clippy clean; the queue 0001-0050 reproduces the test
 - `cd82c17bf5`, `228229e95c`, `82eb70e86d`: the empty page is a symptom of earlier line-height or
   break differences.
 - `f7d3afdfdb` (−1): Latin text in Arial Unicode MS drawn by WPS in a font of its own (widths).
-- `a18e0d6d84`: table-cell text wraps narrower in WPS (F33).
 - The rest not yet traced: `a9f763a2b4`, `a180b9d578`, `2d6a9da333`, `1f522d22f6`,
   `e67370879a`, `aa1a5e719d`, `40991f97da`, `7abe5be4e9`, `1403def07e`, `39de0888eb`,
   `a5beccd773`, `85cb8e4b30`, `9c1f3849ea`.
 
-**Next:** `a18e0d6d84` (cell wrap), then continue down that list (`cd82c17bf5`, `228229e95c`, `ea10dc7972`,
+**Next:** continue down that list (`cd82c17bf5`, `228229e95c`, `ea10dc7972`,
 `82eb70e86d`: tables and trailing empty paragraphs), then line-height differences.
 
 ## 2026-11-03 (9): no empty page before a heading that opens with a page break (F25): 170 / 200
