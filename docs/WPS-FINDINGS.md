@@ -688,7 +688,8 @@ hang") turned out to be this: its paragraph is left-aligned; its page 1 now matc
 last line. `ce628d9760` scores lower (0.941 → 0.925): a centred cell that Wenshu filled only by
 hanging `，`, which WPS fits by about 1 pt of overflow not yet explained.
 
-Measured on the way, not yet in the queue (rescore pending): (1) WPS kerns adjacent full-width
+Measured on the way; (1)–(3) are patches 0060–0062 (page counts 184 → 185 / 200, mean 0.9426 →
+0.9430, `9c1f3849ea` matches, no losses): (1) WPS kerns adjacent full-width
 marks on a character grid too, by half the cell (Wenshu skipped kerning there;
 `228229e95c`'s `策）。`); (2) with `w:evenAndOddHeaders` (margins not mirrored) the gutter moves
 to the right of even pages (`85cb8e4b30`); (3) an empty section-end paragraph holding only a
@@ -696,7 +697,13 @@ bookmark stays at the page bottom like an empty one (`9c1f3849ea`); (4) a missin
 substitute follows its font-table `w:charset`: 86 (GB2312) 宋体 for the whole run
 (`f7d3afdfdb`), 88 (Big5) MingLiU-ExtB, none or 00 Segoe Print for an unknown name (the
 Segoe Print of F32's open item) and an Arial-metric face for Arial Unicode MS; (5) automatic
-spaces beside digits cut the punctuation squeeze limit (no rule yet). Also: without `tblCellMar`
+spaces beside digits on a justified mode-15 line (`out/sqz13`, `sqz14`: 12 pt, 10–30 units, 1–4
+commas, 0–3 digit groups `20` with an automatic space each side, 2,530 renders): the automatic
+spaces do give up room, **0.25 em per line in all** however many groups (one group: half of each
+of its two 3 pt spaces); and each comma's limit falls further, as if 1/(k + n/32 + r), with
+r ≈ 0.32 for one group, 0.87 for two, 1.13 for three, the same for 1–4 commas and 10–30 units.
+Not implemented: r has no rule yet, and documents often have a real space beside the digits
+(`20 年`), which the sweep doesn't cover. Also: without `tblCellMar`
 or a table style WPS uses almost no cell margins (0.47 pt).
 
 ## Still to measure

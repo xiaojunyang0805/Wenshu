@@ -1,0 +1,75 @@
+Upstream: (not opened; WPS measurement: kerned text closes up adjacent full-width marks on a character grid too, by half the mark cell)
+diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
+index 1a0816b0..db538ab4 100644
+--- a/crates/layout/src/para/grid.rs
++++ b/crates/layout/src/para/grid.rs
+@@ -171,9 +171,10 @@ pub(super) fn auto_space(b: &mut Builder, text: &str, de: bool, dn: bool) -> Vec
+ /// whose advance is at least 0.9 em, so a proportional (Latin) quote is left alone.
+ /// Punctuation kerning: kerned text (`w:kern`, at or above its threshold size) closes up adjacent
+ /// full-width marks by half an em ([`crate::kinsoku::kern_side`]), whether or not punctuation is
+-/// compressed (WPS: `中》《中` advances 》 by 8 pt at 16 pt). The earlier mark's advance shrinks;
++/// compressed (WPS: `中》《中` advances 》 by 8 pt at 16 pt; on a character grid by half its cell). The
++/// earlier mark's advance shrinks;
+ /// returns the blank sides taken, (cluster, left side), which compression then leaves alone.
+-pub(super) fn kern_punct(b: &mut Builder, text: &str) -> Vec<(usize, bool)> {
++pub(super) fn kern_punct(b: &mut Builder, text: &str, on_grid: bool) -> Vec<(usize, bool)> {
+     let mark = |b: &Builder, k: usize| -> Option<(char, f32)> {
+         let c = b.clusters.get(k).filter(|c| c.kind == ClKind::Text)?;
+         let mut chars = text.get(c.start..c.end).unwrap_or_default().chars();
+@@ -191,7 +192,9 @@ pub(super) fn kern_punct(b: &mut Builder, text: &str) -> Vec<(usize, bool)> {
+             None => continue,
+         };
+         if let Some(cl) = b.clusters.get_mut(k) {
+-            cl.adv = (cl.adv - (size / 2.0).min(200.0)).max(0.0);
++            // On a character grid, half the mark's cell (WPS: 8.5 pt on a 17 pt pitch).
++            let half = if on_grid { cl.adv / 2.0 } else { size / 2.0 };
++            cl.adv = (cl.adv - half.min(200.0)).max(0.0);
+             taken.push(side);
+         }
+     }
+diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
+index cb35c0a8..2b71fdca 100644
+--- a/crates/layout/src/para/paragraph.rs
++++ b/crates/layout/src/para/paragraph.rs
+@@ -618,11 +618,12 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+     if rp.snap_to_grid {
+         snap_chars(&mut sh.b, &p.text, &env.grid);
+     }
+-    // Kerned text closes up adjacent full-width marks, off a character grid (WPS).
+-    let kerned = if doc.settings.no_punctuation_kerning || (rp.snap_to_grid && env.grid.chars.is_some()) {
++    // Kerned text closes up adjacent full-width marks, on a character grid too (WPS: by half the
++    // pitch).
++    let kerned = if doc.settings.no_punctuation_kerning {
+         Vec::new()
+     } else {
+-        super::grid::kern_punct(&mut sh.b, &p.text)
++        super::grid::kern_punct(&mut sh.b, &p.text, rp.snap_to_grid && env.grid.chars.is_some())
+     };
+     // Text on a character grid keeps to its cells; compression applies there too (WPS).
+     let mut auto_space =
+diff --git a/crates/layout/src/tests/compress.rs b/crates/layout/src/tests/compress.rs
+index 99d572c3..8139327a 100644
+--- a/crates/layout/src/tests/compress.rs
++++ b/crates/layout/src/tests/compress.rs
+@@ -405,6 +405,21 @@ fn kerned_text_closes_up_adjacent_marks_by_half_an_em() {
+     assert!((adv("中》《中", Some(1.0), true) - SIZE).abs() < 0.01, "noPunctuationKerning");
+     assert!((adv("中》《中", Some(20.0), false) - SIZE).abs() < 0.01, "below the kerning threshold");
+     assert!(adv("中）“中", Some(1.0), false) > SIZE * 0.9, "curly quotes stay");
++    // On a character grid too, by half the mark's cell (WPS: 8.5 pt on a 17 pt pitch, 7.8 on a
++    // 15.55 pt one).
++    for char_space in [0, 4127, -1839] {
++        let mut d = doc("中）。中", CharSpacing::DoNotCompress, None);
++        d.settings.no_punctuation_kerning = false;
++        d.last_section.doc_grid = Some(DocGrid { kind: DocGridType::LinesAndChars, line_pitch: 15.6, char_space });
++        if let Some(Block::Para(p)) = d.body.first_mut().map(Arc::make_mut) {
++            for r in &mut p.runs {
++                r.props.kern = Some(1.0);
++            }
++        }
++        let g = first_para(&lay(&d));
++        let (cell, mark) = (g.clusters.first().map_or(0.0, |c| c.adv), g.clusters.get(1).map_or(0.0, |c| c.adv));
++        assert!((mark - cell / 2.0).abs() < 0.01, "charSpace {char_space}: ） {mark} in a {cell} pt cell");
++    }
+ }
+ 
+ /// A hanging closing mark and the squeeze of the marks before it add up: the line's other marks

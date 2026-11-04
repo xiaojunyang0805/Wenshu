@@ -1,0 +1,55 @@
+Upstream: (not opened; WPS measurement: with different odd and even headers and margins not mirrored, the gutter moves to the right of even pages)
+diff --git a/crates/layout/src/headers.rs b/crates/layout/src/headers.rs
+index 3b354573..69f9758f 100644
+--- a/crates/layout/src/headers.rs
++++ b/crates/layout/src/headers.rs
+@@ -335,10 +335,12 @@ pub(crate) fn headers_footers(ctx: &mut Ctx, pages: &mut [Page], sections: &[(us
+ /// Mirrored margins: even pages have the inside margin (and gutter) on the right, so their
+ /// header, text, notes and footer move to start at the outside margin. Page borders, measured
+ /// from the page edge, stay.
+-pub(crate) fn mirror_even_pages(pages: &mut [Page], sections: &[(usize, &SectionProps)]) {
++/// With `gutter_only` (different odd and even headers, margins not mirrored), only the gutter
++/// moves: WPS Office puts it on the right of even pages, so they shift left by it.
++pub(crate) fn mirror_even_pages(pages: &mut [Page], sections: &[(usize, &SectionProps)], gutter_only: bool) {
+     for page in pages.iter_mut().filter(|p| p.number % 2 == 0) {
+         let Some((_, s)) = sections.get(page.section) else { continue };
+-        let dx = s.margin_right - s.margin_left - s.gutter;
++        let dx = if gutter_only { -s.gutter } else { s.margin_right - s.margin_left - s.gutter };
+         if dx.abs() < 0.001 || !dx.is_finite() {
+             continue;
+         }
+diff --git a/crates/layout/src/pass.rs b/crates/layout/src/pass.rs
+index 2ce8b82e..07983401 100644
+--- a/crates/layout/src/pass.rs
++++ b/crates/layout/src/pass.rs
+@@ -451,7 +451,9 @@ fn fill_headers_footers(
+     }
+     headers_footers(ctx, pages, sections, &found);
+     if ctx.doc.settings.mirror_margins {
+-        mirror_even_pages(pages, sections);
++        mirror_even_pages(pages, sections, false);
++    } else if ctx.doc.settings.even_odd_headers {
++        mirror_even_pages(pages, sections, true);
+     }
+     None
+ }
+diff --git a/crates/layout/src/tests/pages.rs b/crates/layout/src/tests/pages.rs
+index 93e410af..a2158099 100644
+--- a/crates/layout/src/tests/pages.rs
++++ b/crates/layout/src/tests/pages.rs
+@@ -51,6 +51,15 @@ fn mirrored_margins_put_the_inside_margin_toward_the_binding() {
+         assert!((x - want).abs() < 0.01, "page {i} (number {}): text at {x}, want {want}", p.number);
+         assert!((p.body.x - want).abs() < 0.01 && (p.body.w - d.last_section.text_width()).abs() < 0.01, "page {i}: {:?}", p.body);
+     }
++    // Different odd and even headers without mirrored margins: only the gutter moves, to the
++    // right of even pages (WPS Office).
++    d.settings.mirror_margins = false;
++    d.settings.even_odd_headers = true;
++    let l = lay(&d);
++    for (x, p) in body_left(&l).iter().zip(&l.pages) {
++        let want = if p.number % 2 == 1 { 118.0 } else { 108.0 };
++        assert!((x - want).abs() < 0.01, "page number {}: text at {x}, want {want}", p.number);
++    }
+ }
+ 
+ #[test]

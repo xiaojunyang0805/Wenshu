@@ -91,8 +91,11 @@ longer applies, and running the fidelity corpus before and after.
 | 0057-layout-lowered-text-keeps-the-line-height | wordcraft-layout | A line all lowered by `w:position` is as tall as an unlowered one (WPS, F40). Test | not opened: WPS-measured |
 | 0058-layout-squeeze-limit-shrinks-with-line-length | wordcraft-layout | In mode 15 a justified line squeezes each of k marks at most 1/(k + n/32) em, n its length before the last unit (WPS, F41; replaces F10's 1 − 1/(2k)). Test | not opened: WPS-measured |
 | 0059-layout-mode-15-hangs-justified-lines-only | wordcraft-layout | In mode 15 a closing mark hangs past the margin on justified and distributed lines only (WPS, F42). Test | not opened: WPS-measured |
+| 0060-layout-punctuation-kerning-on-a-character-grid | wordcraft-layout | Kerned text closes up adjacent full-width marks on a character grid too, by half the cell (WPS, F42). Test | not opened: WPS-measured |
+| 0061-layout-even-pages-gutter-with-odd-even-headers | wordcraft-layout | With different odd and even headers (margins not mirrored) the gutter moves to the right of even pages (WPS, F42). Test | not opened: WPS-measured |
+| 0062-layout-bookmark-only-section-end-stays | wordcraft-layout | A section-closing paragraph of nothing but markers (a bookmark) counts as empty and stays at the bottom of a full page (F42). Test | could go upstream: generalises an existing rule |
 
-All 59 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-04); the
+All 62 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-04); the
 `wordcraft-layout` (612), `-fonts` (109), `-doc` (242), `-docx` (375 + 134 integration) and
 `-engine` (1095) suites pass with them, and fmt and clippy are clean.
 
