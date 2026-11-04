@@ -89,7 +89,14 @@ grid (`2d6a9da333`) and `a9f763a2b4`'s kerned pairs.
 **Then (F43, patch 0063): 186 / 200.** Group G: an empty paragraph's indents don't widen a column
 fitted to its contents (`1403def07e` matches). Group H (`a180b9d578`) probed (row splits with
 minimum heights, centred cells, no borders, empty first paragraphs: all match WPS); its cause is
-still unknown and needs the page position it occurs at.
+still unknown and needs the page position it occurs at. Group I (`82eb70e86d`) traced: a row split
+at the page bottom, its narrow cell (6 pt text on a 15.6 pt line grid) keeps 3 lines in Wenshu
+and 4 in WPS though the 4th ends inside the body (504.0 against 505.3); not widow control (off,
+Wenshu still keeps 3; WPS applies widow and orphan control in split cells, probed) and not the
+bottom margin (the footer sets the body's end); without the line grid both keep the same.
+Needs Wenshu's split measurements (the grid line boxes in `split_row`). Probed on the way: WPS
+lets a split cell's last line run about 2 pt past the page bottom (20 pt exact lines, 97.9 pt of
+room: five lines), and packs two 9 pt characters a line into a 12 pt cell where Wenshu fits one.
 
 **Then (patches 0060–0062): 185 / 200, mean 0.9430.** Kerning on character grids (C), the gutter on
 even pages under `evenAndOddHeaders` (D) and a bookmark-only section-end paragraph (E) rescored:
