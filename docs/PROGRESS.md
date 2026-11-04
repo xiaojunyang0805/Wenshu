@@ -53,6 +53,12 @@ Tests: layout 609; fmt and clippy clean; the queue 0001-0050 reproduces the test
 matches again, eight more score higher (`cd82c17bf5` 0.902 → 0.946), no losses. Tests: doc 242,
 docx 374 + 134, layout 609, engine 1095; the queue 0001-0051 reproduces the tested tree.
 
+**Then (F35, patch 0052): still 180 / 200.** Text after a paragraph's leading page or column
+break keeps the first-line indent in WPS (probed; Wenshu matches the probes now, no corpus change).
+`7abe5be4e9` (+1) is otherwise a PDF-converted form: its header holds an OLE object whose EMF
+preview WPS draws (body pushed to ~19.3 pt; Wenshu draws the embedded document's text and keeps the
+15 pt margin), and a 45-shape drawing group (bars, checkboxes) Wenshu doesn't draw.
+
 **Where the 20 stand (2026-11-04):**
 - `29a7772dfb` (+2): cut down to 16 blocks (`out/bis/reduce2.py … 第二部分2023`); WPS keeps a
   break-only paragraph after text ending at y 724, Wenshu (725) sends it over (empty page). Probe:

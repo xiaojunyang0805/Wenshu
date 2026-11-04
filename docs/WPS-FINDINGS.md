@@ -592,6 +592,17 @@ a hanging further in; `w:left` is not used. `leftChars=250 hangingChars=274` at 
 line at left − hanging). Patch 0051. Page counts 179 → 180 / 200 (`a18e0d6d84`, whose table cells
 F33 left wrapping wide), mean 0.9408 → 0.9419; eight more score higher, no losses.
 
+## F35. Text after a leading page or column break is still the first line
+
+Measured 2026-11-04 (two-column probes, 9 pt 宋体). A paragraph that opens with a column break (or
+a page break, or several) starts its text in the next column or page with the first-line or
+hanging indent (`w:hanging="291"`: x 326.8, not the other lines' 341.4; `w:firstLine="600"`:
+345.6); the space before is not repeated there. After a leading line break, or a column break
+after text, the text takes the other lines' indent. Wenshu now does the same (patch 0052); the
+probes match. No corpus change: found in `dc-forms-7abe5be4e9`, a form converted from PDF whose
+page count differs for other reasons (a header holding an OLE object's EMF preview that pushes the
+body down in WPS; a 45-shape drawing group that Wenshu doesn't draw).
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

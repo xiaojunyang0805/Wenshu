@@ -1,0 +1,77 @@
+Upstream: (not opened; WPS measurement: text after a paragraph leading page or column breaks is still the first line and keeps the first-line or hanging indent in the next column or page; after a leading line break, or a column break after text, the other lines indent applies)
+diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
+index 53333815..02b383ed 100644
+--- a/crates/layout/src/para/lines.rs
++++ b/crates/layout/src/para/lines.rs
+@@ -357,6 +357,15 @@ impl<'e> Breaker<'e> {
+             self.first_x0 = sc.xs.first().copied();
+         }
+         let end = sc.end;
++        // Text after leading page or column breaks is still the first line (WPS Office: it keeps
++        // the first-line or hanging indent in the next column or page; after a line break, or a
++        // column break after text, the other lines' indent applies).
++        let leading_break = self.first
++            && matches!(end, LineEnd::PageBreak | LineEnd::ColumnBreak)
++            && pl
++                .clusters
++                .get(sc.c0..c1)
++                .is_some_and(|cs| cs.iter().all(|c| matches!(c.kind, ClKind::PageBreak | ClKind::ColumnBreak | ClKind::Marker)));
+         let mut line = Line {
+             top: self.top,
+             height: v.height,
+@@ -381,7 +390,7 @@ impl<'e> Breaker<'e> {
+             reorder_line(pl, &mut line, self.width);
+         }
+         self.lines.push(line);
+-        self.first = false;
++        self.first = leading_break;
+         self.skipped = 0;
+         self.i = j;
+         end
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+index cc9af3b9..c8c7d418 100644
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -12304,3 +12304,42 @@ fn balanced_single_byte_width_doubles_east_asian_character_spacing() {
+         assert!((space - want).abs() < 0.01, "balance {balance}: a space changes by {space}");
+     }
+ }
++
++/// Text after a paragraph's leading page or column break is still its first line: it keeps the
++/// hanging indent on the next page (WPS Office). After a leading line break, or a column break
++/// after text, the other lines' indent applies.
++#[test]
++fn text_after_a_leading_page_break_keeps_the_first_line_indent() {
++    use wordcraft_doc::para::{COLUMN_BREAK, LINE_BREAK, PAGE_BREAK};
++    let words = "Indented text that runs on long enough to wrap onto a further line of the paragraph. ".repeat(3);
++    let lefts = |lead: String| {
++        let mut d = Document::from_text("x");
++        let mut p = Paragraph::with_text(&format!("{lead}{words}"), Default::default());
++        p.props.indent_left = Some(40.0);
++        p.props.indent_first = Some(-20.0);
++        d.body = vec![wordcraft_doc::para_block(p)];
++        let l = lay(&d);
++        let lines: Vec<f32> = l
++            .pages
++            .iter()
++            .flat_map(|pg| pg.items.iter())
++            .filter_map(|it| {
++                if let Placed::Lines { para, l0, l1, .. } = it {
++                    Some(para.lines[*l0..*l1].iter().map(|ln| ln.left).collect::<Vec<_>>())
++                } else {
++                    None
++                }
++            })
++            .flatten()
++            .collect();
++        lines
++    };
++    let page = lefts(PAGE_BREAK.to_string());
++    assert!((page[2] - page[1] - 20.0).abs() < 0.01, "after a leading page break {page:?}");
++    let two = lefts(format!("{COLUMN_BREAK}{PAGE_BREAK}"));
++    assert!((two[3] - two[2] - 20.0).abs() < 0.01, "after two leading breaks {two:?}");
++    let line = lefts(LINE_BREAK.to_string());
++    assert!((line[2] - line[1]).abs() < 0.01, "after a leading line break {line:?}");
++    let mid = lefts(format!("Lead{COLUMN_BREAK}"));
++    assert!((mid[2] - mid[1]).abs() < 0.01, "after text and a column break {mid:?}");
++}
