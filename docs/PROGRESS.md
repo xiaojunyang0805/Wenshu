@@ -12,7 +12,14 @@ Newest first. One entry per working session: what landed, what was verified, wha
   tagged, CI built all 8 assets into a draft, checksums verified; the same 13 checks pass on the
   Windows portable zip and MSI (installed per user, then uninstalled) and on the Linux .deb,
   tar.gz and AppImage in WSL; the LoongArch CLI runs under qemu with the x86_64 result. Draft
-  awaiting publication.
+  awaiting publication. Then: the MSI upgrades v0.1.2 in place (one entry, 0.1.3, 13 / 13, clean
+  uninstall); the installed .deb embeds its own Carlito, Caladea and 朱雀仿宋 in PDF export with no
+  setup; the LoongArch desktop under qemu passes 11 / 13. Its two failures: `cd82c17bf5` is 30
+  pages there (28 on x86_64) because the emulated root has only DejaVu, so 宋体 / 新細明體 text
+  falls back to the bundled 霞鹜文楷 (the LoongArch CLI gives 30 in the same root; documents in
+  bundled fonts match); the quit check's 20 s wait is too short under emulation. A first run
+  "stalled" only because WSL had wiped `/tmp`, where the comparison CLI was. Open: a Song-style
+  fallback for systems without Chinese fonts (the tar.gz can't recommend fonts-noto-cjk).
 - **Chinese blank documents** now match WPS's own (created in WPS through COM, saved, read):
   Calibri for Latin text (not Times New Roman), punctuation compression on, compatibility mode
   14, header and footer 851 / 992 twips; WPS also shows the Latin font and en-US language for a
