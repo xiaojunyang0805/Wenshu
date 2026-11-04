@@ -696,7 +696,11 @@ to the right of even pages (`85cb8e4b30`); (3) an empty section-end paragraph ho
 bookmark stays at the page bottom like an empty one (`9c1f3849ea`); (4) a missing font's Latin
 substitute follows its font-table `w:charset`: 86 (GB2312) 宋体 for the whole run
 (`f7d3afdfdb`), 88 (Big5) MingLiU-ExtB, none or 00 Segoe Print for an unknown name (the
-Segoe Print of F32's open item) and an Arial-metric face for Arial Unicode MS; (5) automatic
+Segoe Print of F32's open item) and an Arial-metric face for Arial Unicode MS. Tried as a
+rule ("a missing font with charset 86 is drawn in 宋体") it cost 2 page matches and lowered 37
+documents (r28): 公文 fonts such as 仿宋_GB2312 carry charset 86 too, and WPS draws those in
+their own substitutes, so the charset applies only to names WPS has no substitute for; and it
+broke F31's line box for Arial Unicode MS. Reverted; it needs a probe of which names count; (5) automatic
 spaces beside digits on a justified mode-15 line (`out/sqz13`, `sqz14`: 12 pt, 10–30 units, 1–4
 commas, 0–3 digit groups `20` with an automatic space each side, 2,530 renders): the automatic
 spaces do give up room, **0.25 em per line in all** however many groups (one group: half of each

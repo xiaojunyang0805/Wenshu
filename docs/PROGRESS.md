@@ -89,8 +89,9 @@ grid (`2d6a9da333`) and `a9f763a2b4`'s kerned pairs.
 **Then (patches 0060–0062): 185 / 200, mean 0.9430.** Kerning on character grids (C), the gutter on
 even pages under `evenAndOddHeaders` (D) and a bookmark-only section-end paragraph (E) rescored:
 `9c1f3849ea` matches, three more score higher, no losses (`228229e95c` and `85cb8e4b30` still a
-page off for further causes). Group A's digit factor measured (F42 (5)), not implemented. Next: F,
-the font-table charset substitute (`f7d3afdfdb`).
+page off for further causes). Group A's digit factor measured (F42 (5)), not implemented. F (the
+font-table charset substitute) implemented and rescored: 185 → 183 / 200, 37 documents lower
+(公文 fonts like 仿宋_GB2312 carry charset 86 but keep their own substitutes in WPS); reverted.
 
 **Then (F42, patch 0059): 184 / 200, mean 0.9426.** Group B was not about `；`: in mode 15 WPS
 hangs closing marks on justified lines only. Measured and implemented but not yet rescored (the
