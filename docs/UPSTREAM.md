@@ -81,9 +81,10 @@ longer applies, and running the fidelity corpus before and after.
 | 0047-layout-linked-face-keeps-line-height | wordcraft-layout | Compatibility ideographs in a stand-in face keep the run font's line height (WPS, F30). Test | not opened: WPS-measured |
 | 0048-fonts-missing-arial-unicode-ms-line | wordcraft-fonts | A missing Arial Unicode MS keeps a 1.74 em line box (WPS, F31). Test | not opened: WPS-measured |
 | 0049-layout-missing-founder-faces-line-box | wordcraft-fonts, -layout | Missing Founder faces keep WPS's line box, also for text in the run's East Asian font (F32). Test | not opened: WPS-measured, depends on WPS's substitutes |
+| 0050-layout-at-least-zero-off-grid | wordcraft-layout | At least 0 (`w:line="0" w:lineRule="atLeast"`) is no rule: natural height, off the document grid (F33). Test | not opened: WPS-measured |
 
-All 49 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-03); the
-`wordcraft-layout` (602), `-fonts` (109), `-doc` (242), `-docx` (373 + 134 integration) and
+All 50 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-04); the
+`wordcraft-layout` (609), `-fonts` (109), `-doc` (242), `-docx` (373 + 134 integration) and
 `-engine` (1095) suites pass with them, and fmt and clippy are clean.
 
 **Review status (2026-10-31):** four CodeRabbit rounds; every thread resolved or answered, and the

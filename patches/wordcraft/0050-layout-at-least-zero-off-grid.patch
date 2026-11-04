@@ -1,0 +1,69 @@
+Upstream: (not opened; WPS measurement: a line spacing of at least 0 (w:line="0" w:lineRule="atLeast") is no rule at all to WPS, the line keeps its natural height off the document grid; any other minimum, 0.05 pt included, still snaps)
+diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
+index f89cfd9c..53333815 100644
+--- a/crates/layout/src/para/lines.rs
++++ b/crates/layout/src/para/lines.rs
+@@ -497,9 +497,11 @@ impl<'e> Breaker<'e> {
+         let grid = self.grid.as_ref();
+         let (height, centred) = match (rp.line_spacing, grid) {
+             (LineSpacing::Multiple(m), Some(g)) => (g.multiple_height(natural, m).max(g.snap_height(pictures)), true),
+-            (LineSpacing::AtLeast(v), Some(g)) => (g.snap_height(natural.max(pictures)).max(v), true),
++            // At least 0 (`w:line="0" w:lineRule="atLeast"`) is no rule at all to WPS: the
++            // natural height, off the grid (any other minimum, 0.05 pt included, snaps).
++            (LineSpacing::AtLeast(v), Some(g)) if v > 0.0 => (g.snap_height(natural.max(pictures)).max(v), true),
+             (LineSpacing::Multiple(m), None) => ((text_natural * m + label_extra).max(text_pictures), false),
+-            (LineSpacing::AtLeast(v), None) => (natural.max(text_pictures).max(v), false),
++            (LineSpacing::AtLeast(v), _) => (natural.max(text_pictures).max(v), false),
+             (LineSpacing::Exactly(v), _) => (v, false),
+         };
+         let baseline = if centred {
+@@ -590,13 +592,14 @@ impl<'e> Breaker<'e> {
+         let natural = asc + desc;
+         let h = match (rp.line_spacing, grid) {
+             (LineSpacing::Multiple(m), Some(g)) => g.multiple_height(natural, m),
+-            (LineSpacing::AtLeast(v), Some(g)) => g.snap_height(natural).max(v),
++            (LineSpacing::AtLeast(v), Some(g)) if v > 0.0 => g.snap_height(natural).max(v),
+             (LineSpacing::Multiple(m), None) => natural * m,
+-            (LineSpacing::AtLeast(v), None) => natural.max(v),
++            (LineSpacing::AtLeast(v), _) => natural.max(v),
+             (LineSpacing::Exactly(v), _) => v,
+         };
+         let exact = matches!(rp.line_spacing, LineSpacing::Exactly(_));
+-        let baseline = if grid.is_some() && !exact { h - desc } else { baseline_offset(rp.line_spacing, asc, h, desc) };
++        let off_grid = matches!(rp.line_spacing, LineSpacing::AtLeast(v) if v <= 0.0);
++        let baseline = if grid.is_some() && !exact && !off_grid { h - desc } else { baseline_offset(rp.line_spacing, asc, h, desc) };
+         let (width, x0) = (self.width, rp.indent_left);
+         let (x0, left, right) = if self.rtl_para { (width - x0, width - self.base_right, width - x0) } else { (x0, x0, self.base_right) };
+         self.lines.push(Line {
+diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
+index c7632bf5..06e47e87 100644
+--- a/crates/layout/src/tests/grid.rs
++++ b/crates/layout/src/tests/grid.rs
+@@ -63,6 +63,27 @@ fn line_grid_snaps_line_heights_and_fixes_lines_per_page() {
+     assert_eq!(lines(&lay(&off)).1[0], lines(&lay(&plain)).1[0]);
+ }
+ 
++/// `w:line="0" w:lineRule="atLeast"` is no rule to WPS: on a line grid the line keeps its natural
++/// height, as with snapping off; any other minimum, 0.05 pt included, snaps (measured: 14 pt text
++/// on an 18 pt grid, 18.24 pt lines at 0, 36 at 0.05 to 20 pt).
++#[test]
++fn at_least_zero_lines_are_off_the_grid() {
++    let text = ["Grid line"; 6].join("\n");
++    let heights = |spacing: LineSpacing, snap: bool| {
++        let mut d = with_grid(&text, DocGridType::Lines, 0);
++        for b in d.body.iter_mut() {
++            if let Block::Para(p) = std::sync::Arc::make_mut(b) {
++                p.props.line_spacing = Some(spacing);
++                p.props.snap_to_grid = Some(snap);
++            }
++        }
++        lines(&lay(&d)).1
++    };
++    assert_eq!(heights(LineSpacing::AtLeast(0.0), true), heights(LineSpacing::AtLeast(0.0), false), "natural height, off the grid");
++    let snapped = heights(LineSpacing::AtLeast(0.05), true);
++    assert!(snapped.iter().all(|h| ((h / 18.0) - (h / 18.0).round()).abs() < 1e-3), "{snapped:?}");
++}
++
+ /// A grid whose pitch is a little under the default size, as a 28-characters-a-line Chinese
+ /// official document has (16 pt text on a 15.79 pt pitch): (document, default size, pitch).
+ fn tight_grid(text: &str) -> (Document, f32, f32) {

@@ -568,6 +568,17 @@ Not done: in a run whose Latin font is 新細明體 or 細明體 (missing), WPS 
 Print, and its tall line box (28.2 pt at 16 pt, baseline 20.3) sets the line; Chinese-only lines
 are unaffected. Three references show it (`173ff7b3a5`, `ffe3dc89e6`, `aae80ea709`).
 
+## F33. At least 0 is no line rule: off the grid
+
+Measured 2026-11-04 (settings part included; 14 pt and 10.5 pt, 標楷體 and 新細明體, on an 18 pt
+line grid). A paragraph with `<w:spacing w:line="0" w:lineRule="atLeast"/>` lays its lines in WPS
+at their natural height (18.24 pt at 14 pt, 13.68 at 10.5), off the grid, as if it had no rule;
+any other minimum, 0.05 pt included, snaps to whole pitches (36 pt for those same lines). Wenshu
+snapped at least 0 as well (patch 0050). Page counts 177 → 179 / 200, mean 0.9401 → 0.9408: gains
+`493a360281`, `173ff7b3a5`, `ffe3dc89e6`; `a18e0d6d84` lost a lucky match. Its page 3 now has
+WPS's 18 pt pitch, but WPS wraps the text in its narrow table cells at 6 characters a line where
+Wenshu fits 10 to 12 (to trace).
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).
