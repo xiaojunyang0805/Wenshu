@@ -94,7 +94,11 @@ at the page bottom, its narrow cell (6 pt text on a 15.6 pt line grid) keeps 3 l
 and 4 in WPS though the 4th ends inside the body (504.0 against 505.3); not widow control (off,
 Wenshu still keeps 3; WPS applies widow and orphan control in split cells, probed) and not the
 bottom margin (the footer sets the body's end); without the line grid both keep the same.
-Needs Wenshu's split measurements (the grid line boxes in `split_row`). Probed on the way: WPS
+Traced with debug output in `split_row`: four lines fit (62.9 pt against a 63.95 pt limit) and
+widow control takes one back; with `w:widowControl w:val="0"` on that cell Wenshu matches WPS.
+So WPS doesn't apply widow control in this cell, though it does in exact-spaced probe cells
+(3 + 2 lines); the variable that separates them isn't found (line-grid probes laid the page
+above the table out differently in the two, so their room differed). Probed on the way: WPS
 lets a split cell's last line run about 2 pt past the page bottom (20 pt exact lines, 97.9 pt of
 room: five lines), and packs two 9 pt characters a line into a 12 pt cell where Wenshu fits one.
 
