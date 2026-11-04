@@ -1,0 +1,48 @@
+Upstream: (not opened; WPS measurement: in compatibility mode 15 a closing mark hangs past the margin on justified and distributed lines only; left, centred and right lines send the character before it over too; older modes hang on every line)
+diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
+index 6172de06..cb35c0a8 100644
+--- a/crates/layout/src/para/paragraph.rs
++++ b/crates/layout/src/para/paragraph.rs
+@@ -661,8 +661,10 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+     // `w:overflowPunct` (on unless turned off) in runs whose East Asian language is Chinese,
+     // Japanese or Korean (WPS; text tagged en-US gets only the blank half of
+     // `end_marks`, and only under compression), unless `w:useAltKinsokuLineBreakRules` is set.
++    // Compatibility mode 15 hangs them on justified and distributed lines only: a left-aligned,
++    // centred or right-aligned line sends the mark's character over with it (WPS Office).
+     let mut hang_marks = Vec::new();
+-    if rp.overflow_punct && !doc.settings.alt_kinsoku {
++    if rp.overflow_punct && !doc.settings.alt_kinsoku && (justified || squeeze_rule == super::SqueezeRule::HalfEm) {
+         let cjk: Vec<std::ops::Range<usize>> = p
+             .run_ranges()
+             .filter(|(_, props)| cx.res.char(props).lang_ea.as_deref().is_some_and(crate::kinsoku::cjk_lang))
+diff --git a/crates/layout/src/tests/compress.rs b/crates/layout/src/tests/compress.rs
+index 8d136c33..99d572c3 100644
+--- a/crates/layout/src/tests/compress.rs
++++ b/crates/layout/src/tests/compress.rs
+@@ -359,6 +359,26 @@ fn a_closing_mark_in_chinese_text_hangs_whole_under_overflow_punct() {
+     assert_eq!(first(Some("en-US"), None), 9, "text tagged en-US keeps the usual rule");
+     assert_eq!(first(None, None), 9, "untagged text too");
+     assert_eq!(first_alt(Some("zh-CN"), None, true), 9, "useAltKinsokuLineBreakRules turns hanging off");
++    // Compatibility mode 15 hangs on justified and distributed lines only (WPS: a left-aligned,
++    // centred or right-aligned line moves 中， down).
++    let mode15 = |align: Align| {
++        let mut d = doc(&text, CharSpacing::DoNotCompress, Some(10.0));
++        d.settings.compat_mode = 15;
++        if let Some(Block::Para(p)) = d.body.first_mut().map(Arc::make_mut) {
++            p.props.align = Some(align);
++            for r in &mut p.runs {
++                r.props.lang_ea = Some("zh-TW".into());
++            }
++        }
++        let g = first_para(&lay(&d));
++        g.lines[0].c1 - g.lines[0].c0
++    };
++    for align in [Align::Left, Align::Center, Align::Right] {
++        assert_eq!(mode15(align), 9, "{align:?} in mode 15");
++    }
++    for align in [Align::Justify, Align::Distribute] {
++        assert_eq!(mode15(align), 11, "{align:?} in mode 15");
++    }
+ }
+ 
+ /// Kerned text (`w:kern`) closes up adjacent full-width marks by half an em, compressed or not,

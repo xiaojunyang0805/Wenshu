@@ -676,6 +676,29 @@ what the marks may give (two commas: 0.31 em instead of 0.38 on a 20-unit line),
 keeps `cd82c17bf5` and `39de0888eb` one character short; (3) on a character grid WPS squeezes
 `：、` by half a pitch where Wenshu doesn't (`2d6a9da333`).
 
+## F42. Mode 15 hangs closing marks on justified lines only
+
+Measured 2026-11-04 (12 pt 宋体 zh-TW, a closing mark after exactly a full line; `，；：。、！）」`
+alike, `？` never hangs; body text and table cells with explicit cell margins). In compatibility
+mode 15 a closing mark hangs past the margin only on justified and distributed lines; a
+left-aligned, centred or right-aligned line sends the character before it over with it. Mode 14
+and older hang on every line. (F20's probes were justified.) Patch 0059; the 10 body and 12 cell
+probes match. Corpus 184 / 200, mean 0.9424 → 0.9426. `a5beccd773` (hypothesis B: "`；` doesn't
+hang") turned out to be this: its paragraph is left-aligned; its page 1 now matches up to the
+last line. `ce628d9760` scores lower (0.941 → 0.925): a centred cell that Wenshu filled only by
+hanging `，`, which WPS fits by about 1 pt of overflow not yet explained.
+
+Measured on the way, not yet in the queue (rescore pending): (1) WPS kerns adjacent full-width
+marks on a character grid too, by half the cell (Wenshu skipped kerning there;
+`228229e95c`'s `策）。`); (2) with `w:evenAndOddHeaders` (margins not mirrored) the gutter moves
+to the right of even pages (`85cb8e4b30`); (3) an empty section-end paragraph holding only a
+bookmark stays at the page bottom like an empty one (`9c1f3849ea`); (4) a missing font's Latin
+substitute follows its font-table `w:charset`: 86 (GB2312) 宋体 for the whole run
+(`f7d3afdfdb`), 88 (Big5) MingLiU-ExtB, none or 00 Segoe Print for an unknown name (the
+Segoe Print of F32's open item) and an Arial-metric face for Arial Unicode MS; (5) automatic
+spaces beside digits cut the punctuation squeeze limit (no rule yet). Also: without `tblCellMar`
+or a table style WPS uses almost no cell margins (0.47 pt).
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

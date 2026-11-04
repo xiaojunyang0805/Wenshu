@@ -86,6 +86,13 @@ held only at 20 units. Implemented; `8f343b7812`'s line breaks now match. Still 
 hanging end marks, automatic spaces beside digits (`cd82c17bf5`, `39de0888eb`), the character
 grid (`2d6a9da333`) and `a9f763a2b4`'s kerned pairs.
 
+**Then (F42, patch 0059): 184 / 200, mean 0.9426.** Group B was not about `；`: in mode 15 WPS
+hangs closing marks on justified lines only. Measured and implemented but not yet rescored (the
+run was stopped for low memory): kerning on character grids (group C, `228229e95c`), the gutter
+on even pages under `evenAndOddHeaders` (D, `85cb8e4b30`), a bookmark-only section-end paragraph
+(E, `9c1f3849ea`); measured, not implemented: the font-table charset substitute (F,
+`f7d3afdfdb`).
+
 **Where the 16 stand (2026-11-04, analysed before fixing; `out/triage2.py`, `out/pagestarts.py`,
 `out/linecmp.py`):** each document's first divergence from WPS, traced to a cause. "Probe" marks a
 cause seen in the document but not yet confirmed with WPS probes.
