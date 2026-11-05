@@ -1,0 +1,20 @@
+[package]
+name = "wenshu-ofd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "OFD (GB/T 33190-2016) writer: pages of text, paths and images, with embedded font subsets"
+
+[lints]
+workspace = true
+
+[dependencies]
+zip = { workspace = true }
+# The same subsetter krilla uses for PDF; we add back the cmap and OS/2 tables an OFD reader needs.
+subsetter = { version = "0.2.6", default-features = false }
+log = { workspace = true }
+
+[dev-dependencies]
+quick-xml = { workspace = true }
+skrifa = "0.47"

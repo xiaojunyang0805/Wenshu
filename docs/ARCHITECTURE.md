@@ -24,7 +24,8 @@ first.
 │ wenshu-fidelity  corpus runner, page diff, scoreboard         │
 │ wenshu-cjk       pure data: font substitutes, punctuation     │
 │                   classes (clreq / GB/T 15834), no deps        │
-│ wenshu-ofd (M3)  OFD (GB/T 33190) export from the layout      │
+│ wenshu-ofd       OFD (GB/T 33190) writer; wenshu-core::ofd     │
+│                   walks the layout's display list into it      │
 └──────────────┬─────────────────────────────────────────────────┘
                │ path deps + thin patch queue (patches/<engine>/)
 ┌──────────────▼──────────── upstream engines ────────────────────┐
@@ -68,6 +69,7 @@ Wenshu/
 │  ├─ cjk/                 wenshu-cjk
 │  ├─ core/                wenshu-core
 │  ├─ gongwen/             wenshu-gongwen
+│  ├─ ofd/                 wenshu-ofd
 │  └─ fidelity/            wenshu-fidelity
 ├─ apps/wenshu-cli/       `wenshu` binary
 ├─ apps/wenshu-desktop/   `wenshu-desktop`: the WordCraft front end as 文枢 (M2)
@@ -82,12 +84,12 @@ Wenshu/
 | Crate | Depends on | Responsibility | State |
 |---|---|---|---|
 | `wenshu-cjk` | — | Chinese document-font substitutes by design class (仿宋/楷/宋/小标宋/黑/雅黑), normalised names (`_GB2312`, `简体`, Founder IDs); punctuation classes, line-start/end prohibitions, compression amounts | ✅ 6 tests |
-| `wenshu-core` | cjk, wordcraft-engine, wordcraft-fonts | `init()` installs the substitute provider; `Doc::{open, info, pages, render_png, save_as, run}`; zh-CN default region (`WENSHU_REGION`) | ✅ |
+| `wenshu-core` | cjk, ofd, wordcraft-engine, wordcraft-fonts, wordcraft-layout | `init()` installs the substitute provider and the OFD save format; `Doc::{open, info, pages, render_png, save_as, run}`; `ofd::export` (the page display list → `wenshu-ofd`); zh-CN default region (`WENSHU_REGION`) | ✅ |
 | `wenshu-gongwen` | zip, quick-xml | `spec` (A4, 37/28 mm, 156×225 mm, 22×28 grid, 3号 仿宋…), `write_docx` (organ mark, number, red rule, title, recipients, body with 一、/（一） headings, signature, date, odd/even "— N —" footers), `check_docx` (8 rules) | ✅ 5 tests |
 | `wenshu-fidelity` | core, image | Render `corpus/files/*`, compare against `corpus/ref/<stem>.p<N>.png` (luminance diff), page-count match, `report.json` | ✅ 1 test |
 | `wenshu-cli` | core, gongwen, fidelity | `wenshu info · render · convert · gongwen new/check · fidelity` | ✅ |
 | `wenshu-desktop` | core, gongwen, wordcraft (app, patch 0006), wordcraft-control-key | `wordcraft::run` with Wenshu's brand (文枢), icon, settings folder (`%APPDATA%\Wenshu`), `wenshu_core::init()` at start-up (font substitutes; Chinese blank-document defaults in a Chinese region), 公文 templates seeded into File › New › Personal, and Review › 文枢 › 检查公文格式 (`wenshu-gongwen` checker). Packaged by `packaging/windows/package.ps1` (zip, MSI) and `packaging/linux/package.sh` (tar.gz, .deb, AppImage; tar.gz and .deb for LoongArch). The one crate that embeds the UI shell; document work still goes through `wenshu-core` | ✅ alpha |
-| `wenshu-ofd` | core | OFD export (GB/T 33190) from WordCraft's page display list | M3 |
+| `wenshu-ofd` | zip, subsetter | OFD (GB/T 33190) writer, engine-free: pages of text, paths and pictures in mm, fonts embedded as subsets with their own `cmap` (`CGTransform` only where a glyph isn't the cmap's), the OFD.xml / Document.xml / resources / page content package. `wenshu-core::ofd` walks WordCraft's page display list into it, and `init()` registers `.ofd` as a save format (patch 0065) for the CLI, Save As and File › Export | ✅ M3 (2026-11-05) |
 
 ## 5. How the engine is extended
 

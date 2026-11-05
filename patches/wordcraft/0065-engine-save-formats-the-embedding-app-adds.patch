@@ -1,0 +1,148 @@
+Upstream: (not opened; a list of save formats the embedding app adds, io::set_app_formats: file.save writes them by extension through the app's function, Save As offers them in its type list and File › Export as buttons, after WordCraft's own and never in place of one; Wenshu adds OFD)
+diff --git a/apps/wordcraft/src/file_dialogs.rs b/apps/wordcraft/src/file_dialogs.rs
+index b7f1bc68..866e5acc 100644
+--- a/apps/wordcraft/src/file_dialogs.rs
++++ b/apps/wordcraft/src/file_dialogs.rs
+@@ -209,11 +209,12 @@ fn save_exts(name: &str) -> Vec<String> {
+         .extension()
+         .and_then(std::ffi::OsStr::to_str)
+         .map(str::to_ascii_lowercase)
+-        .filter(|e| wordcraft_engine::io::SAVE_EXTS.contains(&e.as_str()))
++        .filter(|e| wordcraft_engine::io::save_exts().contains(&e.as_str()))
+         .unwrap_or_else(|| "docx".to_string());
+-    let mut exts: Vec<String> = Vec::with_capacity(wordcraft_engine::io::SAVE_EXTS.len());
++    let all = wordcraft_engine::io::save_exts();
++    let mut exts: Vec<String> = Vec::with_capacity(all.len());
+     exts.push(suggested.clone());
+-    exts.extend(wordcraft_engine::io::SAVE_EXTS.iter().filter(|e| **e != suggested).map(|e| (*e).to_string()));
++    exts.extend(all.iter().filter(|e| **e != suggested).map(|e| (*e).to_string()));
+     exts
+ }
+ 
+@@ -243,7 +244,10 @@ fn format_name(ext: &str) -> String {
+         "png" => "PNG Image".into(),
+         "json" => "JSON".into(),
+         "xml" => "XML".into(),
+-        other => other.to_ascii_uppercase(),
++        other => match wordcraft_engine::io::app_formats().iter().find(|f| f.ext == other) {
++            Some(f) => f.name.into(),
++            None => other.to_ascii_uppercase(),
++        },
+     }
+ }
+ 
+diff --git a/crates/engine/src/io.rs b/crates/engine/src/io.rs
+index f31e1fda..fdc20340 100644
+--- a/crates/engine/src/io.rs
++++ b/crates/engine/src/io.rs
+@@ -30,6 +30,36 @@ pub const OPEN_EXTS: &[&str] = &[
+ /// Formats WordCraft saves (Save As).
+ pub const SAVE_EXTS: &[&str] = &["docx", "docm", "dotx", "dotm", "pdf", "txt", "md", "html", "rtf", "odt", "tex", "png", "json", "xml"];
+ 
++/// A format the embedding app saves (an export: the document keeps its own file), offered by Save
++/// As and File › Export after WordCraft's own and written by `write`. Wenshu adds OFD this way.
++#[derive(Clone, Copy, Debug)]
++pub struct AppFormat {
++    /// The extension, lower-case, without the dot.
++    pub ext: &'static str,
++    /// What the file-type list and File › Export call it (shown as given, not translated).
++    pub name: &'static str,
++    pub write: fn(&Document) -> Result<Vec<u8>, String>,
++}
++
++static APP_FORMATS: std::sync::OnceLock<Vec<AppFormat>> = std::sync::OnceLock::new();
++
++/// Install the embedding app's save formats, once per process (later calls are ignored and
++/// return false). A format with one of WordCraft's own extensions is ignored.
++pub fn set_app_formats(formats: Vec<AppFormat>) -> bool {
++    let own = |e: &str| SAVE_EXTS.contains(&e) || e == "text";
++    APP_FORMATS.set(formats.into_iter().filter(|f| !own(f.ext) && !f.ext.is_empty()).collect()).is_ok()
++}
++
++/// The embedding app's save formats ([`set_app_formats`]).
++pub fn app_formats() -> &'static [AppFormat] {
++    APP_FORMATS.get().map_or(&[], Vec::as_slice)
++}
++
++/// Every extension Save As offers: WordCraft's own ([`SAVE_EXTS`]) then the app's.
++pub fn save_exts() -> Vec<&'static str> {
++    SAVE_EXTS.iter().copied().chain(app_formats().iter().map(|f| f.ext)).collect()
++}
++
+ /// Magic number for ZIP package signatures (used by .docx/.docm/.dotx/.dotm).
+ const ZIP_SIG: &[u8] = b"PK\x03\x04";
+ /// Magic number for OLE compound document signatures (used by .doc/.dot).
+@@ -388,6 +418,10 @@ pub fn save_bytes_opts(name: &str, doc: &Document, opts: &ExportOptions) -> Resu
+             Ok(if opts.markup && opts.comments { wordcraft_formats::comments::append("txt", doc, bytes) } else { bytes })
+         }
+         "json" => serde_json::to_vec_pretty(doc).map_err(|e| e.to_string()),
++        other if app_formats().iter().any(|f| f.ext == other) => match app_formats().iter().find(|f| f.ext == other) {
++            Some(f) => (f.write)(doc),
++            None => Err(format!("{name}: can't save as `.{other}`")),
++        },
+         other => match crate::io_ext::save(other, doc, opts) {
+             Some(r) => r,
+             None => Err(format!("{name}: can't save as `.{other}`")),
+diff --git a/crates/engine/src/tests/app_formats.rs b/crates/engine/src/tests/app_formats.rs
+new file mode 100644
+index 00000000..84b213b0
+--- /dev/null
++++ b/crates/engine/src/tests/app_formats.rs
+@@ -0,0 +1,28 @@
++//! Formats the embedding app saves (`io::set_app_formats`): written by the app's function,
++//! offered after WordCraft's own, never in place of one of them. (The list is set once per
++//! process, so this is the only test that sets it.)
++
++use crate::io::{AppFormat, app_formats, save_bytes, save_exts, set_app_formats};
++
++fn sample(doc: &wordcraft_doc::Document) -> Result<Vec<u8>, String> {
++    Ok(format!("paragraphs: {}", doc.body.len()).into_bytes())
++}
++
++#[test]
++fn an_app_format_is_saved_by_the_app() {
++    let first = set_app_formats(vec![
++        AppFormat { ext: "zzz", name: "Sample", write: sample },
++        // One of WordCraft's own: ignored, PDF stays WordCraft's.
++        AppFormat { ext: "pdf", name: "Not PDF", write: sample },
++    ]);
++    assert!(first);
++    assert!(!set_app_formats(Vec::new()), "set once");
++    assert_eq!(app_formats().len(), 1);
++    let exts = save_exts();
++    assert_eq!(exts.last(), Some(&"zzz"));
++    assert_eq!(exts.iter().filter(|e| **e == "pdf").count(), 1);
++    let doc = wordcraft_doc::Document::new();
++    assert_eq!(save_bytes("out.zzz", &doc).unwrap(), b"paragraphs: 1".to_vec());
++    assert_eq!(save_bytes("OUT.ZZZ", &doc).unwrap(), b"paragraphs: 1".to_vec());
++    assert!(save_bytes("out.pdf", &doc).unwrap().starts_with(b"%PDF"));
++}
+diff --git a/crates/ui-egui/src/print_page.rs b/crates/ui-egui/src/print_page.rs
+index 78ec2ce3..812aa898 100644
+--- a/crates/ui-egui/src/print_page.rs
++++ b/crates/ui-egui/src/print_page.rs
+@@ -370,4 +370,12 @@ pub fn export_formats(app: &mut WordApp, ui: &mut Ui) {
+         }
+         ui.add_space(4.0);
+     }
++    // Formats the embedding app adds (`wordcraft_engine::io::set_app_formats`), named as it names them.
++    for f in wordcraft_engine::io::app_formats() {
++        let label = format!("{} (*.{})", f.name, f.ext);
++        if ui.add(egui::Button::new(egui::RichText::new(label).font(medium(13.5))).min_size(vec2(320.0, 34.0))).clicked() {
++            app.export_dialog(f.ext);
++        }
++        ui.add_space(4.0);
++    }
+ }
+diff --git a/crates/engine/src/tests.rs b/crates/engine/src/tests.rs
+index 89aab700..378287b1 100644
+--- a/crates/engine/src/tests.rs
++++ b/crates/engine/src/tests.rs
+@@ -13,6 +13,7 @@ mod bidi;
+ mod documents;
+ mod font_sizes;
+ mod fonts;
++mod app_formats;
+ mod ime_noop;
+ mod revision_checks;
+ mod typing;

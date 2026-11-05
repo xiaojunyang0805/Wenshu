@@ -15,3 +15,14 @@ wordcraft-engine = { workspace = true }
 wordcraft-doc = { workspace = true }
 wordcraft-fonts = { workspace = true }
 serde_json = { workspace = true }
+# OFD export (`ofd`): the page display list written through wenshu-ofd.
+wenshu-ofd = { workspace = true }
+wordcraft-layout = { workspace = true }
+wordcraft-geom = { workspace = true }
+wordcraft-metafile = { workspace = true }
+kurbo = { workspace = true }
+log = { workspace = true }
+image = { workspace = true, features = ["jpeg", "gif", "bmp", "tiff", "webp"] }
+
+[dev-dependencies]
+zip = { workspace = true }

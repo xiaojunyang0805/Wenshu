@@ -17,11 +17,16 @@ wenshu-cjk = { path = "crates/cjk" }
 wenshu-gongwen = { path = "crates/gongwen" }
 wenshu-core = { path = "crates/core" }
 wenshu-fidelity = { path = "crates/fidelity" }
+wenshu-ofd = { path = "crates/ofd" }
 
 # Upstream engine (WordCraft), pinned by `upstream.lock` and patched by `patches/wordcraft/`.
 wordcraft-engine = { path = "upstream/wordcraft/crates/engine" }
 wordcraft-fonts = { path = "upstream/wordcraft/crates/fonts" }
 wordcraft-doc = { path = "upstream/wordcraft/crates/doc" }
+wordcraft-layout = { path = "upstream/wordcraft/crates/layout" }
+wordcraft-geom = { path = "upstream/wordcraft/crates/geom" }
+wordcraft-metafile = { path = "upstream/wordcraft/crates/metafile" }
+kurbo = "0.13"
 # The desktop front end, as a library (patch 0006), and its settings folder. Only
 # `apps/wenshu-desktop` uses these: it is the one place the UI shell is embedded.
 wordcraft = { path = "upstream/wordcraft/apps/wordcraft" }

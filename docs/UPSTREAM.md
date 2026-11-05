@@ -96,6 +96,7 @@ longer applies, and running the fidelity corpus before and after.
 | 0062-layout-bookmark-only-section-end-stays | wordcraft-layout | A section-closing paragraph of nothing but markers (a bookmark) counts as empty and stays at the bottom of a full page (F42). Test | could go upstream: generalises an existing rule |
 | 0063-layout-empty-paragraph-indent-takes-no-column-room | wordcraft-layout | An empty paragraph's indents don't widen a column fitted to its contents (WPS, F43). Test | not opened: WPS-measured |
 | 0064-fonts-missing-windows-chinese-faces-keep-their-line | wordcraft-fonts | A missing Windows Chinese system face (宋体, 黑体, 仿宋, 楷体, 微软雅黑, 微軟正黑體, 等线) keeps its own East Asian line box, not the substitute's, and so does a missing font drawn as one of them (新細明體 as 宋体) (Linux: 115 → 150, then 167 → 173 / 200). Tests (fonts, wenshu-core) | could go upstream: font metrics only |
+| 0065-engine-save-formats-the-embedding-app-adds | wordcraft-engine, apps/wordcraft, ui-egui | `io::set_app_formats`: save formats the embedding app adds, written by its function; `file.save` takes them by extension, Save As lists them in its type list and File › Export as buttons, after WordCraft's own and never in place of one (Wenshu: OFD). Test | could go upstream: a generic extension point, like 0001 |
 
 All 64 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-04); the
 `wordcraft-layout` (613), `-fonts` (109 + 1), `-doc` (242), `-docx` (375 + 134 integration) and

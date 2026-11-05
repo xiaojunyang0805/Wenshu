@@ -12,6 +12,8 @@ use wordcraft_engine::Session;
 
 pub use wenshu_cjk as cjk;
 
+pub mod ofd;
+
 /// The region used for documents that don't give a paper size (text, HTML, Markdown): mainland
 /// China, A4. `WENSHU_REGION` (a BCP 47 tag) overrides it.
 pub const DEFAULT_REGION: &str = "zh-CN";
@@ -19,12 +21,18 @@ pub const DEFAULT_REGION: &str = "zh-CN";
 static INIT: Once = Once::new();
 
 /// Install Wenshu's defaults into the engine: Chinese document-font substitutes, and Chinese
-/// defaults for new blank documents in a Chinese region ([`blank_defaults`]). Idempotent;
+/// defaults for new blank documents in a Chinese region ([`blank_defaults`]), and OFD as a save
+/// format (`file.save`, Save As, File › Export; [`ofd::export`]). Idempotent;
 /// [`Doc::open`] calls it.
 pub fn init() {
     INIT.call_once(|| {
         let _ = wordcraft_fonts::word::set_substitute_provider(wenshu_cjk::fonts::substitutes);
         let _ = wordcraft_engine::set_blank_document_hook(blank_defaults);
+        let _ = wordcraft_engine::io::set_app_formats(vec![wordcraft_engine::io::AppFormat {
+            ext: "ofd",
+            name: "OFD · GB/T 33190",
+            write: ofd::export,
+        }]);
         wordcraft_fonts::FontDb::global().add_font_dirs(app_font_dirs());
     });
 }
@@ -147,7 +155,8 @@ impl Doc {
         )
     }
 
-    /// Save or export by the extension of `out` (docx, pdf, odt, rtf, html, md, txt…).
+    /// Save or export by the extension of `out` (docx, pdf, ofd, odt, rtf, html, md, txt…);
+    /// `.ofd` too ([`ofd::export`], installed by [`init`]).
     pub fn save_as(&mut self, out: &Path) -> Result<(), String> {
         self.run("file.save", &json!({"path": out})).map(|_| ())
     }
@@ -210,6 +219,36 @@ mod tests {
             wordcraft_fonts::word::missing_font_line("No Such Font", &r),
             None
         );
+    }
+
+    /// The 公文 sample as OFD: its text as text (the red organ mark in its own font, in red), the
+    /// fonts embedded, A4 pages in millimetres.
+    #[test]
+    fn a_gongwen_exports_as_ofd() {
+        use std::io::Read;
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../corpus/files/01_gongwen.docx"
+        );
+        let mut doc = super::Doc::open(std::path::Path::new(path), None).unwrap();
+        let out = std::env::temp_dir().join(format!("wenshu-ofd-test-{}.ofd", std::process::id()));
+        doc.save_as(&out).unwrap();
+        let bytes = std::fs::read(&out).unwrap();
+        let _ = std::fs::remove_file(&out);
+        let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        let mut page = String::new();
+        z.by_name("Doc_0/Pages/Page_0/Content.xml")
+            .unwrap()
+            .read_to_string(&mut page)
+            .unwrap();
+        assert!(page.contains("<ofd:PhysicalBox>0 0 210.009 297.004</ofd:PhysicalBox>"));
+        assert!(page.contains(r#"<ofd:FillColor Value="224 0 0"/><ofd:TextCode"#));
+        assert!(page.contains(">某某市人民政府办公室文件</ofd:TextCode>"));
+        let fonts = (0..z.len())
+            .filter(|i| z.by_index(*i).unwrap().name().ends_with(".ttf"))
+            .count();
+        assert!(fonts >= 1);
+        assert_eq!(doc.pages().unwrap(), 1);
     }
 
     #[test]

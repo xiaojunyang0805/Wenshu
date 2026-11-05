@@ -11,7 +11,7 @@ USAGE:
   wenshu info <file>                            pages, paragraphs, properties (JSON)
   wenshu render <file> <out.png> [--page N] [--scale S]
                                                  render one page (default page 1, scale 2)
-  wenshu convert <in> <out>                     convert by extension: docx, pdf, odt, rtf, html, md, txt
+  wenshu convert <in> <out>                     convert by extension: docx, pdf, ofd, odt, rtf, html, md, txt
   wenshu gongwen new <spec.json> <out.docx>     write a GB/T 9704 official document
   wenshu gongwen check <file.docx> [--json]     check a document against GB/T 9704 (exit 1 on failures)
   wenshu fidelity <corpus> <out> [--scale S]    render <corpus>/files, compare with <corpus>/ref, write <out>/report.json

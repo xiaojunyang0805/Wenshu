@@ -2,6 +2,48 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-05: M3, OFD export
+
+- **`wenshu-ofd`** (new crate, no engine dependency): an OFD writer (GB/T 33190-2016). Pages of
+  text, path and picture objects in millimetres; the package OFD.xml → Doc_0/Document.xml →
+  PublicRes (RGB colour space, fonts) / DocumentRes (pictures) → Pages/Page_N/Content.xml. Text
+  stays text: each `TextCode` has its characters, glyphs and steps (`DeltaX`/`DeltaY`, runs of
+  equal steps as `g n v`). Fonts are embedded as subsets: the same subsetter krilla uses for PDF,
+  plus a `cmap` built for the characters drawn (format 4, format 12 past the BMP) and the
+  original `OS/2`, so the subset works as a font on its own, which an OFD reader needs (a PDF CID
+  font doesn't). A `CGTransform` is written only where a glyph isn't the one the cmap gives.
+  Every object's `Boundary` is the page, so positions are page coordinates; a `CTM` carries
+  turns, rotations, synthetic italic and `w:w` stretching.
+- **`wenshu-core::ofd`** walks each page's display list (the one the PDF export and renderer
+  draw): glyph runs, fills, rules (solid, dotted, dashed, double, triple, wave), shapes with
+  shadow, glow and soft edges, paths, ink, WordArt layers, clips, turned and rotated groups,
+  pictures (PNG and RGB/grey JPEG as they are, anything else as PNG; metafiles as their paths,
+  bitmaps and text), the page colour, page picture and watermark. Synthetic bold is a stroke.
+- **Save format hook (patch 0065)**: `wordcraft_engine::io::set_app_formats`; `init()` adds
+  `.ofd` ("OFD · GB/T 33190"). `wenshu convert x.docx x.ofd`, `file.save`/`file.saveAs`, the
+  desktop's Save As type list and File › Export all write OFD; the document keeps its .docx.
+- **Checked in WPS's OFD reader** (WPS Office 12.1, `wps.exe /prometheus /pdf`, window captured
+  with `PrintWindow`): the 公文 sample and a 公文 with a red rule and an attachment table look as
+  Wenshu renders them, embedded fonts in use. A probe (btLr and tbRl cells, a 30° text box, a
+  cropped picture, synthetic bold italic) found two reader rules, now followed: a clip area is a
+  path painted like any other (stroked, unfilled by default), and WPS clips to what it paints, so
+  areas say `Fill="true" Stroke="false"`; and areas are in the object's own space before its CTM
+  (a picture's clip went to its unit square). (Wenshu's layout doesn't turn a rotated text box's
+  text with the box; the OFD shows what Wenshu shows.)
+- **Corpus check** (`corpus/tools/ofd_check.py`, every document converted to OFD and PDF in fresh
+  processes; the package parsed, every font opened with fontTools, each OFD character matched to
+  the PDF's): 200 / 200 convert, 200 / 200 with the PDF's page count, recall of the PDF's
+  characters 1.0000, OFD characters within 1 pt of the same character in the PDF 0.9991, 60 MB of
+  OFD against 73 MB of PDF, under a minute for the corpus. 199 / 200 with every character in its
+  font's cmap; in `896cafeedf` the layout draws 60 Chinese characters in Times New Roman and
+  Calibri, which lack them, so the PDF and the OFD both show the missing-glyph box (a fallback
+  gap in the layout, for the page-count list). The two documents under 0.99 differ only where
+  the PDF's text leaves things out (table-of-contents leader dots; a clipped text box off the
+  page). One fix on the way: glyphs with no character in the font (a missing glyph's box) keep
+  the text they stand for instead of U+FFFD.
+- **Next:** OFD outline (bookmarks from headings) and links; a reader besides WPS (e.g. a
+  Linux OFD viewer) for a second opinion; then the regression gate.
+
 ## 2026-11-04 (5): v0.1.3 published; where to start next
 
 - **v0.1.3 published** as a pre-release (patches through 0064; Windows zip + MSI, Linux tar.gz,
