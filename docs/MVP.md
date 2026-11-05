@@ -43,8 +43,8 @@ rules or problems from real documents only. In order:
    typing through a Chinese IME.
 3. **OFD export** (M3): done 2026-11-05 (CLI, Save As, File › Export; checked in WPS's OFD
    reader and across the corpus), with outline and links.
-4. **Regression gate**: the fidelity rescore, Windows and Linux, run before each release so the
-   page counts can't slip unnoticed.
+4. **Regression gate**: done 2026-11-05 (`corpus/tools/gate.py`, baselines Windows 186 / 200
+   and Linux 173 / 200 in `corpus/baseline/`), run before each release (README).
 
 Then the business plan review.
 

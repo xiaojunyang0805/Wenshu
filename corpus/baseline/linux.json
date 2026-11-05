@@ -1,0 +1,1209 @@
+{
+ "documents": {
+  "01_gongwen.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9516
+  },
+  "02_mixed_cjk.docx": {
+   "error": null,
+   "pages": 6,
+   "ref": 4,
+   "score": 0.8586
+  },
+  "dc-administrative-1d61b2728b.docx": {
+   "error": null,
+   "pages": 60,
+   "ref": 60,
+   "score": 0.9603
+  },
+  "dc-administrative-1f522d22f6.docx": {
+   "error": null,
+   "pages": 5,
+   "ref": 5,
+   "score": 0.9517
+  },
+  "dc-administrative-29a7772dfb.docx": {
+   "error": null,
+   "pages": 29,
+   "ref": 27,
+   "score": 0.9047
+  },
+  "dc-administrative-3275566be0.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 2,
+   "score": 0.9365
+  },
+  "dc-administrative-43c2246cf6.docx": {
+   "error": null,
+   "pages": 4,
+   "ref": 4,
+   "score": 0.9595
+  },
+  "dc-administrative-43e2a0386f.docx": {
+   "error": null,
+   "pages": 28,
+   "ref": 28,
+   "score": 0.9259
+  },
+  "dc-administrative-63dd6e9c28.docx": {
+   "error": null,
+   "pages": 43,
+   "ref": 43,
+   "score": 0.9032
+  },
+  "dc-administrative-668a6d7886.docx": {
+   "error": null,
+   "pages": 7,
+   "ref": 7,
+   "score": 0.9225
+  },
+  "dc-administrative-82eb70e86d.docx": {
+   "error": null,
+   "pages": 19,
+   "ref": 17,
+   "score": 0.9278
+  },
+  "dc-administrative-89d77c0946.docx": {
+   "error": null,
+   "pages": 6,
+   "ref": 6,
+   "score": 0.9115
+  },
+  "dc-administrative-990c87ed31.docx": {
+   "error": null,
+   "pages": 5,
+   "ref": 5,
+   "score": 0.8926
+  },
+  "dc-administrative-a9f763a2b4.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 4,
+   "score": 0.8886
+  },
+  "dc-administrative-b7e49d691e.docx": {
+   "error": null,
+   "pages": 15,
+   "ref": 14,
+   "score": 0.9232
+  },
+  "dc-administrative-bc2cf558d0.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.9165
+  },
+  "dc-administrative-bd6b721e4e.docx": {
+   "error": null,
+   "pages": 12,
+   "ref": 12,
+   "score": 0.9624
+  },
+  "dc-administrative-d99840aebf.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.9391
+  },
+  "dc-administrative-ef14cd2f88.docx": {
+   "error": null,
+   "pages": 35,
+   "ref": 35,
+   "score": 0.9396
+  },
+  "dc-administrative-f526989771.docx": {
+   "error": null,
+   "pages": 4,
+   "ref": 4,
+   "score": 0.959
+  },
+  "dc-administrative-f899568bb2.docx": {
+   "error": null,
+   "pages": 4,
+   "ref": 4,
+   "score": 0.8997
+  },
+  "dc-administrative-f96ef99a79.docx": {
+   "error": null,
+   "pages": 4,
+   "ref": 4,
+   "score": 0.9273
+  },
+  "dc-administrative-f9e6e0e0e6.docx": {
+   "error": null,
+   "pages": 5,
+   "ref": 5,
+   "score": 0.9199
+  },
+  "dc-correspondence-195b80f877.docx": {
+   "error": null,
+   "pages": 9,
+   "ref": 9,
+   "score": 0.9597
+  },
+  "dc-correspondence-31310a47c6.docx": {
+   "error": null,
+   "pages": 4,
+   "ref": 4,
+   "score": 0.9199
+  },
+  "dc-correspondence-382f5546ac.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.9089
+  },
+  "dc-correspondence-493a360281.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.9308
+  },
+  "dc-correspondence-6ce199cdd6.docx": {
+   "error": null,
+   "pages": 5,
+   "ref": 5,
+   "score": 0.9147
+  },
+  "dc-correspondence-8666f7313e.docx": {
+   "error": null,
+   "pages": 7,
+   "ref": 7,
+   "score": 0.9364
+  },
+  "dc-correspondence-9914e05252.docx": {
+   "error": null,
+   "pages": 8,
+   "ref": 8,
+   "score": 0.9622
+  },
+  "dc-correspondence-9e27fa4072.docx": {
+   "error": null,
+   "pages": 4,
+   "ref": 4,
+   "score": 0.9334
+  },
+  "dc-correspondence-a12d3c6f47.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.8843
+  },
+  "dc-correspondence-a180b9d578.docx": {
+   "error": null,
+   "pages": 14,
+   "ref": 15,
+   "score": 0.927
+  },
+  "dc-correspondence-aae80ea709.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.7776
+  },
+  "dc-correspondence-ccbaad306d.docx": {
+   "error": null,
+   "pages": 13,
+   "ref": 13,
+   "score": 0.9277
+  },
+  "dc-creative-03e6089cb6.docx": {
+   "error": null,
+   "pages": 5,
+   "ref": 5,
+   "score": 0.8607
+  },
+  "dc-creative-274e32995c.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 3,
+   "score": 0.9047
+  },
+  "dc-creative-377b4bf861.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 3,
+   "score": 0.9202
+  },
+  "dc-creative-484fdc3948.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.8199
+  },
+  "dc-creative-65628ecb9b.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 3,
+   "score": 0.9519
+  },
+  "dc-creative-8f343b7812.docx": {
+   "error": null,
+   "pages": 5,
+   "ref": 6,
+   "score": 0.8419
+  },
+  "dc-creative-a23594df1d.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 3,
+   "score": 0.8993
+  },
+  "dc-creative-e67370879a.docx": {
+   "error": null,
+   "pages": 5,
+   "ref": 5,
+   "score": 0.8862
+  },
+  "dc-creative-f7d3afdfdb.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 3,
+   "score": 0.93
+  },
+  "dc-educational-2d63a32ac5.docx": {
+   "error": null,
+   "pages": 7,
+   "ref": 7,
+   "score": 0.9649
+  },
+  "dc-educational-3b02f9c9a6.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9448
+  },
+  "dc-educational-92262161df.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.9155
+  },
+  "dc-educational-a9249ea5f3.docx": {
+   "error": null,
+   "pages": 13,
+   "ref": 13,
+   "score": 0.9563
+  },
+  "dc-educational-aa1a5e719d.docx": {
+   "error": null,
+   "pages": 4,
+   "ref": 4,
+   "score": 0.8588
+  },
+  "dc-educational-b8de3ae296.docx": {
+   "error": null,
+   "pages": 31,
+   "ref": 31,
+   "score": 0.906
+  },
+  "dc-educational-be4a26d95e.docx": {
+   "error": null,
+   "pages": 8,
+   "ref": 7,
+   "score": 0.8981
+  },
+  "dc-educational-d0aa0369b2.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.9312
+  },
+  "dc-educational-da84530838.docx": {
+   "error": null,
+   "pages": 6,
+   "ref": 4,
+   "score": 0.8631
+  },
+  "dc-forms-0fa1839a73.docx": {
+   "error": null,
+   "pages": 12,
+   "ref": 12,
+   "score": 0.9522
+  },
+  "dc-forms-13d40464f4.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9595
+  },
+  "dc-forms-173ff7b3a5.docx": {
+   "error": null,
+   "pages": 11,
+   "ref": 11,
+   "score": 0.9544
+  },
+  "dc-forms-19cd5f62ce.docx": {
+   "error": null,
+   "pages": 18,
+   "ref": 14,
+   "score": 0.9622
+  },
+  "dc-forms-1a9cff202d.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.9045
+  },
+  "dc-forms-1ceb1d46a8.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9252
+  },
+  "dc-forms-1cf94cc345.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 3,
+   "score": 0.9117
+  },
+  "dc-forms-40991f97da.docx": {
+   "error": null,
+   "pages": 4,
+   "ref": 4,
+   "score": 0.9525
+  },
+  "dc-forms-4b135c5e2f.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.9852
+  },
+  "dc-forms-519bdd9cf4.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.966
+  },
+  "dc-forms-56af470ee7.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9545
+  },
+  "dc-forms-63fb911e67.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 1,
+   "score": 0.9454
+  },
+  "dc-forms-6c9f280d2f.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 1,
+   "score": 0.9254
+  },
+  "dc-forms-7abe5be4e9.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 2,
+   "score": 0.8282
+  },
+  "dc-forms-80c0efce58.docx": {
+   "error": null,
+   "pages": 4,
+   "ref": 4,
+   "score": 0.9528
+  },
+  "dc-forms-c4d000cc34.docx": {
+   "error": null,
+   "pages": 14,
+   "ref": 14,
+   "score": 0.9256
+  },
+  "dc-forms-e98a952d34.docx": {
+   "error": null,
+   "pages": 30,
+   "ref": 30,
+   "score": 0.9548
+  },
+  "dc-legal-04184d858d.docx": {
+   "error": null,
+   "pages": 13,
+   "ref": 13,
+   "score": 0.859
+  },
+  "dc-legal-0527bfacb5.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.9525
+  },
+  "dc-legal-27632a777a.docx": {
+   "error": null,
+   "pages": 15,
+   "ref": 15,
+   "score": 0.8896
+  },
+  "dc-legal-2a32d09ff6.docx": {
+   "error": null,
+   "pages": 25,
+   "ref": 25,
+   "score": 0.9293
+  },
+  "dc-legal-59d7b8bb94.docx": {
+   "error": null,
+   "pages": 11,
+   "ref": 11,
+   "score": 0.948
+  },
+  "dc-legal-6f63e16a44.docx": {
+   "error": null,
+   "pages": 9,
+   "ref": 9,
+   "score": 0.8904
+  },
+  "dc-legal-8bb3586f93.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 3,
+   "score": 0.9304
+  },
+  "dc-legal-8c26a30bd3.docx": {
+   "error": null,
+   "pages": 10,
+   "ref": 9,
+   "score": 0.9186
+  },
+  "dc-legal-a18e0d6d84.docx": {
+   "error": null,
+   "pages": 6,
+   "ref": 6,
+   "score": 0.93
+  },
+  "dc-legal-c72e419fa5.docx": {
+   "error": null,
+   "pages": 22,
+   "ref": 22,
+   "score": 0.8548
+  },
+  "dc-legal-cd82c17bf5.docx": {
+   "error": null,
+   "pages": 28,
+   "ref": 26,
+   "score": 0.9297
+  },
+  "dc-legal-ce628d9760.docx": {
+   "error": null,
+   "pages": 10,
+   "ref": 6,
+   "score": 0.9235
+  },
+  "dc-legal-cf046fe702.docx": {
+   "error": null,
+   "pages": 8,
+   "ref": 8,
+   "score": 0.9244
+  },
+  "dc-legal-d9c898ea81.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.9567
+  },
+  "dc-policies-01337a5ce4.docx": {
+   "error": null,
+   "pages": 7,
+   "ref": 7,
+   "score": 0.9484
+  },
+  "dc-policies-03b324df33.docx": {
+   "error": null,
+   "pages": 14,
+   "ref": 14,
+   "score": 0.9432
+  },
+  "dc-policies-1403def07e.docx": {
+   "error": null,
+   "pages": 8,
+   "ref": 8,
+   "score": 0.9403
+  },
+  "dc-policies-228229e95c.docx": {
+   "error": null,
+   "pages": 24,
+   "ref": 24,
+   "score": 0.9116
+  },
+  "dc-policies-2e6f27b909.docx": {
+   "error": null,
+   "pages": 10,
+   "ref": 10,
+   "score": 0.9366
+  },
+  "dc-policies-38bfeee828.docx": {
+   "error": null,
+   "pages": 8,
+   "ref": 8,
+   "score": 0.9441
+  },
+  "dc-policies-39de0888eb.docx": {
+   "error": null,
+   "pages": 14,
+   "ref": 13,
+   "score": 0.929
+  },
+  "dc-policies-5313b71db5.docx": {
+   "error": null,
+   "pages": 10,
+   "ref": 10,
+   "score": 0.9534
+  },
+  "dc-policies-730d6a61a9.docx": {
+   "error": null,
+   "pages": 57,
+   "ref": 57,
+   "score": 0.9503
+  },
+  "dc-policies-7380cfbea3.docx": {
+   "error": null,
+   "pages": 26,
+   "ref": 26,
+   "score": 0.904
+  },
+  "dc-policies-896cafeedf.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 3,
+   "score": 0.9219
+  },
+  "dc-policies-8d7924a05c.docx": {
+   "error": null,
+   "pages": 28,
+   "ref": 28,
+   "score": 0.9412
+  },
+  "dc-policies-a5beccd773.docx": {
+   "error": null,
+   "pages": 20,
+   "ref": 19,
+   "score": 0.8579
+  },
+  "dc-policies-a78d52e7ee.docx": {
+   "error": null,
+   "pages": 23,
+   "ref": 23,
+   "score": 0.9238
+  },
+  "dc-policies-af80f1c025.docx": {
+   "error": null,
+   "pages": 19,
+   "ref": 17,
+   "score": 0.912
+  },
+  "dc-policies-b6747d9df3.docx": {
+   "error": null,
+   "pages": 6,
+   "ref": 6,
+   "score": 0.9417
+  },
+  "dc-policies-baf8affe64.docx": {
+   "error": null,
+   "pages": 13,
+   "ref": 13,
+   "score": 0.9397
+  },
+  "dc-policies-de24610147.docx": {
+   "error": null,
+   "pages": 87,
+   "ref": 86,
+   "score": 0.8593
+  },
+  "dc-policies-ea10dc7972.docx": {
+   "error": null,
+   "pages": 14,
+   "ref": 14,
+   "score": 0.9517
+  },
+  "dc-policies-efacf8571b.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 3,
+   "score": 0.9233
+  },
+  "dc-policies-ffe3dc89e6.docx": {
+   "error": null,
+   "pages": 10,
+   "ref": 10,
+   "score": 0.933
+  },
+  "dc-reference-13b329bb48.docx": {
+   "error": null,
+   "pages": 6,
+   "ref": 6,
+   "score": 0.8851
+  },
+  "dc-reference-38b612a5dd.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 3,
+   "score": 0.9561
+  },
+  "dc-reference-481b4fb9a6.docx": {
+   "error": null,
+   "pages": 16,
+   "ref": 16,
+   "score": 0.8973
+  },
+  "dc-reference-69d9f94c70.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.8516
+  },
+  "dc-reference-6d4f3a0f9b.docx": {
+   "error": null,
+   "pages": 12,
+   "ref": 12,
+   "score": 0.9039
+  },
+  "dc-reference-a598d05be9.docx": {
+   "error": null,
+   "pages": 8,
+   "ref": 8,
+   "score": 0.9007
+  },
+  "dc-reference-ce8e10b9e6.docx": {
+   "error": null,
+   "pages": 4,
+   "ref": 4,
+   "score": 0.8905
+  },
+  "dc-reference-e3e5dba681.docx": {
+   "error": null,
+   "pages": 10,
+   "ref": 10,
+   "score": 0.8929
+  },
+  "dc-reports-0f0af1ece4.docx": {
+   "error": null,
+   "pages": 8,
+   "ref": 8,
+   "score": 0.9067
+  },
+  "dc-reports-1aa06d7905.docx": {
+   "error": null,
+   "pages": 32,
+   "ref": 32,
+   "score": 0.9283
+  },
+  "dc-reports-200798ba75.docx": {
+   "error": null,
+   "pages": 7,
+   "ref": 7,
+   "score": 0.9528
+  },
+  "dc-reports-29f40af8c4.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 3,
+   "score": 0.9122
+  },
+  "dc-reports-2d6a9da333.docx": {
+   "error": null,
+   "pages": 21,
+   "ref": 22,
+   "score": 0.8547
+  },
+  "dc-reports-32f4ad9f7f.docx": {
+   "error": null,
+   "pages": 6,
+   "ref": 6,
+   "score": 0.9571
+  },
+  "dc-reports-502cae9b40.docx": {
+   "error": null,
+   "pages": 19,
+   "ref": 19,
+   "score": 0.8894
+  },
+  "dc-reports-70caf3a6de.docx": {
+   "error": null,
+   "pages": 11,
+   "ref": 12,
+   "score": 0.8891
+  },
+  "dc-reports-7274c8e6c2.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9745
+  },
+  "dc-reports-7f0a1221f0.docx": {
+   "error": null,
+   "pages": 22,
+   "ref": 22,
+   "score": 0.8727
+  },
+  "dc-reports-8ca746fc85.docx": {
+   "error": null,
+   "pages": 25,
+   "ref": 25,
+   "score": 0.8687
+  },
+  "dc-reports-aa35f17a03.docx": {
+   "error": null,
+   "pages": 29,
+   "ref": 29,
+   "score": 0.9362
+  },
+  "dc-reports-bc216f1194.docx": {
+   "error": null,
+   "pages": 16,
+   "ref": 16,
+   "score": 0.8769
+  },
+  "dc-reports-ccde58d9b7.docx": {
+   "error": null,
+   "pages": 8,
+   "ref": 8,
+   "score": 0.9427
+  },
+  "dc-reports-e1c1c56064.docx": {
+   "error": null,
+   "pages": 6,
+   "ref": 6,
+   "score": 0.9433
+  },
+  "dc-technical-0b42cfc224.docx": {
+   "error": null,
+   "pages": 6,
+   "ref": 6,
+   "score": 0.8731
+  },
+  "dc-technical-41063c56dd.docx": {
+   "error": null,
+   "pages": 8,
+   "ref": 8,
+   "score": 0.9659
+  },
+  "dc-technical-447f1d5cb4.docx": {
+   "error": null,
+   "pages": 94,
+   "ref": 96,
+   "score": 0.9061
+  },
+  "dc-technical-5c7fc3661f.docx": {
+   "error": null,
+   "pages": 15,
+   "ref": 15,
+   "score": 0.9458
+  },
+  "dc-technical-6204decfbe.docx": {
+   "error": null,
+   "pages": 11,
+   "ref": 11,
+   "score": 0.9646
+  },
+  "dc-technical-6272d69b09.docx": {
+   "error": null,
+   "pages": 26,
+   "ref": 26,
+   "score": 0.978
+  },
+  "dc-technical-85cb8e4b30.docx": {
+   "error": null,
+   "pages": 32,
+   "ref": 31,
+   "score": 0.9059
+  },
+  "dc-technical-9c189a35a9.docx": {
+   "error": null,
+   "pages": 12,
+   "ref": 13,
+   "score": 0.9765
+  },
+  "dc-technical-9c1f3849ea.docx": {
+   "error": null,
+   "pages": 21,
+   "ref": 21,
+   "score": 0.9538
+  },
+  "dc-technical-c2c92639c7.docx": {
+   "error": null,
+   "pages": 45,
+   "ref": 45,
+   "score": 0.9496
+  },
+  "dc-technical-f7f2106b68.docx": {
+   "error": null,
+   "pages": 7,
+   "ref": 7,
+   "score": 0.9729
+  },
+  "gen-gongwen-01-tongzhi.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.9688
+  },
+  "gen-gongwen-02-qingshi.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 3,
+   "score": 0.9518
+  },
+  "gen-gongwen-03-baogao.docx": {
+   "error": null,
+   "pages": 4,
+   "ref": 4,
+   "score": 0.9524
+  },
+  "gen-gongwen-04-han.docx": {
+   "error": null,
+   "pages": 5,
+   "ref": 5,
+   "score": 0.9411
+  },
+  "gen-gongwen-05-pifu.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.9717
+  },
+  "gen-gongwen-06-yijian.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 3,
+   "score": 0.9486
+  },
+  "gen-gongwen-07-tongbao.docx": {
+   "error": null,
+   "pages": 4,
+   "ref": 4,
+   "score": 0.9512
+  },
+  "gen-gongwen-08-jueding.docx": {
+   "error": null,
+   "pages": 5,
+   "ref": 5,
+   "score": 0.9535
+  },
+  "gen-gongwen-09-gonggao.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.9737
+  },
+  "gen-gongwen-10-jiyao.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 3,
+   "score": 0.9593
+  },
+  "gen-probe-01-compress-on-char-grid.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9791
+  },
+  "gen-probe-02-compress-line-grid.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9955
+  },
+  "gen-probe-03-compress-off.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9953
+  },
+  "gen-probe-04-quote-latin-font.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9974
+  },
+  "gen-probe-05-quote-hinted.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9973
+  },
+  "gen-probe-06-line-end-pairs.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9908
+  },
+  "gen-probe-07-top-line-punct.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9881
+  },
+  "gen-probe-08-grid-large-text.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9808
+  },
+  "gen-probe-09-char-indents.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9803
+  },
+  "gen-probe-10-hint-pinyin.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9935
+  },
+  "gen-probe-11-kinsoku.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9937
+  },
+  "gen-probe-12-kinsoku-off.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9937
+  },
+  "gen-probe-13-autospace.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9947
+  },
+  "gen-probe-14-dash-ellipsis.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9956
+  },
+  "gen-probe-15-emphasis-scaling.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9979
+  },
+  "gen-probe-16-combine-vert.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9989
+  },
+  "gen-probe-17-ruby.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9995
+  },
+  "gen-probe-18-vertical.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9937
+  },
+  "gen-probe-19-columns.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9827
+  },
+  "gen-probe-20-numbering.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9814
+  },
+  "gen-probe-21-table-on-grid.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9914
+  },
+  "gen-probe-22-fonts-by-name.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9644
+  },
+  "gen-probe-23-line-spacing.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9569
+  },
+  "gen-probe-24-fullwidth-forms.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9971
+  },
+  "gen-probe-25-footnotes.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9988
+  },
+  "gen-probe-26-red-header.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9821
+  },
+  "gen-probe-27-traditional.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9946
+  },
+  "gen-probe-28-kana-compression.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9934
+  },
+  "gen-probe-29-snap-off-in-grid.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9907
+  },
+  "gen-probe-30-mixed-sizes-line.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9983
+  },
+  "gov-bj-changping.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 3,
+   "score": 0.9363
+  },
+  "gov-bj-gfxwj-1.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.9451
+  },
+  "gov-bj-gfxwj-2.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 3,
+   "score": 0.9353
+  },
+  "gov-bj-gfxwj-3.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.9378
+  },
+  "gov-bj-jtw.docx": {
+   "error": null,
+   "pages": 12,
+   "ref": 12,
+   "score": 0.9573
+  },
+  "gov-bj-yllhj.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 3,
+   "score": 0.9119
+  },
+  "gov-fj-gaoxin.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 3,
+   "score": 0.9646
+  },
+  "gov-hn-huishou.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 3,
+   "score": 0.9119
+  },
+  "gov-mct-keji.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.9299
+  },
+  "gov-nmpa-1.docx": {
+   "error": null,
+   "pages": 40,
+   "ref": 40,
+   "score": 0.9346
+  },
+  "gov-nmpa-3.docx": {
+   "error": null,
+   "pages": 35,
+   "ref": 35,
+   "score": 0.9144
+  },
+  "gov-nmpa-5.docx": {
+   "error": null,
+   "pages": 38,
+   "ref": 38,
+   "score": 0.9156
+  },
+  "gov-nmpa-6.docx": {
+   "error": null,
+   "pages": 26,
+   "ref": 26,
+   "score": 0.9386
+  },
+  "gov-nmpa-fb1.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9577
+  },
+  "gov-nmpa-fb2.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9505
+  },
+  "gov-nmpa-fb3.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9753
+  },
+  "gov-nmpa-fb4.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9691
+  },
+  "gov-nmpa-fb5.docx": {
+   "error": null,
+   "pages": 1,
+   "ref": 1,
+   "score": 0.9696
+  },
+  "gov-nmpa-fb6.docx": {
+   "error": null,
+   "pages": 2,
+   "ref": 2,
+   "score": 0.9835
+  },
+  "gov-sh-sheitc.docx": {
+   "error": null,
+   "pages": 19,
+   "ref": 19,
+   "score": 0.9712
+  },
+  "gov-yn-kjt.docx": {
+   "error": null,
+   "pages": 3,
+   "ref": 3,
+   "score": 0.8761
+  }
+ },
+ "machine": "WSL Ubuntu 22.04; WENSHU_FONTS_DIR=/usr/share/wenshu/fonts (wenshu 0.1.3 .deb, 22 fonts)",
+ "mean_score": 0.9228,
+ "page_count_compared": 200,
+ "page_count_matches": 173,
+ "platform": "linux"
+}

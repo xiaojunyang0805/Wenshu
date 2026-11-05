@@ -36,6 +36,20 @@ Packages go to `dist/`:
   with [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild) and Zig 0.14.
 - `.github/workflows/release.yml`: all of the above on a `v*` tag, attached to a draft release.
 
+Before tagging a release, run the regression gate on Windows and on Linux (it needs the WPS
+references in `corpus/ref`, kept locally, so it runs where they are, not in CI):
+
+```sh
+python -X utf8 corpus/tools/gate.py run                     # fidelity rescore vs corpus/baseline/<platform>.json
+python -X utf8 corpus/tools/gate.py update out/gate-windows/report.json   # after a change meant to move the numbers
+```
+
+It fails when a document stops matching WPS's page count, the matches drop, a document's score
+falls by more than 0.02 or the mean by more than 0.002. On Linux, set
+`WENSHU_FONTS_DIR=/usr/share/wenshu/fonts` (the packaged fonts); from Windows,
+`corpus/tools/gate_wsl.sh` does the Linux half in WSL.
+`corpus/tools/pdf_check.py` and `corpus/tools/ofd_check.py` check the PDF and OFD exports.
+
 Needs Rust ≥ 1.95 (tested on 1.99.1; on Windows use the MSVC toolchain), Git and about 10 GB of disk for the build.
 
 ## Use
@@ -45,6 +59,7 @@ wenshu gongwen new examples/gongwen-sample.json notice.docx   # write a GB/T 970
 wenshu gongwen check notice.docx                              # check it against the standard
 wenshu render notice.docx page1.png --page 1                  # render a page
 wenshu convert notice.docx notice.pdf                         # export PDF (fonts embedded)
+wenshu convert notice.docx notice.ofd                         # export OFD (GB/T 33190)
 wenshu fidelity corpus out/fidelity                           # corpus scoreboard
 ```
 

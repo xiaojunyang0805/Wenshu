@@ -2,6 +2,26 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-05 (3): regression gate
+
+- **`corpus/tools/gate.py`**: the fidelity rescore against a committed baseline,
+  `corpus/baseline/{windows,linux}.json` (per document: Wenshu's pages, WPS's pages, mean page
+  score; numbers only, no renders). `run` renders the corpus (each document in its own process)
+  and checks; `check` checks a report; `update` makes a report the baseline. It fails when a
+  document fails, a document that matched WPS's page count stops matching, the matches drop, a
+  document's score falls by more than 0.02 or the mean by more than 0.002; improvements are
+  listed so the baseline can be raised. Tested on a doctored report (a lost match, a score drop,
+  a lower total: 3 failures, exit 1). `corpus/tools/gate_wsl.sh` runs the Linux half in WSL (the
+  clone brought to the Windows checkout's main, the patch queue applied, the packaged fonts).
+  The README has the release step. It needs the WPS references, so it runs locally, not in CI.
+- **Baselines on today's main** (patches through 0065, OFD export in): Windows 186 / 200, mean
+  0.943, the same as r31 on 2026-11-04 (the gate passes against it: nothing slipped since);
+  Linux (WSL Ubuntu 22.04, the v0.1.3 .deb's 22 fonts) 173 / 200, mean 0.923, the same as the
+  last Linux run.
+- **Second OFD reader**: tried the Python package `easyofd` in a scratch virtual environment;
+  running it was blocked as code from outside the project, so this waits for the user's call
+  (or Java for ofdrw).
+
 ## 2026-11-05 (2): OFD outline and links
 
 - **Outline**: the body headings (outline levels 1–9) as `Outlines` in Document.xml, nested by
