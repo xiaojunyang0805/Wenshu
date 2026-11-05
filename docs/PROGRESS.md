@@ -2,6 +2,30 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-05 (4): IME hand test: two winit bugs fixed (patches/winit/0001)
+
+- **Hand test with the user** (Windows 11, the desktop app, the user typing): English fine;
+  Chinese through 极点五笔 typed every committed word twice (对对于于文文枢枢…), and full-width
+  punctuation (，。：“”！) didn't appear at all; with 微软拼音 punctuation worked. WPS takes both
+  input methods fine. Saved test files: docs/test/文档1–6.docx (local).
+- **Traced** (a temporary event log in the canvas, then the raw Windows messages in winit):
+  (1) Wubi sends each result with an empty composition string; winit took that as a composition
+  still open, and at `WM_IME_ENDCOMPOSITION` read the result again: `Commit(x) … Commit(x)`.
+  (2) For punctuation Jidian Wubi sends `WM_IME_COMPOSITION` with the result (，) and
+  `WM_IME_ENDCOMPOSITION` but no `WM_IME_STARTCOMPOSITION`; winit only took results while it
+  believed a composition was open, so the punctuation was dropped.
+- **Fixed in winit** (the storytold fork WordCraft pins, now in the patch queue: `upstream.lock`
+  `winit` line, `patches/winit/0001-windows-ime-results-once-and-unannounced.patch`, the
+  workspace's `[patch.crates-io] winit` pointing at `upstream/winit`): an empty composition
+  string beside a result ends the composition; a result with no composition announced is
+  committed unless the last composition already committed at its end (the Hangul IME's stray
+  message, which winit's check was there for). An app-side workaround (dropping a repeated
+  commit in the canvas) was written and tested first, then removed once the root was fixed.
+- **Re-tested by the user:** 极点五笔 words once each and ，。“”！？： all typed; 微软拼音 too;
+  English unchanged ("fully working"). The OFD desktop check still passes (4 / 4).
+- **Open:** the winit fixes are worth offering to storytold/winit and upstream winit (a hand
+  test, no unit test: the code is the Windows message handler).
+
 ## 2026-11-05 (3): regression gate
 
 - **`corpus/tools/gate.py`**: the fidelity rescore against a committed baseline,

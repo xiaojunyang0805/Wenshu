@@ -1,0 +1,74 @@
+Upstream: (not opened; winit's Windows IME composition handling, two fixes, found typing with 极点五笔 and checked by hand with 极点五笔 and 微软拼音 (docs/PROGRESS.md 2026-11-05 (4)): (1) an empty composition string beside a result means the composition is over, so WM_IME_ENDCOMPOSITION no longer reads the result again (every word was typed twice); (2) a result sent with no WM_IME_STARTCOMPOSITION before it (Jidian Wubi's full-width punctuation) is committed, unless the last composition already committed at its end (the Hangul IME's stray message). For storytold/winit and upstream winit)
+diff --git a/src/platform_impl/windows/event_loop.rs b/src/platform_impl/windows/event_loop.rs
+index 0d1e9b08..43090834 100644
+--- a/src/platform_impl/windows/event_loop.rs
++++ b/src/platform_impl/windows/event_loop.rs
+@@ -1550,6 +1550,7 @@ unsafe fn public_window_callback_inner(
+             let ime_allowed = userdata.window_state_lock().ime_allowed;
+             if ime_allowed {
+                 userdata.window_state_lock().ime_state = ImeState::Enabled;
++                userdata.window_state_lock().ime_end_committed = false;
+ 
+                 userdata.send_event(Event::WindowEvent {
+                     window_id: RootWindowId(WindowId(window)),
+@@ -1561,9 +1562,15 @@ unsafe fn public_window_callback_inner(
+         },
+ 
+         WM_IME_COMPOSITION => {
++            // Wenshu patch: some input methods (Jidian Wubi's full-width punctuation) send a
++            // result with no `WM_IME_STARTCOMPOSITION` before it; it is text all the same. A
++            // result right after a composition that already committed at its end is the
++            // stray message the Hangul IME sends (see below) and stays ignored.
+             let ime_allowed_and_composing = {
+                 let w = userdata.window_state_lock();
+-                w.ime_allowed && w.ime_state != ImeState::Disabled
++                let unannounced_result =
++                    (lparam as u32 & GCS_RESULTSTR) != 0 && !w.ime_end_committed;
++                w.ime_allowed && (w.ime_state != ImeState::Disabled || unannounced_result)
+             };
+             // Windows Hangul IME sends WM_IME_COMPOSITION after WM_IME_ENDCOMPOSITION, so
+             // check whether composing.
+@@ -1591,7 +1598,12 @@ unsafe fn public_window_callback_inner(
+                     if let Some((text, first, last)) =
+                         unsafe { ime_context.get_composing_text_and_cursor(lparam as u32) }
+                     {
+-                        userdata.window_state_lock().ime_state = ImeState::Preedit;
++                        // Wenshu patch: an empty composition string beside a result (Wubi sends
++                        // one with every result) means the composition is over. Taken as one
++                        // still open, `WM_IME_ENDCOMPOSITION` read the result again and
++                        // committed it twice.
++                        userdata.window_state_lock().ime_state =
++                            if text.is_empty() { ImeState::Enabled } else { ImeState::Preedit };
+                         let cursor_range = first.map(|f| (f, last.unwrap_or(f)));
+ 
+                         events.push(WindowEvent::Ime(Ime::Preedit(text, cursor_range)));
+@@ -1618,6 +1630,7 @@ unsafe fn public_window_callback_inner(
+                     if let Some(text) = unsafe { ime_context.get_composed_text() } {
+                         events.push(WindowEvent::Ime(Ime::Preedit(String::new(), None)));
+                         events.push(WindowEvent::Ime(Ime::Commit(text)));
++                        userdata.window_state_lock().ime_end_committed = true;
+                     }
+                 }
+ 
+diff --git a/src/platform_impl/windows/window_state.rs b/src/platform_impl/windows/window_state.rs
+index 1f801ede..e555598f 100644
+--- a/src/platform_impl/windows/window_state.rs
++++ b/src/platform_impl/windows/window_state.rs
+@@ -45,6 +45,9 @@ pub(crate) struct WindowState {
+     pub window_flags: WindowFlags,
+ 
+     pub ime_state: ImeState,
++    /// The last composition committed its result at `WM_IME_ENDCOMPOSITION` (Wenshu patch): a
++    /// result arriving after it, before a new composition starts, is a repeat.
++    pub ime_end_committed: bool,
+     pub ime_allowed: bool,
+     pub system_caret: SystemCaret,
+ 
+@@ -170,6 +173,7 @@ impl WindowState {
+             window_flags: WindowFlags::empty(),
+ 
+             ime_state: ImeState::Disabled,
++            ime_end_committed: false,
+             ime_allowed: false,
+             system_caret: SystemCaret::default(),
+ 
