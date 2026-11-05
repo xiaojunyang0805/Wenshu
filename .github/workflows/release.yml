@@ -6,7 +6,8 @@
 #
 # Packages: Windows x64 portable zip + per-user MSI (packaging/windows/package.ps1), Linux x86_64
 # tar.gz + .deb + AppImage (packaging/linux/package.sh, built on Ubuntu 22.04 for glibc 2.35),
-# Linux loongarch64 tar.gz + .deb (cross-built, glibc 2.36; the CLI is smoke-tested under qemu).
+# Linux loongarch64 tar.gz + .deb (cross-built, glibc 2.36; the CLI is smoke-tested under qemu),
+# and the VS Code preview extension (.vsix, vscode/package.py; its version must match Cargo.toml).
 # The binaries are not code-signed yet: Windows SmartScreen warns on first start.
 name: Release
 
@@ -114,6 +115,29 @@ jobs:
             dist/*.AppImage
           if-no-files-found: error
 
+  vscode:
+    needs: version
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package the VS Code extension
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          ext=$(python3 -c "import json; print(json.load(open('vscode/package.json', encoding='utf-8'))['version'])")
+          if [[ "$ext" != "$VERSION" ]]; then
+            echo "::error::vscode/package.json version $ext does not match Cargo.toml version $VERSION"
+            exit 1
+          fi
+          node --check vscode/extension.js
+          python3 vscode/package.py
+          unzip -l dist/wenshu-preview-$VERSION.vsix | grep -q extension/extension.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vscode
+          path: dist/*.vsix
+          if-no-files-found: error
+
   # Cross-built on x86_64 with cargo-zigbuild against glibc 2.36 (new-world LoongArch ABI), then the
   # CLI runs under qemu-user on a Debian loong64 glibc: it writes, checks and renders a 公文.
   linux-loongarch64:
@@ -164,7 +188,7 @@ jobs:
 
   release:
     if: github.ref_type == 'tag'
-    needs: [version, windows, linux, linux-loongarch64]
+    needs: [version, windows, linux, linux-loongarch64, vscode]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -194,6 +218,7 @@ jobs:
           | \`wenshu-$VERSION-linux-x86_64.tar.gz\` | a plain file tree |
           | \`wenshu-$VERSION-linux-loongarch64.deb\` | LoongArch, new-world (deepin 23+, openKylin 2, Loongnix 25, Debian loong64; glibc ≥ 2.36) |
           | \`wenshu-$VERSION-linux-loongarch64.tar.gz\` | LoongArch, a plain file tree |
+          | \`wenshu-preview-$VERSION.vsix\` | VS Code: preview documents as Wenshu lays them out (needs Wenshu installed; \`code --install-extension <file>\`) |
 
           The binaries are not code-signed yet, so Windows SmartScreen asks before the first start
           ("More info" › "Run anyway"). Check downloads against \`SHA256SUMS\`.
