@@ -2,6 +2,25 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-05 (6): v0.1.4 preparation; where to start tomorrow
+
+- **Pushed** `main` through 80d902c (OFD export, outline and links, the regression gate, the IME
+  fix, the VS Code extension).
+- **Regression gate** on that `main`: Windows 186 / 200, mean 0.943; Linux (WSL, gate_wsl.sh)
+  173 / 200, mean 0.923: both PASS, equal to the baselines. The Linux build cloned and patched
+  winit, so the winit patch queue works outside Windows too.
+- **J4 re-measured** (`pdf_check.py`, screen renders from the gate run): 200 / 200 PDFs, page
+  count = layout 200 / 200, every font embedded and subset 200 / 200, recall 0.9987 (Chinese
+  0.9985; was 0.9986 / 0.9984 at patch 0038), all characters in 173 / 200 (was 169), PDF vs
+  screen every page > 0.99 in 198 / 200, median 0.1 s. The worst is still `aae80ea709`.
+- **Release workflow** (f7e1795, not pushed): a `vscode` job packages the .vsix, failing if
+  `vscode/package.json`'s version differs from `Cargo.toml`'s; the draft release lists it.
+- **Next session, v0.1.4 in steps:** (4b) J5 re-measured: re-save the corpus with Wenshu into
+  `out/rt/files`, `wps_render.py --files out/rt/files --out out/rt/ref --force` (WPS on screen,
+  the PC left alone: the user's call), `roundtrip.py`; (6) version 0.1.4 in `Cargo.toml` and
+  `vscode/package.json`, changelogs and docs, push, tag `v0.1.4`; CI makes a draft with 9 assets;
+  install-test, then the user publishes.
+
 ## 2026-11-05 (5): VS Code extension (vscode/), wenshu render --all
 
 - **`vscode/`: Wenshu Document Preview** (`wenshu-preview` 0.1.3, commit 264e712): a read-only
