@@ -2,6 +2,29 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-05 (2): OFD outline and links
+
+- **Outline**: the body headings (outline levels 1–9) as `Outlines` in Document.xml, nested by
+  level, each entry a Goto to the top of its heading's first line (as the PDF outline; a heading
+  pushed to the next page by a leading break is listed there). Symbol-font bullets (private-use
+  characters) are left out of the titles: WPS showed them as "＼". WPS's 目录 panel lists the
+  entries with their pages.
+- **Links**: hyperlinked runs become `Link` annotations (Doc_0/Annots/Annotations.xml → one
+  Annotation.xml per page with links): an invisible rectangle whose click action is a Goto
+  (internal `#bookmark` links, to the bookmark's line) or a URI (http, https, mailto and ftp only;
+  other schemes keep their text and get no link, as in the PDF). Measured in WPS first: a click
+  action on the page's own objects (with or without a `Region`, either order) is ignored, and
+  so is an annotation carrying the action itself; an annotation whose appearance holds an object
+  with the action is followed (a contents line jumped to page 3). One link's runs on a line
+  share one rectangle, so a contents entry is clickable across its leader too.
+- **ModDate** in DocInfo and on the annotations (the day the file is written).
+- **Corpus** (`ofd_check.py` now also compares navigation with the PDF): outline entries 1,854
+  in both, the PDF's count in 200 / 200 documents; links in both or in neither in 200 / 200
+  (1,004 OFD link rectangles against the PDF's 1,451 areas: a contents line is one rectangle
+  here, two in the PDF); every Goto names a page of the document. Text and pages unchanged
+  (200 / 200, recall 1.0000, placed 0.9991).
+- **Next:** a second OFD reader for a second opinion, then the regression gate.
+
 ## 2026-11-05: M3, OFD export
 
 - **`wenshu-ofd`** (new crate, no engine dependency): an OFD writer (GB/T 33190-2016). Pages of
@@ -41,8 +64,8 @@ Newest first. One entry per working session: what landed, what was verified, wha
   the PDF's text leaves things out (table-of-contents leader dots; a clipped text box off the
   page). One fix on the way: glyphs with no character in the font (a missing glyph's box) keep
   the text they stand for instead of U+FFFD.
-- **Next:** OFD outline (bookmarks from headings) and links; a reader besides WPS (e.g. a
-  Linux OFD viewer) for a second opinion; then the regression gate.
+- **Next:** OFD outline and links (done the same day, entry (2)); a reader besides WPS for a
+  second opinion; then the regression gate.
 
 ## 2026-11-04 (5): v0.1.3 published; where to start next
 

@@ -30,6 +30,8 @@ pub struct Meta {
     pub creator_version: String,
     /// `YYYY-MM-DD`.
     pub creation_date: String,
+    /// `YYYY-MM-DD`: when this file was written (link annotations carry it too).
+    pub mod_date: String,
     /// 32 hex digits identifying the document; derived from the content when empty.
     pub doc_id: String,
 }
@@ -92,6 +94,38 @@ pub struct Common {
     pub clips: Vec<Vec<Seg>>,
     /// Opacity 0–255.
     pub alpha: u8,
+}
+
+/// A place in the document: a page (index into [`Ofd::pages`]) and a point on it (mm).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Dest {
+    pub page: usize,
+    pub x: f64,
+    pub y: f64,
+}
+
+/// Where a link goes.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Link {
+    Uri(String),
+    Goto(Dest),
+}
+
+/// A link on a page: a click in `rect` (x, y, width, height in mm) follows `link`. Written as a
+/// `Link` annotation whose appearance holds an invisible rectangle with the click action (the
+/// form WPS follows; a click action on the page's own objects it ignores).
+#[derive(Clone, Debug, PartialEq)]
+pub struct PageLink {
+    pub rect: [f64; 4],
+    pub link: Link,
+}
+
+/// An entry of the document outline (bookmarks), with the entries under it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OutlineItem {
+    pub title: String,
+    pub dest: Dest,
+    pub children: Vec<OutlineItem>,
 }
 
 impl Default for Common {
@@ -203,12 +237,15 @@ pub struct Page {
     pub width: f64,
     pub height: f64,
     pub objects: Vec<Object>,
+    pub links: Vec<PageLink>,
 }
 
 /// A document being built.
 pub struct Ofd<'a> {
     pub meta: Meta,
     pub pages: Vec<Page>,
+    /// The outline readers show beside the pages.
+    pub outline: Vec<OutlineItem>,
     fonts: Vec<FontFace<'a>>,
     images: Vec<(Vec<u8>, ImageFormat)>,
 }
@@ -305,6 +342,7 @@ impl<'a> Ofd<'a> {
         Ofd {
             meta,
             pages: Vec::new(),
+            outline: Vec::new(),
             fonts: Vec::new(),
             images: Vec::new(),
         }
@@ -429,27 +467,85 @@ impl<'a> Ofd<'a> {
 
         let mut page_list = String::new();
         let mut page_files = Vec::new();
+        // Page IDs first: links and the outline point at pages.
+        let page_ids: Vec<u64> = self.pages.iter().map(|_| post_inc(&mut next)).collect();
         for (pi, p) in self.pages.iter().enumerate() {
-            let pid = post_inc(&mut next);
+            let pid = page_ids.get(pi).copied().unwrap_or(0);
             let _ = write!(
                 page_list,
                 r#"<ofd:Page ID="{pid}" BaseLoc="Pages/Page_{pi}/Content.xml"/>"#
             );
-            let content = self.page_xml(p, &mut next, &font_ids, &image_ids, &subsets);
+            let content = self.page_xml(p, &mut next, (&font_ids, &image_ids), &subsets);
             page_files.push((
                 format!("Doc_0/Pages/Page_{pi}/Content.xml"),
                 content.into_bytes(),
             ));
         }
+        // Links: one annotation file per page that has any.
+        let mut annots = String::new();
+        let today = [&self.meta.mod_date, &self.meta.creation_date]
+            .into_iter()
+            .find(|d| !d.is_empty())
+            .map_or("2026-01-01", |d| d.as_str());
+        for (pi, p) in self.pages.iter().enumerate() {
+            let mut body = String::new();
+            for l in &p.links {
+                let target = match &l.link {
+                    Link::Uri(u) => Some(format!(r#"<ofd:URI URI="{}"/>"#, esc(u))),
+                    Link::Goto(d) => goto(d, &page_ids),
+                };
+                let [x, y, w, h] = l.rect;
+                let Some(target) = target
+                    .filter(|_| [x, y, w, h].iter().all(|v| v.is_finite()) && w > 0.0 && h > 0.0)
+                else {
+                    continue;
+                };
+                let (aid, oid) = (post_inc(&mut next), post_inc(&mut next));
+                let (w, h) = (num(w), num(h));
+                let _ = write!(
+                    body,
+                    r#"<ofd:Annot ID="{aid}" Type="Link" Creator="{}" LastModDate="{today}"><ofd:Appearance Boundary="{} {} {w} {h}"><ofd:PathObject ID="{oid}" Boundary="0 0 {w} {h}" Stroke="false" Fill="false"><ofd:Actions><ofd:Action Event="CLICK">{target}</ofd:Action></ofd:Actions><ofd:AbbreviatedData>M 0 0 L {w} 0 L {w} {h} L 0 {h} C</ofd:AbbreviatedData></ofd:PathObject></ofd:Appearance></ofd:Annot>"#,
+                    esc(if self.meta.creator.is_empty() {
+                        "Wenshu"
+                    } else {
+                        &self.meta.creator
+                    }),
+                    num(x),
+                    num(y)
+                );
+            }
+            if body.is_empty() {
+                continue;
+            }
+            let pid = page_ids.get(pi).copied().unwrap_or(0);
+            let _ = write!(
+                annots,
+                r#"<ofd:Page PageID="{pid}"><ofd:FileLoc>Page_{pi}/Annotation.xml</ofd:FileLoc></ofd:Page>"#
+            );
+            files.push((
+                format!("Doc_0/Annots/Page_{pi}/Annotation.xml"),
+                format!(r#"<?xml version="1.0" encoding="UTF-8"?><ofd:PageAnnot xmlns:ofd="{NS}">{body}</ofd:PageAnnot>"#).into_bytes(),
+            ));
+        }
+        let annotations = if annots.is_empty() {
+            String::new()
+        } else {
+            files.push((
+                "Doc_0/Annots/Annotations.xml".to_string(),
+                format!(r#"<?xml version="1.0" encoding="UTF-8"?><ofd:Annotations xmlns:ofd="{NS}">{annots}</ofd:Annotations>"#).into_bytes(),
+            ));
+            "<ofd:Annotations>Annots/Annotations.xml</ofd:Annotations>".to_string()
+        };
         let first = self
             .pages
             .first()
             .map_or((210.0, 297.0), |p| (p.width, p.height));
         let max_id = next - 1;
         let document = format!(
-            r#"<?xml version="1.0" encoding="UTF-8"?><ofd:Document xmlns:ofd="{NS}"><ofd:CommonData><ofd:MaxUnitID>{max_id}</ofd:MaxUnitID><ofd:PageArea><ofd:PhysicalBox>0 0 {} {}</ofd:PhysicalBox></ofd:PageArea><ofd:PublicRes>PublicRes.xml</ofd:PublicRes><ofd:DocumentRes>DocumentRes.xml</ofd:DocumentRes><ofd:DefaultCS>1</ofd:DefaultCS></ofd:CommonData><ofd:Pages>{page_list}</ofd:Pages></ofd:Document>"#,
+            r#"<?xml version="1.0" encoding="UTF-8"?><ofd:Document xmlns:ofd="{NS}"><ofd:CommonData><ofd:MaxUnitID>{max_id}</ofd:MaxUnitID><ofd:PageArea><ofd:PhysicalBox>0 0 {} {}</ofd:PhysicalBox></ofd:PageArea><ofd:PublicRes>PublicRes.xml</ofd:PublicRes><ofd:DocumentRes>DocumentRes.xml</ofd:DocumentRes><ofd:DefaultCS>1</ofd:DefaultCS></ofd:CommonData><ofd:Pages>{page_list}</ofd:Pages>{}{annotations}</ofd:Document>"#,
             num(first.0),
-            num(first.1)
+            num(first.1),
+            outlines(&self.outline, &page_ids)
         );
         let ofd = self.ofd_xml(&page_files);
 
@@ -502,6 +598,7 @@ impl<'a> Ofd<'a> {
         opt(&mut info, "Author", &m.author);
         opt(&mut info, "Subject", &m.subject);
         opt(&mut info, "CreationDate", &m.creation_date);
+        opt(&mut info, "ModDate", &m.mod_date);
         if !m.keywords.is_empty() {
             info.push_str("<ofd:Keywords>");
             for k in &m.keywords {
@@ -520,8 +617,7 @@ impl<'a> Ofd<'a> {
         &self,
         p: &Page,
         next: &mut u64,
-        font_ids: &[u64],
-        image_ids: &[u64],
+        (font_ids, image_ids): (&[u64], &[u64]),
         subsets: &[Option<font::Subset>],
     ) -> String {
         let bx = format!("0 0 {} {}", num(p.width), num(p.height));
@@ -703,6 +799,42 @@ fn clips(s: &mut String, c: &Common, bx: &str) {
         );
     }
     s.push_str("</ofd:Clips>");
+}
+
+/// A `Goto` to `d` (None when its page isn't in the document).
+fn goto(d: &Dest, page_ids: &[u64]) -> Option<String> {
+    let pid = page_ids.get(d.page)?;
+    Some(format!(
+        r#"<ofd:Goto><ofd:Dest Type="XYZ" PageID="{pid}" Left="{}" Top="{}"/></ofd:Goto>"#,
+        num(d.x),
+        num(d.y)
+    ))
+}
+
+/// The document outline (`Outlines`), empty when there is none.
+fn outlines(items: &[OutlineItem], page_ids: &[u64]) -> String {
+    fn elems(items: &[OutlineItem], page_ids: &[u64], depth: usize, out: &mut String) {
+        for it in items {
+            let _ = write!(out, r#"<ofd:OutlineElem Title="{}">"#, esc(&it.title));
+            if let Some(g) = goto(&it.dest, page_ids) {
+                let _ = write!(
+                    out,
+                    r#"<ofd:Actions><ofd:Action Event="CLICK">{g}</ofd:Action></ofd:Actions>"#
+                );
+            }
+            if depth < 16 {
+                elems(&it.children, page_ids, depth + 1, out);
+            }
+            out.push_str("</ofd:OutlineElem>");
+        }
+    }
+    if items.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from("<ofd:Outlines>");
+    elems(items, page_ids, 0, &mut out);
+    out.push_str("</ofd:Outlines>");
+    out
 }
 
 /// The inverse of `[a b c d e f]`, None when it is singular.

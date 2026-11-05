@@ -7,7 +7,9 @@ PDF (a fresh process each), then:
 - pages: as many as the PDF export;
 - text and place: each page's characters against the PDF's (PyMuPDF): recall both ways, and the
   share of OFD characters within 1 pt of the same character in the PDF (both exports draw the
-  same layout, so they should coincide).
+  same layout, so they should coincide);
+- outline and links: the OFD's outline entries and link annotations against the PDF's outline
+  and links (each OFD Goto must name a page of the document).
 
 python -X utf8 corpus/tools/ofd_check.py [wenshu.exe] [stem-filter]
 Writes out/ofd/<stem>.ofd, out/ofd/<stem>.pdf, out/ofd/report.json and out/ofd/summary.txt."""
@@ -75,6 +77,21 @@ def read_ofd(path):
             mf = f"{rbase}/{m.findtext('ofd:MediaFile', namespaces=NS)}"
             if mf not in names:
                 problems.append(f'missing {mf}')
+    page_ids = [p.get('ID') for p in doc.findall('.//ofd:Pages/ofd:Page', NS)]
+    outline = len(doc.findall('.//ofd:Outlines//ofd:OutlineElem', NS))
+    links = 0
+    gotos = doc.findall('.//ofd:Outlines//ofd:Dest', NS)
+    al = doc.findtext('ofd:Annotations', namespaces=NS)
+    if al:
+        ann = xml(f'{base}/{al}')
+        abase = os.path.dirname(f'{base}/{al}')
+        for pg in ann.findall('ofd:Page', NS):
+            pa = xml(f"{abase}/{pg.findtext('ofd:FileLoc', namespaces=NS)}")
+            links += len(pa.findall('ofd:Annot', NS))
+            gotos += pa.findall('.//ofd:Dest', NS)
+    for g in gotos:
+        if g.get('PageID') not in page_ids:
+            problems.append(f"Goto to unknown page {g.get('PageID')}")
     pages = []
     for p in doc.findall('.//ofd:Pages/ofd:Page', NS):
         pg = xml(f"{base}/{p.get('BaseLoc')}")
@@ -111,7 +128,12 @@ def read_ofd(path):
                         x += dx[i] if i < len(dx) else 0
                         y += dy[i] if i < len(dy) else 0
         pages.append(chars)
-    return pages, problems
+    return pages, problems, outline, links
+
+
+def pdf_nav(path):
+    with fitz.open(path) as d:
+        return len(d.get_toc()), sum(len(p.get_links()) for p in d)
 
 
 def pdf_chars(path):
@@ -166,13 +188,14 @@ def main():
         row['ofd_kb'] = round(os.path.getsize(ofd) / 1024)
         row['pdf_kb'] = round(os.path.getsize(pdf) / 1024) if os.path.exists(pdf) else None
         try:
-            pages, problems = read_ofd(ofd)
+            pages, problems, row['outline'], row['links'] = read_ofd(ofd)
         except Exception as e:  # noqa: BLE001
             row['error'] = f'unreadable: {e}'
             rows.append(row)
             print(f, 'ERROR', row['error'])
             continue
         ppages = pdf_chars(pdf)
+        row['pdf_outline'], row['pdf_links'] = pdf_nav(pdf)
         row['pages'], row['pdf_pages'] = len(pages), len(ppages)
         row['problems'] = sorted(set(problems))[:20]
         row['problem_count'] = len(problems)
@@ -194,6 +217,8 @@ def main():
         f"no package/font problems: {sum(r['problem_count'] == 0 for r in ok)}",
         f"mean recall {sum(r['recall'] for r in ok) / max(len(ok), 1):.4f}, precision {sum(r['precision'] for r in ok) / max(len(ok), 1):.4f}, placed {sum(r['placed'] for r in ok) / max(len(ok), 1):.4f}",
         f"documents with placed < 0.99: {sum(r['placed'] < 0.99 for r in ok)}",
+        f"outline entries: OFD {sum(r['outline'] for r in ok)}, PDF {sum(r['pdf_outline'] for r in ok)}; documents with the PDF's count: {sum(r['outline'] == r['pdf_outline'] for r in ok)}",
+        f"links: OFD {sum(r['links'] for r in ok)} annotations, PDF {sum(r['pdf_links'] for r in ok)} link areas; documents with links in both or neither: {sum((r['links'] > 0) == (r['pdf_links'] > 0) for r in ok)}",
         f"size: OFD {sum(r['ofd_kb'] for r in ok)} KB, PDF {sum(r['pdf_kb'] or 0 for r in ok)} KB; OFD time {sum(r['ofd_s'] for r in rows):.0f} s",
     ]
     with open(os.path.join(OUT, 'summary.txt'), 'w', encoding='utf-8') as fh:

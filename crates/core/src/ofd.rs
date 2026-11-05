@@ -17,7 +17,8 @@ use wordcraft_doc::{Document, Rgb};
 use wordcraft_fonts::FaceRef;
 use wordcraft_geom::Rect;
 use wordcraft_layout::display::{DisplayOptions, Draw, Paint, Stroke as LineStyle};
-use wordcraft_layout::{LayoutCache, LayoutOptions, Page};
+use wordcraft_layout::para::{ClKind, LineEnd};
+use wordcraft_layout::{DocLayout, LayoutCache, LayoutOptions, Page, Placed};
 use wordcraft_metafile::PlacedItem;
 
 /// Millimetres per point.
@@ -36,8 +37,18 @@ pub fn export(doc: &Document) -> Result<Vec<u8>, String> {
     if lay.pages.is_empty() {
         return Err("the document has no pages".to_string());
     }
+    let mut bookmarks: HashMap<String, wordcraft_doc::Pos> = HashMap::new();
+    let mut folded: HashMap<String, wordcraft_doc::Pos> = HashMap::new();
+    for (n, pos) in doc.bookmarks() {
+        folded
+            .entry(n.to_ascii_lowercase())
+            .or_insert_with(|| pos.clone());
+        bookmarks.entry(n).or_insert(pos);
+    }
     let mut w = Writer {
         doc,
+        lay: &lay,
+        bookmarks: (bookmarks, folded),
         out: ofd::Ofd::new(meta(doc)),
         fonts: HashMap::new(),
         cmaps: HashMap::new(),
@@ -46,10 +57,12 @@ pub fn export(doc: &Document) -> Result<Vec<u8>, String> {
         objects: Vec::new(),
         ctm: Affine::IDENTITY,
         clips: Vec::new(),
+        links: Vec::new(),
     };
     for page in &lay.pages {
         w.page(page);
     }
+    w.out.outline = outline(doc, &lay);
     w.out.write()
 }
 
@@ -78,6 +91,7 @@ fn meta(doc: &Document) -> ofd::Meta {
         creator: "Wenshu".to_string(),
         creator_version: env!("CARGO_PKG_VERSION").to_string(),
         creation_date: date,
+        mod_date: today(),
         doc_id: String::new(),
     }
 }
@@ -127,6 +141,12 @@ struct Vector {
 
 struct Writer<'d> {
     doc: &'d Document,
+    lay: &'d DocLayout,
+    /// Bookmark positions by name, exact and ASCII-lowercased (the first of a name wins).
+    bookmarks: (
+        HashMap<String, wordcraft_doc::Pos>,
+        HashMap<String, wordcraft_doc::Pos>,
+    ),
     out: ofd::Ofd<'static>,
     fonts: HashMap<u32, ofd::FontId>,
     cmaps: HashMap<u32, Arc<HashMap<u32, char>>>,
@@ -139,12 +159,15 @@ struct Writer<'d> {
     ctm: Affine,
     /// Clip areas in page millimetres.
     clips: Vec<Vec<ofd::Seg>>,
+    /// The current page's links.
+    links: Vec<ofd::PageLink>,
 }
 
 impl Writer<'_> {
     fn page(&mut self, page: &Page) {
         let (w, h) = (page.w - page.markup.max(0.0), page.h);
         self.objects.clear();
+        self.links.clear();
         self.ctm = Affine::IDENTITY;
         self.clips.clear();
         if let Some(c) = self.doc.settings.page_color {
@@ -183,6 +206,7 @@ impl Writer<'_> {
             width: w * K,
             height: h * K,
             objects: std::mem::take(&mut self.objects),
+            links: std::mem::take(&mut self.links),
         });
     }
 
@@ -358,8 +382,10 @@ impl Writer<'_> {
                 text,
                 ranges,
                 x_scale,
+                link,
                 ..
             } => {
+                let before = self.objects.len();
                 let style = Style {
                     color: *c,
                     alpha: *a,
@@ -387,6 +413,11 @@ impl Writer<'_> {
                         self.with(m, |me| me.glyphs(face, *size, &moved, style, text, ranges));
                     }
                     None => self.glyphs(face, *size, glyphs, style, text, ranges),
+                }
+                if let Some(l) = link
+                    && self.objects.len() > before
+                {
+                    self.link(face, *size, glyphs, l);
                 }
             }
             Draw::Fill {
@@ -551,6 +582,74 @@ impl Writer<'_> {
                 }
             }
         }
+    }
+
+    /// Makes the text object just written follow `target` when its glyphs' box is clicked.
+    fn link(&mut self, face: &FaceRef, size: f32, glyphs: &[(u32, f32, f32)], target: &str) {
+        let (Some(first), Some(last)) = (glyphs.first(), glyphs.last()) else {
+            return;
+        };
+        let adv = face.advance(last.0) as f32 * size / face.upem.max(1.0) as f32;
+        let (x0, x1) = (first.1.min(last.1), first.1.max(last.1) + adv);
+        let (y0, y1) = (first.2 - size * 0.85, first.2 + size * 0.25);
+        let Some(area) = rect_bez(&Rect::new(x0, y0, x1 - x0, y1 - y0)).map(|b| self.segs(&b))
+        else {
+            return;
+        };
+        if area.is_empty() {
+            return;
+        }
+        let link = if let Some(name) = target.strip_prefix('#') {
+            match self.bookmark(name) {
+                Some(d) => ofd::Link::Goto(d),
+                None => return,
+            }
+        } else {
+            match safe_uri(target) {
+                Some(u) => ofd::Link::Uri(u),
+                None => return,
+            }
+        };
+        let pts = area.iter().filter_map(|g| match *g {
+            ofd::Seg::Move(x, y) | ofd::Seg::Line(x, y) => Some((x, y)),
+            _ => None,
+        });
+        let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+        for (x, y) in pts {
+            (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+        }
+        if x1 > x0 && y1 > y0 && self.links.len() < 10_000 {
+            // The runs of one link on one line (a contents entry's title and page number either
+            // side of its leader) share a rectangle.
+            if let Some(prev) = self.links.last_mut()
+                && prev.link == link
+                && (prev.rect[1] - y0).abs() < 0.2
+                && (prev.rect[3] - (y1 - y0)).abs() < 0.2
+            {
+                let right = (prev.rect[0] + prev.rect[2]).max(x1);
+                prev.rect[0] = prev.rect[0].min(x0);
+                prev.rect[2] = right - prev.rect[0];
+                return;
+            }
+            self.links.push(ofd::PageLink {
+                rect: [x0, y0, x1 - x0, y1 - y0],
+                link,
+            });
+        }
+    }
+
+    /// Where a bookmark starts: its page and the top of its line.
+    fn bookmark(&self, name: &str) -> Option<ofd::Dest> {
+        let (exact, folded) = &self.bookmarks;
+        let pos = exact
+            .get(name)
+            .or_else(|| folded.get(&name.to_ascii_lowercase()))?;
+        let c = self.lay.caret(pos)?;
+        Some(ofd::Dest {
+            page: c.page,
+            x: f64::from(c.x) * K,
+            y: f64::from(c.top) * K,
+        })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1103,6 +1202,117 @@ impl Writer<'_> {
             me.glyphs(&face, size, &glyphs, style, &text, &ranges)
         });
     }
+}
+
+/// A link target readers may follow: web and mail addresses. Other schemes (javascript:, file:,
+/// shares) get no link; the text stays.
+fn safe_uri(u: &str) -> Option<String> {
+    let u = u.trim();
+    let lower = u.to_ascii_lowercase();
+    let ok = ["http://", "https://", "mailto:", "ftp://"]
+        .iter()
+        .any(|p| lower.starts_with(p));
+    (ok && u.len() < 4096 && !u.chars().any(char::is_control)).then(|| u.to_string())
+}
+
+/// The outline from body headings (outline levels 1–9): each where its first line is.
+fn outline(doc: &Document, lay: &DocLayout) -> Vec<ofd::OutlineItem> {
+    let mut flat: Vec<(u8, ofd::OutlineItem)> = Vec::new();
+    for (pi, page) in lay.pages.iter().enumerate() {
+        for it in &page.items {
+            let Placed::Lines {
+                story: wordcraft_doc::StoryRef::Body,
+                path,
+                para,
+                l0,
+                l1,
+                x,
+                y,
+                ..
+            } = it
+            else {
+                continue;
+            };
+            let Some(p) = doc.para(wordcraft_doc::StoryRef::Body, path) else {
+                continue;
+            };
+            let Some(level) = doc.styles.resolve_para(&p.props).outline_level else {
+                continue;
+            };
+            // A leading page break can be placed on the previous page without the heading.
+            let first = para
+                .lines
+                .iter()
+                .take_while(|line| {
+                    line.end == LineEnd::PageBreak
+                        && para.clusters.get(line.c0..line.c1).is_some_and(|cs| {
+                            cs.iter()
+                                .all(|c| matches!(c.kind, ClKind::PageBreak | ClKind::Marker))
+                        })
+                })
+                .count();
+            if !(*l0..*l1).contains(&first) {
+                continue;
+            }
+            let (Some(line), Some(piece)) = (para.lines.get(first), para.lines.get(*l0)) else {
+                continue;
+            };
+            let mut dropped = para.left_out.clone();
+            dropped.extend(p.deleted_ranges());
+            let title: String = p
+                .text_without(&dropped)
+                // Symbol-font bullets (private use) mean nothing in a reader's outline panel.
+                .replace(|c: char| ('\u{E000}'..='\u{F8FF}').contains(&c), " ")
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .chars()
+                .take(200)
+                .collect();
+            if title.is_empty() {
+                continue;
+            }
+            let dest = ofd::Dest {
+                page: pi,
+                x: f64::from(*x) * K,
+                y: f64::from(*y + line.top - piece.top) * K,
+            };
+            flat.push((
+                level.min(8),
+                ofd::OutlineItem {
+                    title,
+                    dest,
+                    children: Vec::new(),
+                },
+            ));
+        }
+    }
+    // Nest: each entry under the nearest earlier entry with a lower level.
+    fn build(flat: &[(u8, ofd::OutlineItem)], i: &mut usize, level: u8) -> Vec<ofd::OutlineItem> {
+        let mut out = Vec::new();
+        while let Some((l, item)) = flat.get(*i) {
+            if *l < level {
+                break;
+            }
+            *i += 1;
+            let mut node = item.clone();
+            if flat.get(*i).is_some_and(|n| n.0 > *l) {
+                node.children = build(flat, i, l + 1);
+            }
+            out.push(node);
+        }
+        out
+    }
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < flat.len() {
+        let before = i;
+        out.extend(build(&flat, &mut i, 0));
+        if i == before {
+            i += 1;
+        }
+    }
+    out
 }
 
 #[derive(Clone, Copy)]

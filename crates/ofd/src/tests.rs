@@ -68,6 +68,7 @@ fn a_page_of_text_and_shapes_makes_a_complete_package() {
     ofd.pages.push(Page {
         width: 210.0,
         height: 297.0,
+        links: vec![],
         objects: vec![
             Object::Text(Text {
                 common: Common::default(),
@@ -172,6 +173,7 @@ fn a_glyph_the_cmap_does_not_give_gets_a_cg_transform() {
     ofd.pages.push(Page {
         width: 100.0,
         height: 100.0,
+        links: vec![],
         objects: vec![Object::Text(Text {
             common: Common::default(),
             font: f,
@@ -220,6 +222,7 @@ fn a_clip_is_filled_and_in_the_objects_space() {
     ofd.pages.push(Page {
         width: 100.0,
         height: 100.0,
+        links: vec![],
         objects: vec![Object::Image(Image {
             common: Common {
                 ctm: Some([80.0, 0.0, 0.0, 20.0, 10.0, 10.0]),
@@ -233,4 +236,71 @@ fn a_clip_is_filled_and_in_the_objects_space() {
     let page = String::from_utf8(files["Doc_0/Pages/Page_0/Content.xml"].clone()).unwrap();
     assert!(page.contains(r#"Stroke="false" Fill="true"><ofd:AbbreviatedData>M 0.25 0 L 0.75 0 L 0.75 1 L 0.25 1 C<"#), "{page}");
     assert!(!page.contains("-0 "), "{page}");
+}
+
+/// Links are link annotations: an invisible rectangle with the click action, a Goto to a page
+/// by its ID or a URI; the outline is a tree of Gotos.
+#[test]
+fn links_and_the_outline() {
+    let mut ofd = Ofd::new(Meta::default());
+    let dest = Dest {
+        page: 1,
+        x: 20.0,
+        y: 30.0,
+    };
+    for _ in 0..2 {
+        ofd.pages.push(Page {
+            width: 100.0,
+            height: 100.0,
+            objects: vec![],
+            links: vec![],
+        });
+    }
+    ofd.pages[0].links = vec![
+        PageLink {
+            rect: [10.0, 10.0, 30.0, 5.0],
+            link: Link::Goto(dest),
+        },
+        PageLink {
+            rect: [10.0, 20.0, 30.0, 5.0],
+            link: Link::Uri("https://example.org/?a=1&b=2".into()),
+        },
+    ];
+    ofd.outline = vec![OutlineItem {
+        title: "一、总则".into(),
+        dest,
+        children: vec![OutlineItem {
+            title: "（一）".into(),
+            dest,
+            children: vec![],
+        }],
+    }];
+    let files = unzip(&ofd.write().unwrap());
+    let doc = String::from_utf8(files["Doc_0/Document.xml"].clone()).unwrap();
+    well_formed(doc.as_bytes());
+    let second_page = doc
+        .split(r#"<ofd:Page ID=""#)
+        .nth(2)
+        .unwrap()
+        .split('"')
+        .next()
+        .unwrap()
+        .to_string();
+    assert!(doc.contains(&format!(r#"<ofd:OutlineElem Title="一、总则"><ofd:Actions><ofd:Action Event="CLICK"><ofd:Goto><ofd:Dest Type="XYZ" PageID="{second_page}" Left="20" Top="30"/>"#)), "{doc}");
+    assert!(doc.contains("<ofd:OutlineElem Title=\"（一）\">"));
+    assert!(doc.ends_with("</ofd:Outlines><ofd:Annotations>Annots/Annotations.xml</ofd:Annotations></ofd:Document>"), "{doc}");
+    let list = String::from_utf8(files["Doc_0/Annots/Annotations.xml"].clone()).unwrap();
+    assert!(
+        list.contains("<ofd:FileLoc>Page_0/Annotation.xml</ofd:FileLoc>")
+            && !list.contains("Page_1"),
+        "{list}"
+    );
+    let annots = String::from_utf8(files["Doc_0/Annots/Page_0/Annotation.xml"].clone()).unwrap();
+    well_formed(annots.as_bytes());
+    assert_eq!(annots.matches(r#"Type="Link""#).count(), 2);
+    assert!(annots.contains(r#"<ofd:Appearance Boundary="10 20 30 5">"#));
+    assert!(
+        annots.contains(r#"<ofd:URI URI="https://example.org/?a=1&amp;b=2"/>"#),
+        "{annots}"
+    );
 }
