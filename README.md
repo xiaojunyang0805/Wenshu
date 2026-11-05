@@ -50,6 +50,10 @@ falls by more than 0.02 or the mean by more than 0.002. On Linux, set
 `corpus/tools/gate_wsl.sh` does the Linux half in WSL.
 `corpus/tools/pdf_check.py` and `corpus/tools/ofd_check.py` check the PDF and OFD exports.
 
+`python vscode/package.py` packages the VS Code preview extension as
+`dist/wenshu-preview-<version>.vsix` (install it with `code --install-extension <file>`); it draws
+the pages with the `wenshu` CLI ([vscode/README.md](vscode/README.md)).
+
 Needs Rust ≥ 1.95 (tested on 1.99.1; on Windows use the MSVC toolchain), Git and about 10 GB of disk for the build.
 
 ## Use
@@ -58,6 +62,7 @@ Needs Rust ≥ 1.95 (tested on 1.99.1; on Windows use the MSVC toolchain), Git a
 wenshu gongwen new examples/gongwen-sample.json notice.docx   # write a GB/T 9704 document
 wenshu gongwen check notice.docx                              # check it against the standard
 wenshu render notice.docx page1.png --page 1                  # render a page
+wenshu render notice.docx pages --all                         # render every page into pages/
 wenshu convert notice.docx notice.pdf                         # export PDF (fonts embedded)
 wenshu convert notice.docx notice.ofd                         # export OFD (GB/T 33190)
 wenshu fidelity corpus out/fidelity                           # corpus scoreboard

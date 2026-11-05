@@ -2,6 +2,27 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-05 (5): VS Code extension (vscode/), wenshu render --all
+
+- **`vscode/`: Wenshu Document Preview** (`wenshu-preview` 0.1.3, commit 264e712): a read-only
+  custom editor for .docx, .docm, .dotx, .doc and .odt (.rtf through Open With) that shows the
+  pages as Wenshu lays them out, drawn by the `wenshu` CLI (found through `wenshu.cliPath`, the
+  MSI's `%LOCALAPPDATA%\Programs\Wenshu`, `/usr/bin`, then `PATH`). Pages appear as they are
+  drawn; zoom, fit width, refresh when the file changes on disk, Open in Wenshu (the desktop app
+  next to the CLI). English and Chinese interface. Plain JavaScript, no dependencies:
+  `python vscode/package.py` writes `dist/wenshu-preview-<version>.vsix` without npm.
+- **`wenshu render <file> <dir> --all`**: one layout, every page as `<dir>/page-N.png`, a JSON
+  line per page as it is drawn, then `{"pages": N}`. The extension uses it; with an older CLI
+  (v0.1.3 answers `--all` with "path must end in .png") it falls back to `info` and
+  `render --page N` per page: checked against the v0.1.3 portable zip's `wenshu.exe`.
+- **Found in the user's test:** the first build showed broken images. The PNGs were written,
+  but VS Code's webview resource loader (`asWebviewUri` + `localResourceRoots`) didn't serve them
+  on that Windows install, and its logs said nothing. The extension now reads each page and sends
+  the bytes to the webview, shown through `blob:` URLs (CSP `img-src blob:`); the user confirmed
+  the pages show (文档6.docx, 1 page, 0.8 s with a development build of the CLI).
+- **Open:** the .vsix isn't built by the release workflow or published to a marketplace yet;
+  the CLI's `--all` reaches users with the next release (0.1.4).
+
 ## 2026-11-05 (4): IME hand test: two winit bugs fixed (patches/winit/0001)
 
 - **Hand test with the user** (Windows 11, the desktop app, the user typing): English fine;

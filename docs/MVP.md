@@ -45,6 +45,8 @@ rules or problems from real documents only. In order:
    reader and across the corpus), with outline and links.
 4. **Regression gate**: done 2026-11-05 (`corpus/tools/gate.py`, baselines Windows 186 / 200
    and Linux 173 / 200 in `corpus/baseline/`), run before each release (README).
+5. **VS Code preview extension** (asked for by the user 2026-11-05, outside the original plan):
+   done (`vscode/`, pages drawn by `wenshu render --all`); not yet in the release workflow.
 
 Then the business plan review.
 
