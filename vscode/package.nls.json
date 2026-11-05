@@ -1,0 +1,10 @@
+{
+  "displayName": "Wenshu Document Preview",
+  "description": "Preview Word, WPS and OpenDocument files (.docx, .doc, .odt, .rtf) in VS Code, laid out by Wenshu (文枢), the open, Chinese-first office suite.",
+  "untrusted": "Previews run the Wenshu command-line tool on the file; set its path only in trusted workspaces.",
+  "editor.name": "Wenshu Preview (文枢)",
+  "command.open": "Open with Wenshu Preview",
+  "command.refresh": "Refresh Preview",
+  "config.cliPath": "Path to the `wenshu` command-line tool. Empty: the installed Wenshu (`%LOCALAPPDATA%\\Programs\\Wenshu\\wenshu.exe`, `/usr/bin/wenshu`) or `wenshu` on `PATH`.",
+  "config.scale": "Page image scale (1 = 96 dpi). Higher is sharper and slower."
+}

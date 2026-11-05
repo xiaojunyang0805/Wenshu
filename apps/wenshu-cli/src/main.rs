@@ -11,6 +11,7 @@ USAGE:
   wenshu info <file>                            pages, paragraphs, properties (JSON)
   wenshu render <file> <out.png> [--page N] [--scale S]
                                                  render one page (default page 1, scale 2)
+  wenshu render <file> <dir> --all [--scale S]  every page as <dir>/page-N.png, one JSON line each
   wenshu convert <in> <out>                     convert by extension: docx, pdf, ofd, odt, rtf, html, md, txt
   wenshu gongwen new <spec.json> <out.docx>     write a GB/T 9704 official document
   wenshu gongwen check <file.docx> [--json]     check a document against GB/T 9704 (exit 1 on failures)
@@ -115,6 +116,22 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         }
         Some("info") => {
             json_out(&Doc::open(Path::new(arg(&p, 1)?), None)?.info()?)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Some("render") if args.iter().any(|a| a == "--all") => {
+            // One process, one layout: each page as soon as it is drawn (a viewer shows them as
+            // they come), then the count.
+            let mut doc = Doc::open(Path::new(arg(&p, 1)?), None)?;
+            let dir = Path::new(arg(&p, 2)?);
+            std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+            let scale = parse(args, "--scale", 2.0)?;
+            let pages = doc.pages()?;
+            for page in 1..=pages {
+                let mut r = doc.render_png(page, scale, &dir.join(format!("page-{page}.png")))?;
+                r["page"] = page.into();
+                println!("{r}");
+            }
+            println!("{}", serde_json::json!({ "pages": pages }));
             Ok(ExitCode::SUCCESS)
         }
         Some("render") => {

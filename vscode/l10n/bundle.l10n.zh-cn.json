@@ -1,0 +1,17 @@
+{
+  "Laying out…": "排版中…",
+  "{0} pages": "共 {0} 页",
+  "1 page": "共 1 页",
+  "Zoom in": "放大",
+  "Zoom out": "缩小",
+  "Fit width": "适合宽度",
+  "Refresh": "刷新",
+  "Open in Wenshu": "在文枢中打开",
+  "Settings": "设置",
+  "The Wenshu desktop app was not found next to {0}.": "在 {0} 旁边没有找到文枢桌面程序。",
+  "Only files on disk can be previewed.": "只能预览磁盘上的文件。",
+  "The Wenshu command-line tool (wenshu) was not found.\n\nInstall Wenshu (https://github.com/xiaojunyang0805/Wenshu/releases) or set \"wenshu.cliPath\" in the settings.": "没有找到文枢命令行工具（wenshu）。\n\n请安装文枢（https://github.com/xiaojunyang0805/Wenshu/releases），或在设置中填写 \"wenshu.cliPath\"。",
+  "Wenshu was not found.": "没有找到文枢。",
+  "laid out by Wenshu in {0} s": "文枢排版用时 {0} 秒",
+  "Wenshu could not lay out this document.": "文枢无法排版此文档。"
+}

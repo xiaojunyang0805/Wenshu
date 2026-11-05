@@ -1,0 +1,10 @@
+{
+  "displayName": "文枢文档预览",
+  "description": "在 VS Code 中预览 Word、WPS 和 OpenDocument 文档（.docx、.doc、.odt、.rtf），由开源、中文优先的办公软件文枢排版。",
+  "untrusted": "预览会对文件运行文枢命令行工具；请只在受信任的工作区中设置其路径。",
+  "editor.name": "文枢预览",
+  "command.open": "用文枢预览打开",
+  "command.refresh": "刷新预览",
+  "config.cliPath": "`wenshu` 命令行工具的路径。留空：使用已安装的文枢（`%LOCALAPPDATA%\\Programs\\Wenshu\\wenshu.exe`、`/usr/bin/wenshu`）或 `PATH` 中的 `wenshu`。",
+  "config.scale": "页面图像缩放（1 = 96 dpi）。越大越清晰，也越慢。"
+}

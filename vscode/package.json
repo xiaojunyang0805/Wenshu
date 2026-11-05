@@ -1,0 +1,110 @@
+{
+  "name": "wenshu-preview",
+  "displayName": "%displayName%",
+  "description": "%description%",
+  "version": "0.1.3",
+  "publisher": "wenshu",
+  "license": "Apache-2.0 OR MIT",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xiaojunyang0805/Wenshu"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "docx",
+    "word",
+    "preview",
+    "wenshu",
+    "公文",
+    "WPS"
+  ],
+  "main": "./extension.js",
+  "l10n": "./l10n",
+  "activationEvents": [],
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "%untrusted%"
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "wenshu.preview",
+        "displayName": "%editor.name%",
+        "selector": [
+          { "filenamePattern": "*.docx" },
+          { "filenamePattern": "*.docm" },
+          { "filenamePattern": "*.dotx" },
+          { "filenamePattern": "*.doc" },
+          { "filenamePattern": "*.odt" }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "wenshu.previewText",
+        "displayName": "%editor.name%",
+        "selector": [
+          { "filenamePattern": "*.rtf" }
+        ],
+        "priority": "option"
+      }
+    ],
+    "commands": [
+      {
+        "command": "wenshu.openPreview",
+        "title": "%command.open%",
+        "category": "Wenshu"
+      },
+      {
+        "command": "wenshu.refresh",
+        "title": "%command.refresh%",
+        "category": "Wenshu"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "wenshu.openPreview",
+          "when": "resourceExtname =~ /^\\.(docx|docm|dotx|doc|odt|rtf)$/i",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "wenshu.openPreview",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Wenshu",
+      "properties": {
+        "wenshu.cliPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "%config.cliPath%"
+        },
+        "wenshu.scale": {
+          "type": "number",
+          "default": 1.5,
+          "minimum": 0.5,
+          "maximum": 4,
+          "markdownDescription": "%config.scale%"
+        }
+      }
+    }
+  }
+}
