@@ -722,6 +722,21 @@ narrowed the others, so the cells wrapped and the form ran a page long. Patch 00
 with a fixed width and no cell widths fits its columns to their contents in WPS (Wenshu keeps
 the grid).
 
+## F44. The squeezed side is a fixed list, wherever the glyph sits (Word differs)
+
+Measured 2026-11-09 (`out/side1`: 12 pt Microsoft JhengHei, whose `，。、；：` sit centred in
+their em like PMingLiU's, against SimSun, whose sit at the left; 30-unit first line, three marks of
+one kind, 4.5 pt short; mode 14 left and justified, mode 15 justified; 30 renders, the PDFs
+confirm JhengHei was used). In both fonts and all three cases `，。、」` give up room only on
+the right and `「` only on the left (1.44–1.56 pt each, the pool shared evenly); a centred
+comma is not squeezed on both sides. So WPS follows `kinsoku::SQUEEZE_RIGHT`/`SQUEEZE_LEFT`
+whatever the font. Word for Windows (kennyfs's measurements on #5006, PMingLiU and DFKai-SB)
+takes equal amounts from both sides of the centred `，。、`, so it seems to pick the side from
+where the glyph sits. That changes only where the marks are drawn, not where lines break. The
+same thread confirmed F10/F12 in Word (modes 11, 12, 14: ½ em per line, left-aligned lines
+too, plus an em per mark in the last unit) and F41 within its ranges for mode 15 (k = 1, 3, 6 on
+30-unit lines: 6–6.5, 9–9.75, 9–10.5 pt; k/(k + n/32) em gives 6, 9.2, 10.4).
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).
@@ -741,4 +756,5 @@ the grid).
   exact only).
 - `dddd` / `ddd` day names by the field's language (F23), and Sunday's `W`.
 - Word's behaviour for each finding. Upstream targets Word, so changes to #5003/#5006 need
-  either Word references or an argument from the spec. F2 has one; F1 does not yet.
+  either Word references or an argument from the spec. F2 has one; F1, F10, F12 and F41 now have
+  kennyfs's (F44).
