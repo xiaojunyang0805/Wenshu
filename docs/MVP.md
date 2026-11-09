@@ -58,8 +58,8 @@ Engineering, in order:
 4. **Linux**: the 12 documents still running long; an open 小标宋 for titles.
 5. **Web build** (M4's engineering part).
 
-Then publish (a release with the above). Then business: code signing (costs in
-docs/PROGRESS.md 2026-11-09 (2): SignPath free, Certum from €49/yr, OV ≈ $220–440/yr), the
+Then publish (a release with the above). Then business: code signing (notes for the decision in
+docs/CODE-SIGNING.md: SignPath free, Certum from €49/yr, OV ≈ $220–440/yr), the
 business plan review, publishing WPS renders / the scoreboard, real LoongArch hardware.
 
 ## Out of scope for the MVP
