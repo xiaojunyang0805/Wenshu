@@ -34,7 +34,9 @@ Newest first. One entry per working session: what landed, what was verified, wha
   .vsix is 0.1.4. Not checked: the MSI's Apps-list entry (the registry query came back empty),
   installing the .vsix into VS Code, the LoongArch desktop.
 
-**Next:** the user publishes v0.1.4 (a draft; tick pre-release as for v0.1.3 if wanted).
+- **v0.1.4 published** by the user as a pre-release (bilingual release notes, 9 assets).
+
+**Next:** M3/M4 work; kennyfs's next round on #5006 if it comes.
 
 ## 2026-11-05 (6): v0.1.4 preparation; where to start tomorrow
 
