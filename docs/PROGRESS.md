@@ -2,6 +2,31 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-09 (2): upstream PRs ready for review; code-signing costs
+
+- **All eight WordCraft PRs ready for review** (#5002–#5006, #5462, #5463, #5470). Six had
+  conflicts with upstream `main` (3,146 commits past our pin in ten days). Each branch got a merge
+  of `main` (a rebase needed a force-push, which the session's safety rules refused; maintainers
+  squash anyway), was retested (fmt, clippy, the touched crates' tests; the only failures are
+  ones plain `main` has on Windows: three layout hyphenation/hidden-text tests and one engine
+  language-pack test) and pushed; then all eight were marked ready. Two merges needed real work:
+  #5002's substitute provider also answers per candidate in upstream's new fallback lists (test
+  added), and #5470 keys upstream's new font-resolve caches by document owner (its test failed
+  after the merge: a document got another's embedded face).
+- **Work order** (user): first close the engineering work, then publish, then business issues.
+- **Code signing, researched (no decision; business, after engineering):**
+
+  | Option | Cost | Notes |
+  |---|---|---|
+  | SignPath Foundation | free | OSS only; certificate issued to "SignPath Foundation" (shown as publisher); wants a released project with verifiable reputation, verifiable CI builds, manual approval per release, MFA, a code-signing policy page; licence rule "OSI, no commercial dual-licensing" (Apache-2.0 OR MIT very likely fine, unconfirmed); acceptance discretionary |
+  | Certum Open Source Code Signing (cloud) | from €49/yr (€69 with card) | for open-source developers, in the user's own name; max 459 days per certificate since 2026-02-27 |
+  | Commercial OV | ≈ $220–440/yr | Sectigo via resellers ≈ $220, DigiCert ≈ $438 |
+  | Commercial EV | ≈ $290–400+/yr | since 2024 no instant SmartScreen pass; only needed for drivers |
+  | Azure Artifact (Trusted) Signing | ≈ $10/month | new sign-ups limited to US/Canada organisations with 3 years' history; individuals paused: not open to us |
+
+  With any certificate SmartScreen reputation still builds with downloads; Linux packages need
+  none. Likely path when the time comes: SignPath (free), Certum as fallback.
+
 ## 2026-11-09: Word measurements on #5006; F44; J5 re-measured for v0.1.4
 
 - **#5006 (punctuation compression):** kennyfs posted two rounds of Word for Windows
