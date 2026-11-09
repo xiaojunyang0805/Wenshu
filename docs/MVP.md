@@ -51,8 +51,9 @@ Order of work (user): **first close the engineering work, then publish, then bus
 Engineering, in order:
 1. **Upstream PRs**: all eight ready for review since 2026-11-09 (up to date with `main`); answer
    reviews as they come.
-2. **Bump the WordCraft pin** (`3b7f7ed`, 2026-10-30) to current `main` (3,000+ commits ahead):
-   re-base the 65 patches, re-run the gates (Windows 186, Linux 173), J4, J5.
+2. ✅ **WordCraft pin bumped** 2026-11-09: `3b7f7ed` → `05f781cf` (3,146 commits), 65 patches
+   re-fitted; gates Windows 186 / 200 (0.9435), Linux 173 / 200 (0.9232); J4 and J5 equal or
+   better (docs/UPSTREAM.md).
 3. **J5's last documents**: the text box in a picture-filled shape (`aae80ea709`) and the two
    documents a page off.
 4. **Linux**: the 12 documents still running long; an open 小标宋 for titles.

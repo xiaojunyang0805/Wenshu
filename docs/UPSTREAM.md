@@ -4,7 +4,7 @@
 
 | Engine | Repo | Revision | Licence |
 |---|---|---|---|
-| WordCraft | storytold/wordcraft | `3b7f7ed` (2026-10-30, v0.12.0) | MIT OR Apache-2.0 |
+| WordCraft | storytold/wordcraft | `05f781cf` (2026-11-09; was `3b7f7ed`, 2026-10-30, v0.12.0) | MIT OR Apache-2.0 |
 | winit | storytold/winit | `a517b38` (2026-10-24, pinned 2026-11-05; WordCraft's fork) | Apache-2.0 |
 
 ## Workflow
@@ -37,6 +37,17 @@ rebase was refused by the session's safety rules; maintainers squash anyway), re
 answers per candidate in upstream's new fallback lists (`A;B`), and #5470 keys upstream's new
 font-resolve caches by the document owner (otherwise a document got another's embedded face).
 Our own pin is still `3b7f7ed`; bumping it is separate work.
+
+**Pin bumped 2026-11-09** to `05f781cf` (3,146 commits; the PR branches' merge base). All 65 patches
+re-fitted, one commit each, then re-exported (first line kept, diff regenerated). Upstream changes
+that touched us: document styles and numbering are `Arc`s now (`Arc::make_mut`; also in
+`wenshu-core`); layout tests load only the bundled Latin fonts (two of our tests no longer assume a
+system CJK face); Word-measured picture-line heights, where we keep WPS's (a line of only pictures
+has no descent and no spacing share, 0032; three upstream expectations changed); a paragraph with a
+page break inside ignores keep-lines (0040, WPS); krilla rev `1b34eba4`. Verified: the touched
+crates' tests pass; Windows gate 186 / 200, mean 0.9435; Linux 173 / 200, mean 0.9232 (baselines
+updated, `aae80ea709` 0.78 → 0.95); J4 recall 0.9987, all characters in 174 / 200; J5 198 / 200
+pages kept, saved vs original 0.9950, 168 pixel-identical.
 
 | Patch | Crate | What | Upstream |
 |---|---|---|---|
@@ -108,7 +119,7 @@ Our own pin is still `3b7f7ed`; bumping it is separate work.
 | 0065-engine-save-formats-the-embedding-app-adds | wordcraft-engine, apps/wordcraft, ui-egui | `io::set_app_formats`: save formats the embedding app adds, written by its function; `file.save` takes them by extension, Save As lists them in its type list and File › Export as buttons, after WordCraft's own and never in place of one (Wenshu: OFD). Test | could go upstream: a generic extension point, like 0001 |
 | winit/0001-windows-ime-results-once-and-unannounced | winit (storytold fork, Windows) | An empty composition string beside a result ends the composition (Wubi: every word was committed twice); a result with no composition announced is committed (Jidian Wubi's full-width punctuation was lost), unless the last composition already committed at its end. Hand-tested | could go upstream (storytold/winit, winit) |
 
-All 64 apply in order on `3b7f7ed` and reproduce the tested tree (checked 2026-11-04); the
+All 65 apply in order on `05f781cf` (re-fitted 2026-11-09; before that, 64 on `3b7f7ed`, checked 2026-11-04); the
 `wordcraft-layout` (613), `-fonts` (109 + 1), `-doc` (242), `-docx` (375 + 134 integration) and
 `-engine` (1095) suites pass with them, and fmt and clippy are clean.
 

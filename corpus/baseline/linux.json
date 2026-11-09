@@ -28,25 +28,25 @@
    "error": null,
    "pages": 29,
    "ref": 27,
-   "score": 0.9047
+   "score": 0.9049
   },
   "dc-administrative-3275566be0.docx": {
    "error": null,
    "pages": 3,
    "ref": 2,
-   "score": 0.9365
+   "score": 0.9373
   },
   "dc-administrative-43c2246cf6.docx": {
    "error": null,
    "pages": 4,
    "ref": 4,
-   "score": 0.9595
+   "score": 0.9599
   },
   "dc-administrative-43e2a0386f.docx": {
    "error": null,
    "pages": 28,
    "ref": 28,
-   "score": 0.9259
+   "score": 0.926
   },
   "dc-administrative-63dd6e9c28.docx": {
    "error": null,
@@ -76,13 +76,13 @@
    "error": null,
    "pages": 5,
    "ref": 5,
-   "score": 0.8926
+   "score": 0.9076
   },
   "dc-administrative-a9f763a2b4.docx": {
    "error": null,
    "pages": 3,
    "ref": 4,
-   "score": 0.8886
+   "score": 0.8887
   },
   "dc-administrative-b7e49d691e.docx": {
    "error": null,
@@ -202,7 +202,7 @@
    "error": null,
    "pages": 2,
    "ref": 2,
-   "score": 0.7776
+   "score": 0.9483
   },
   "dc-correspondence-ccbaad306d.docx": {
    "error": null,
@@ -220,7 +220,7 @@
    "error": null,
    "pages": 3,
    "ref": 3,
-   "score": 0.9047
+   "score": 0.9049
   },
   "dc-creative-377b4bf861.docx": {
    "error": null,
@@ -256,7 +256,7 @@
    "error": null,
    "pages": 5,
    "ref": 5,
-   "score": 0.8862
+   "score": 0.8882
   },
   "dc-creative-f7d3afdfdb.docx": {
    "error": null,
@@ -274,7 +274,7 @@
    "error": null,
    "pages": 1,
    "ref": 1,
-   "score": 0.9448
+   "score": 0.9453
   },
   "dc-educational-92262161df.docx": {
    "error": null,
@@ -298,7 +298,7 @@
    "error": null,
    "pages": 31,
    "ref": 31,
-   "score": 0.906
+   "score": 0.9064
   },
   "dc-educational-be4a26d95e.docx": {
    "error": null,
@@ -316,7 +316,7 @@
    "error": null,
    "pages": 6,
    "ref": 4,
-   "score": 0.8631
+   "score": 0.8619
   },
   "dc-forms-0fa1839a73.docx": {
    "error": null,
@@ -334,7 +334,7 @@
    "error": null,
    "pages": 11,
    "ref": 11,
-   "score": 0.9544
+   "score": 0.9546
   },
   "dc-forms-19cd5f62ce.docx": {
    "error": null,
@@ -346,7 +346,7 @@
    "error": null,
    "pages": 2,
    "ref": 2,
-   "score": 0.9045
+   "score": 0.9044
   },
   "dc-forms-1ceb1d46a8.docx": {
    "error": null,
@@ -406,13 +406,13 @@
    "error": null,
    "pages": 4,
    "ref": 4,
-   "score": 0.9528
+   "score": 0.9527
   },
   "dc-forms-c4d000cc34.docx": {
    "error": null,
    "pages": 14,
    "ref": 14,
-   "score": 0.9256
+   "score": 0.9257
   },
   "dc-forms-e98a952d34.docx": {
    "error": null,
@@ -448,7 +448,7 @@
    "error": null,
    "pages": 11,
    "ref": 11,
-   "score": 0.948
+   "score": 0.9481
   },
   "dc-legal-6f63e16a44.docx": {
    "error": null,
@@ -488,9 +488,9 @@
   },
   "dc-legal-ce628d9760.docx": {
    "error": null,
-   "pages": 10,
+   "pages": 9,
    "ref": 6,
-   "score": 0.9235
+   "score": 0.9228
   },
   "dc-legal-cf046fe702.docx": {
    "error": null,
@@ -508,31 +508,31 @@
    "error": null,
    "pages": 7,
    "ref": 7,
-   "score": 0.9484
+   "score": 0.948
   },
   "dc-policies-03b324df33.docx": {
    "error": null,
    "pages": 14,
    "ref": 14,
-   "score": 0.9432
+   "score": 0.9433
   },
   "dc-policies-1403def07e.docx": {
    "error": null,
    "pages": 8,
    "ref": 8,
-   "score": 0.9403
+   "score": 0.9402
   },
   "dc-policies-228229e95c.docx": {
    "error": null,
    "pages": 24,
    "ref": 24,
-   "score": 0.9116
+   "score": 0.9117
   },
   "dc-policies-2e6f27b909.docx": {
    "error": null,
    "pages": 10,
    "ref": 10,
-   "score": 0.9366
+   "score": 0.937
   },
   "dc-policies-38bfeee828.docx": {
    "error": null,
@@ -544,7 +544,7 @@
    "error": null,
    "pages": 14,
    "ref": 13,
-   "score": 0.929
+   "score": 0.9291
   },
   "dc-policies-5313b71db5.docx": {
    "error": null,
@@ -562,7 +562,7 @@
    "error": null,
    "pages": 26,
    "ref": 26,
-   "score": 0.904
+   "score": 0.9039
   },
   "dc-policies-896cafeedf.docx": {
    "error": null,
@@ -574,7 +574,7 @@
    "error": null,
    "pages": 28,
    "ref": 28,
-   "score": 0.9412
+   "score": 0.9457
   },
   "dc-policies-a5beccd773.docx": {
    "error": null,
@@ -592,7 +592,7 @@
    "error": null,
    "pages": 19,
    "ref": 17,
-   "score": 0.912
+   "score": 0.9128
   },
   "dc-policies-b6747d9df3.docx": {
    "error": null,
@@ -610,7 +610,7 @@
    "error": null,
    "pages": 87,
    "ref": 86,
-   "score": 0.8593
+   "score": 0.8612
   },
   "dc-policies-ea10dc7972.docx": {
    "error": null,
@@ -622,7 +622,7 @@
    "error": null,
    "pages": 3,
    "ref": 3,
-   "score": 0.9233
+   "score": 0.9234
   },
   "dc-policies-ffe3dc89e6.docx": {
    "error": null,
@@ -646,7 +646,7 @@
    "error": null,
    "pages": 16,
    "ref": 16,
-   "score": 0.8973
+   "score": 0.8975
   },
   "dc-reference-69d9f94c70.docx": {
    "error": null,
@@ -658,13 +658,13 @@
    "error": null,
    "pages": 12,
    "ref": 12,
-   "score": 0.9039
+   "score": 0.9045
   },
   "dc-reference-a598d05be9.docx": {
    "error": null,
    "pages": 8,
    "ref": 8,
-   "score": 0.9007
+   "score": 0.901
   },
   "dc-reference-ce8e10b9e6.docx": {
    "error": null,
@@ -718,7 +718,7 @@
    "error": null,
    "pages": 19,
    "ref": 19,
-   "score": 0.8894
+   "score": 0.8893
   },
   "dc-reports-70caf3a6de.docx": {
    "error": null,
@@ -748,7 +748,7 @@
    "error": null,
    "pages": 29,
    "ref": 29,
-   "score": 0.9362
+   "score": 0.9361
   },
   "dc-reports-bc216f1194.docx": {
    "error": null,
@@ -772,7 +772,7 @@
    "error": null,
    "pages": 6,
    "ref": 6,
-   "score": 0.8731
+   "score": 0.8736
   },
   "dc-technical-41063c56dd.docx": {
    "error": null,
@@ -790,13 +790,13 @@
    "error": null,
    "pages": 15,
    "ref": 15,
-   "score": 0.9458
+   "score": 0.9459
   },
   "dc-technical-6204decfbe.docx": {
    "error": null,
    "pages": 11,
    "ref": 11,
-   "score": 0.9646
+   "score": 0.9651
   },
   "dc-technical-6272d69b09.docx": {
    "error": null,
@@ -808,7 +808,7 @@
    "error": null,
    "pages": 32,
    "ref": 31,
-   "score": 0.9059
+   "score": 0.9063
   },
   "dc-technical-9c189a35a9.docx": {
    "error": null,
@@ -820,7 +820,7 @@
    "error": null,
    "pages": 21,
    "ref": 21,
-   "score": 0.9538
+   "score": 0.954
   },
   "dc-technical-c2c92639c7.docx": {
    "error": null,
@@ -982,7 +982,7 @@
    "error": null,
    "pages": 1,
    "ref": 1,
-   "score": 0.9979
+   "score": 0.993
   },
   "gen-probe-16-combine-vert.docx": {
    "error": null,
@@ -1006,7 +1006,7 @@
    "error": null,
    "pages": 1,
    "ref": 1,
-   "score": 0.9827
+   "score": 0.9829
   },
   "gen-probe-20-numbering.docx": {
    "error": null,
@@ -1144,13 +1144,13 @@
    "error": null,
    "pages": 38,
    "ref": 38,
-   "score": 0.9156
+   "score": 0.9157
   },
   "gov-nmpa-6.docx": {
    "error": null,
    "pages": 26,
    "ref": 26,
-   "score": 0.9386
+   "score": 0.9387
   },
   "gov-nmpa-fb1.docx": {
    "error": null,
@@ -1201,8 +1201,8 @@
    "score": 0.8761
   }
  },
- "machine": "WSL Ubuntu 22.04; WENSHU_FONTS_DIR=/usr/share/wenshu/fonts (wenshu 0.1.3 .deb, 22 fonts)",
- "mean_score": 0.9228,
+ "machine": "Windows-11-10.0.26200-SP0",
+ "mean_score": 0.9232,
  "page_count_compared": 200,
  "page_count_matches": 173,
  "platform": "linux"

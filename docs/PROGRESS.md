@@ -2,6 +2,29 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-09 (3): WordCraft pin bumped to `05f781cf` (3,146 commits)
+
+- **Re-fit:** a worktree at `05f781cf` (upstream `main`'s merge base with our PR branches), one
+  commit per patch with `git apply --3way` (or `patch` where a patch has no blob indexes), fixups
+  autosquashed, patches re-exported. Where a PR branch already carried the merged version
+  (0001, 0003–0005, 0027 with #5470's cache keys) it was taken from there. `wenshu-core` sets the
+  blank-document defaults through `Arc::make_mut` (styles are shared now); krilla rev `1b34eba4`.
+- **WPS over Word, kept:** upstream adopted Word's heights for picture lines (descent plus a
+  spacing share). WPS gives a line of only pictures neither: without our rule
+  `493a360281` gained a page and `a78d52e7ee` fell 0.956 → 0.924; with it both are back (three
+  upstream test expectations now WPS's). A paragraph with a page break inside ignores keep-lines
+  (WPS, F25). A kept section-closing paragraph's last-line leading may run into the margin.
+- **Tests:** upstream layout tests load only bundled Latin fonts, so the curly-quote compression
+  and grid-pitch tests were made font-independent (neither is in an open PR). The touched crates
+  (layout, engine, docx, fonts, doc) and Wenshu's pass.
+- **Gates:** Windows 186 / 200, mean 0.9430 → 0.9435; Linux (WSL) 173 / 200, 0.9228 → 0.9232;
+  both PASS, baselines updated; `aae80ea709` 0.78 → 0.95 on both. `gate_wsl.sh` takes `BRANCH`.
+- **J4:** all characters extractable 174 / 200 (was 173), recall 0.9987, PDF vs screen > 0.99 in
+  198 / 200, PDF vs WPS 0.9483.
+- **J5:** 198 / 200 WPS page counts unchanged, text identical 199 / 200 (as v0.1.4); saved vs
+  original 0.9939 → 0.9950, pixel-identical 161 → 168.
+- **Next:** J5's last documents, Linux long documents and an open 小标宋, web build (MVP.md).
+
 ## 2026-11-09 (2): upstream PRs ready for review; code-signing costs
 
 - **All eight WordCraft PRs ready for review** (#5002–#5006, #5462, #5463, #5470). Six had
