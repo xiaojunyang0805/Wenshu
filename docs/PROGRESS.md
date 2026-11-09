@@ -25,7 +25,16 @@ Newest first. One entry per working session: what landed, what was verified, wha
   (a page off in Wenshu's own layout) and `aae80ea709` (text and two Latin font names, as
   before). `out/rt/summary.txt`.
 
-**Next:** v0.1.4 step (6): version bump, changelogs, push, tag; the user publishes.
+- **v0.1.4** (`740766f`, Cargo and `vscode/package.json` 0.1.4): `main` pushed, tag pushed, CI
+  built all 9 assets into a draft (every job green), checksums verified. Install-tested with the
+  13 desktop checks: Windows portable zip 13 / 13, per-user MSI 13 / 13 (fresh install, silent
+  uninstall leaves no folder); WSL Ubuntu 22.04: the .deb upgrades 0.1.3 in place (24 bundled
+  fonts) 13 / 13, tar.gz 13 / 13, AppImage 13 / 13; the LoongArch CLI from the tar.gz under qemu
+  gives the x86_64 page counts and writes PDF and OFD; the zip's CLI writes PDF and OFD; the
+  .vsix is 0.1.4. Not checked: the MSI's Apps-list entry (the registry query came back empty),
+  installing the .vsix into VS Code, the LoongArch desktop.
+
+**Next:** the user publishes v0.1.4 (a draft; tick pre-release as for v0.1.3 if wanted).
 
 ## 2026-11-05 (6): v0.1.4 preparation; where to start tomorrow
 
