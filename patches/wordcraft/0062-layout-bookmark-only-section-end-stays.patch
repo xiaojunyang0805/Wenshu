@@ -1,9 +1,9 @@
 Upstream: (not opened; a paragraph closing a section with nothing but markers, such as a bookmark, counts as empty: it stays at the bottom of a full page, as WPS keeps it)
 diff --git a/crates/layout/src/flow.rs b/crates/layout/src/flow.rs
-index 3fadddf1..e612ab2b 100644
+index dda8af41..92b425f8 100644
 --- a/crates/layout/src/flow.rs
 +++ b/crates/layout/src/flow.rs
-@@ -323,7 +323,7 @@ impl<'a> Flow<'a> {
+@@ -353,7 +353,7 @@ impl<'a> Flow<'a> {
          // (`stays_at_bottom`): WPS places them as if the properties were unset. A kept empty
          // paragraph closing a section moved over, and the section break then began another page.
          let closes_section = self.p.section.is_some() && pb.next_starts_page;
@@ -12,7 +12,7 @@ index 3fadddf1..e612ab2b 100644
              return before;
          }
          let keep_next = rp.keep_next && !closes_section;
-@@ -447,7 +447,8 @@ impl<'a> Flow<'a> {
+@@ -486,7 +486,8 @@ impl<'a> Flow<'a> {
          let only_break = matches!(l.end, LineEnd::PageBreak | LineEnd::ColumnBreak)
              && continues
              && only_breaks(p, l.start..l.stop, |c| matches!(c, wordcraft_doc::para::PAGE_BREAK | wordcraft_doc::para::COLUMN_BREAK));
@@ -23,10 +23,10 @@ index 3fadddf1..e612ab2b 100644
  
      /// Whether the line (just taken, `fit.l1` is after it) forces a break, noted in `fit`.
 diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
-index c1d6d9a5..3510624a 100644
+index d99fc705..a79beea5 100644
 --- a/crates/layout/src/tests.rs
 +++ b/crates/layout/src/tests.rs
-@@ -1399,6 +1399,15 @@ fn a_kept_paragraph_closing_a_section_leaves_no_empty_page() {
+@@ -1505,6 +1505,15 @@ fn a_kept_paragraph_closing_a_section_leaves_no_empty_page() {
          assert_eq!(pages(text, true, extra), pages(text, false, extra), "{text:?}, {extra} lines of room");
          assert_eq!(pages(text, true, extra), 2, "{text:?}, {extra} lines of room");
      }

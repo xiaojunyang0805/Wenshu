@@ -113,10 +113,10 @@ index 109b1229..60dc972a 100644
 +
  pub(super) const FALLBACK_CACHE_MAX: usize = 20_000;
 diff --git a/crates/fonts/src/fontdb/tests/sysfonts.rs b/crates/fonts/src/fontdb/tests/sysfonts.rs
-index 5709ac9a..95edb49d 100644
+index 2572a1b4..e8ebfeef 100644
 --- a/crates/fonts/src/fontdb/tests/sysfonts.rs
 +++ b/crates/fonts/src/fontdb/tests/sysfonts.rs
-@@ -725,6 +725,21 @@ fn catalog_postscript_names() {
+@@ -759,6 +759,21 @@ fn catalog_postscript_names() {
      std::fs::remove_dir_all(dir).unwrap();
  }
  

@@ -1,99 +1,9 @@
 Upstream: folded into #5006 as 0ac59db8 (https://github.com/storytold/wordcraft/pull/5006); the squeeze limit is per line (WPS, F10)
-diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
-index e3e3554..1d636ec 100644
---- a/crates/layout/src/para/grid.rs
-+++ b/crates/layout/src/para/grid.rs
-@@ -140,9 +140,10 @@ pub(super) fn auto_space(b: &mut Builder, text: &str, de: bool, dn: bool) -> Vec
- }
- 
- /// Punctuation compression (`w:characterSpacingControl` other than `doNotCompress`), as WPS
--/// does it: nothing changes on a line that fits. On a line that would overflow, each compressible
--/// side of a full-width mark ([`crate::kinsoku::squeeze_side`]) may give up to a tenth of an em
--/// so the next unit fits ([`Squeeze`], used by the line breaker), and a closing mark ending a
-+/// does it: nothing changes on a line that fits. On a line that would overflow, the compressible
-+/// sides of full-width marks ([`crate::kinsoku::squeeze_side`]) give up room so the next unit
-+/// fits, each the same share, at most its blank half and the line at most what its
-+/// [`super::SqueezeRule`] allows ([`Squeeze`], used by the line breaker), and a closing mark ending a
- /// line takes no room for its blank half ([`crate::kinsoku::end_blank`]). Returns the squeeze
- /// room and the line-end room by cluster index; a mark is full-width when it is one character
- /// whose advance is at least 0.9 em, so a proportional (Latin) quote is left alone.
-@@ -159,7 +160,7 @@ pub(super) fn compress_punct(b: &Builder, text: &str) -> (Vec<Squeeze>, Vec<(usi
-             continue;
-         }
-         if let Some(side) = crate::kinsoku::squeeze_side(ch) {
--            squeeze.push(Squeeze { k, room: (size / 10.0).min(40.0), left: side == crate::kinsoku::Side::Left });
-+            squeeze.push(Squeeze { k, room: (size / 2.0).min(200.0), left: side == crate::kinsoku::Side::Left });
-         }
-         if crate::kinsoku::end_blank(ch) {
-             end.push((k, (size / 2.0).min(200.0)));
-diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
-index 000db66..82fd807 100644
---- a/crates/layout/src/para/lines.rs
-+++ b/crates/layout/src/para/lines.rs
-@@ -650,19 +650,20 @@ struct Measure {
- }
- 
- /// Punctuation compression: a line that overflows (it fitted only by counting its marks' squeeze
--/// room) takes the overflow out of its compressible marks, each in proportion to its room and
--/// never more, so it ends at the margin as WPS lays it out. An opening mark moves left itself;
--/// after a closing mark the rest of the line does.
-+/// room) takes the overflow out of its compressible marks, each in proportion to its blank half
-+/// (the same share at one size), never more than the line's room, so it ends at the margin as
-+/// WPS lays it out. An opening mark moves left itself; after a closing mark the rest of the line
-+/// does.
- fn squeeze_line(pl: &ParaLayout, sc: &mut Scan, c1: usize) {
-     let c0 = sc.c0;
-     let over = content_end(pl, sc, c1) - sc.right_edge;
-     let room = pl.squeeze_room(c0, c1);
--    if over <= 0.0 || room <= 0.0 {
-+    let marks = pl.squeeze_marks(c0, c1);
-+    let halves: f32 = marks.iter().map(|s| s.room).sum();
-+    if over <= 0.0 || room <= 0.0 || halves <= 0.0 {
-         return;
-     }
--    let f = (over / room).min(1.0);
--    let from = pl.squeeze.partition_point(|s| s.k < c0);
--    let marks = pl.squeeze.get(from..).unwrap_or_default();
-+    let f = (over.min(room) / halves).min(1.0);
-     let (mut shift, mut m) = (0.0, 0);
-     for k in c0..=c1 {
-         let mut after = 0.0;
-diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
-index 1f0c9aa..089b41e 100644
---- a/crates/layout/src/para/paragraph.rs
-+++ b/crates/layout/src/para/paragraph.rs
-@@ -581,8 +581,16 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
-     // Text on a character grid keeps to its cells; compression applies there too (WPS).
-     let mut auto_space =
-         if rp.snap_to_grid && env.grid.chars.is_some() { Vec::new() } else { auto_space(&mut sh.b, &p.text, rp.auto_space_de, rp.auto_space_dn) };
--    let squeeze = if doc.settings.char_spacing.compresses_punctuation() {
-+    // Compatibility mode 15 squeezes justified lines only, and only they get a closing mark's
-+    // blank half free at the line end; older modes do both on every line (WPS).
-+    let justified = matches!(rp.align, wordcraft_doc::props::Align::Justify | wordcraft_doc::props::Align::Distribute);
-+    let squeeze_rule =
-+        if doc.settings.compat_mode >= wordcraft_doc::COMPAT_MODE_CURRENT { super::SqueezeRule::Justified } else { super::SqueezeRule::HalfEm };
-+    let compresses = doc.settings.char_spacing.compresses_punctuation() && (justified || squeeze_rule == super::SqueezeRule::HalfEm);
-+    let mut end_marks = Vec::new();
-+    let squeeze = if compresses {
-         let (squeeze, end_blank) = compress_punct(&sh.b, &p.text);
-+        end_marks = end_blank.iter().map(|e| e.0).collect();
-         for (k, room) in end_blank {
-             match auto_space.binary_search_by_key(&k, |a| a.0) {
-                 Ok(i) => auto_space.get_mut(i).into_iter().for_each(|a| a.1 += room),
-@@ -626,6 +634,8 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
-         enclosures,
-         auto_space,
-         squeeze,
-+        squeeze_rule,
-+        end_marks,
-     };
-     let auto = env.doc.settings.auto_hyphenation && !pl.rp.suppress_hyphens;
-     pl.hyph_after = hyphenation_points(&bt.text, |i| bt.to_para(i), &pl, auto, env.doc.settings.hyphenate_caps, &runs);
 diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
-index d82a9b3..1b58795 100644
+index ba4732e6..0393a7d1 100644
 --- a/crates/layout/src/para.rs
 +++ b/crates/layout/src/para.rs
-@@ -98,6 +98,26 @@ pub struct ParaLayout {
+@@ -105,6 +105,26 @@ pub struct ParaLayout {
      /// What each compressible mark may give up on a line that would otherwise overflow
      /// ([`compress_punct`]), by cluster index, sorted. Empty unless punctuation is compressed.
      pub squeeze: Vec<Squeeze>,
@@ -120,7 +30,7 @@ index d82a9b3..1b58795 100644
  }
  
  /// Room one side of a full-width punctuation mark may give up when its line is squeezed.
-@@ -137,10 +157,37 @@ impl ParaLayout {
+@@ -157,10 +177,37 @@ impl ParaLayout {
      }
  
      /// The automatic space in cluster `k`'s advance ([`auto_space`]), 0 without one.
@@ -161,8 +71,98 @@ index d82a9b3..1b58795 100644
      }
      fn auto_space_after(&self, k: usize) -> f32 {
          self.auto_space.binary_search_by_key(&k, |a| a.0).ok().and_then(|i| self.auto_space.get(i)).map_or(0.0, |a| a.1)
+diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
+index e3e35545..1d636ece 100644
+--- a/crates/layout/src/para/grid.rs
++++ b/crates/layout/src/para/grid.rs
+@@ -140,9 +140,10 @@ pub(super) fn auto_space(b: &mut Builder, text: &str, de: bool, dn: bool) -> Vec
+ }
+ 
+ /// Punctuation compression (`w:characterSpacingControl` other than `doNotCompress`), as WPS
+-/// does it: nothing changes on a line that fits. On a line that would overflow, each compressible
+-/// side of a full-width mark ([`crate::kinsoku::squeeze_side`]) may give up to a tenth of an em
+-/// so the next unit fits ([`Squeeze`], used by the line breaker), and a closing mark ending a
++/// does it: nothing changes on a line that fits. On a line that would overflow, the compressible
++/// sides of full-width marks ([`crate::kinsoku::squeeze_side`]) give up room so the next unit
++/// fits, each the same share, at most its blank half and the line at most what its
++/// [`super::SqueezeRule`] allows ([`Squeeze`], used by the line breaker), and a closing mark ending a
+ /// line takes no room for its blank half ([`crate::kinsoku::end_blank`]). Returns the squeeze
+ /// room and the line-end room by cluster index; a mark is full-width when it is one character
+ /// whose advance is at least 0.9 em, so a proportional (Latin) quote is left alone.
+@@ -159,7 +160,7 @@ pub(super) fn compress_punct(b: &Builder, text: &str) -> (Vec<Squeeze>, Vec<(usi
+             continue;
+         }
+         if let Some(side) = crate::kinsoku::squeeze_side(ch) {
+-            squeeze.push(Squeeze { k, room: (size / 10.0).min(40.0), left: side == crate::kinsoku::Side::Left });
++            squeeze.push(Squeeze { k, room: (size / 2.0).min(200.0), left: side == crate::kinsoku::Side::Left });
+         }
+         if crate::kinsoku::end_blank(ch) {
+             end.push((k, (size / 2.0).min(200.0)));
+diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
+index 29bd521e..0eab43a6 100644
+--- a/crates/layout/src/para/lines.rs
++++ b/crates/layout/src/para/lines.rs
+@@ -715,19 +715,20 @@ struct Measure {
+ }
+ 
+ /// Punctuation compression: a line that overflows (it fitted only by counting its marks' squeeze
+-/// room) takes the overflow out of its compressible marks, each in proportion to its room and
+-/// never more, so it ends at the margin as WPS lays it out. An opening mark moves left itself;
+-/// after a closing mark the rest of the line does.
++/// room) takes the overflow out of its compressible marks, each in proportion to its blank half
++/// (the same share at one size), never more than the line's room, so it ends at the margin as
++/// WPS lays it out. An opening mark moves left itself; after a closing mark the rest of the line
++/// does.
+ fn squeeze_line(pl: &ParaLayout, sc: &mut Scan, c1: usize) {
+     let c0 = sc.c0;
+     let over = content_end(pl, sc, c1) - sc.right_edge;
+     let room = pl.squeeze_room(c0, c1);
+-    if over <= 0.0 || room <= 0.0 {
++    let marks = pl.squeeze_marks(c0, c1);
++    let halves: f32 = marks.iter().map(|s| s.room).sum();
++    if over <= 0.0 || room <= 0.0 || halves <= 0.0 {
+         return;
+     }
+-    let f = (over / room).min(1.0);
+-    let from = pl.squeeze.partition_point(|s| s.k < c0);
+-    let marks = pl.squeeze.get(from..).unwrap_or_default();
++    let f = (over.min(room) / halves).min(1.0);
+     let (mut shift, mut m) = (0.0, 0);
+     for k in c0..=c1 {
+         let mut after = 0.0;
+diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
+index 6bee0d36..f4b861c3 100644
+--- a/crates/layout/src/para/paragraph.rs
++++ b/crates/layout/src/para/paragraph.rs
+@@ -686,8 +686,16 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+     // Text on a character grid keeps to its cells; compression applies there too (WPS).
+     let mut auto_space =
+         if rp.snap_to_grid && env.grid.chars.is_some() { Vec::new() } else { auto_space(&mut sh.b, &p.text, rp.auto_space_de, rp.auto_space_dn) };
+-    let squeeze = if doc.settings.char_spacing.compresses_punctuation() {
++    // Compatibility mode 15 squeezes justified lines only, and only they get a closing mark's
++    // blank half free at the line end; older modes do both on every line (WPS).
++    let justified = matches!(rp.align, wordcraft_doc::props::Align::Justify | wordcraft_doc::props::Align::Distribute);
++    let squeeze_rule =
++        if doc.settings.compat_mode >= wordcraft_doc::COMPAT_MODE_CURRENT { super::SqueezeRule::Justified } else { super::SqueezeRule::HalfEm };
++    let compresses = doc.settings.char_spacing.compresses_punctuation() && (justified || squeeze_rule == super::SqueezeRule::HalfEm);
++    let mut end_marks = Vec::new();
++    let squeeze = if compresses {
+         let (squeeze, end_blank) = compress_punct(&sh.b, &p.text);
++        end_marks = end_blank.iter().map(|e| e.0).collect();
+         for (k, room) in end_blank {
+             match auto_space.binary_search_by_key(&k, |a| a.0) {
+                 Ok(i) => auto_space.get_mut(i).into_iter().for_each(|a| a.1 += room),
+@@ -733,6 +741,8 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+         enclosures,
+         auto_space,
+         squeeze,
++        squeeze_rule,
++        end_marks,
+     };
+     let auto = env.doc.settings.auto_hyphenation && !pl.rp.suppress_hyphens;
+     pl.hyph_after = hyphenation_points(&bt.text, |i| bt.to_para(i), &pl, auto, env.doc.settings.hyphenate_caps, &runs);
 diff --git a/crates/layout/src/tests/compress.rs b/crates/layout/src/tests/compress.rs
-index 442c50d..564babe 100644
+index 442c50db..564babed 100644
 --- a/crates/layout/src/tests/compress.rs
 +++ b/crates/layout/src/tests/compress.rs
 @@ -1,6 +1,8 @@

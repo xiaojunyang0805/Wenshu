@@ -1,9 +1,9 @@
 Upstream: (not opened; WPS measurement, departs from Word: off a character grid a first-line indent in characters counts the first run with text, its size plus twice its character spacing, not the paragraph mark size)
 diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
-index ab715965..6172de06 100644
+index 185e72d3..37d42fb5 100644
 --- a/crates/layout/src/para/paragraph.rs
 +++ b/crates/layout/src/para/paragraph.rs
-@@ -112,12 +112,23 @@ fn paragraph_props(p: &Paragraph, env: &ParaEnv) -> ResolvedPara {
+@@ -121,12 +121,23 @@ fn paragraph_props(p: &Paragraph, env: &ParaEnv) -> ResolvedPara {
      // the mark's, each plus the grid's adjustment (WPS Office: with a 10.5 pt Normal style and
      // 16 pt text, `firstLineChars=200` is 2 × 15.54 pt, not two 10.05 pt cells). On a line grid
      // without a character pitch, the left and right indents count the grid's default font size
@@ -30,7 +30,7 @@ index ab715965..6172de06 100644
          match (rp.snap_to_grid, env.grid.chars, env.grid.line) {
              (true, Some(pitch), _) => {
                  let cell = |size: f32| env.grid.advance(size).filter(|a| *a > 0.0).unwrap_or(pitch);
-@@ -125,8 +136,8 @@ fn paragraph_props(p: &Paragraph, env: &ParaEnv) -> ResolvedPara {
+@@ -134,8 +145,8 @@ fn paragraph_props(p: &Paragraph, env: &ParaEnv) -> ResolvedPara {
              }
              // Whether or not the paragraph snaps to the grid (`dc-policies-39de0888eb`: `snapToGrid=0`,
              // `leftChars=413` beside 13 pt text is 4.13 × the 12 pt Normal size in WPS).
@@ -42,10 +42,10 @@ index ab715965..6172de06 100644
      }
      list_indents(&mut rp, p, env);
 diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
-index cde8a802..9d4650b1 100644
+index 1b7b0f96..6defd77c 100644
 --- a/crates/layout/src/tests.rs
 +++ b/crates/layout/src/tests.rs
-@@ -5972,11 +5972,14 @@ fn a_page_break_at_the_bottom_of_a_full_page_leaves_no_blank_page() {
+@@ -7581,12 +7581,15 @@ fn a_page_break_at_the_bottom_of_a_full_page_leaves_no_blank_page() {
      assert!(last_on_2, "the text after the break is on page 2");
  }
  
@@ -57,13 +57,14 @@ index cde8a802..9d4650b1 100644
 +/// 22 pt mark indents 19 pt a character).
  #[test]
  fn character_indents_use_the_paragraph_mark_size() {
+     crate::test_fonts();
 -    let mut p = wordcraft_doc::Paragraph::with_text(&"字".repeat(80), Default::default());
 +    let text = wordcraft_doc::props::CharProps { size: Some(15.0), spacing: Some(2.0), ..Default::default() };
 +    let mut p = wordcraft_doc::Paragraph::with_text(&"字".repeat(80), text);
      p.props.indent_first = Some(5.0);
      p.props.indent_first_chars = Some(2.0);
      p.props.indent_left_chars = Some(1.0);
-@@ -5985,8 +5988,17 @@ fn character_indents_use_the_paragraph_mark_size() {
+@@ -7595,8 +7598,17 @@ fn character_indents_use_the_paragraph_mark_size() {
      d.body = vec![wordcraft_doc::para_block(p)];
      let l = lay(&d);
      let para = l.pages[0].items.iter().find_map(|it| if let Placed::Lines { para, .. } = it { Some(para.clone()) } else { None }).unwrap();
@@ -82,11 +83,29 @@ index cde8a802..9d4650b1 100644
  }
  
  #[test]
+@@ -15460,6 +15472,8 @@ fn turned_cell_float_keeps_its_along_text_offset() {
+         let reference = place(direction, true);
+         assert!((confined.y - reference.y).abs() < 0.01, "{direction:?}: {confined:?} vs {reference:?}");
+     }
++}
++
+ /// `w:balanceSingleByteDoubleByteWidth`: each space is half an em of its size, whatever its font;
+ /// letters keep their own widths (WPS Office, probe 33 of Wenshu's corpus).
+ #[test]
+@@ -15494,7 +15508,7 @@ fn balanced_single_byte_width_makes_a_label_s_suffix_space_half_an_em() {
+         items[0].props.indent_left = Some(0.0);
+         items[0].props.indent_first = Some(0.0);
+         let id = d.numbering.abstract_of(d.numbering.nums[0].id).map(|a| a.id).unwrap();
+-        let a = d.numbering.abstracts.iter_mut().find(|a| a.id == id).unwrap();
++        let a = std::sync::Arc::make_mut(&mut d.numbering).abstracts.iter_mut().find(|a| a.id == id).unwrap();
+         a.levels[0].suffix = wordcraft_doc::numbering::LevelSuffix::Space;
+         a.levels[0].chr.size = Some(16.0);
+         items[0].runs[0].props.size = Some(16.0);
 diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
-index 06e47e87..21190757 100644
+index 3e59820e..bb3bf3c2 100644
 --- a/crates/layout/src/tests/grid.rs
 +++ b/crates/layout/src/tests/grid.rs
-@@ -271,7 +271,8 @@ fn character_grid_places_east_asian_text_on_the_pitch() {
+@@ -273,7 +273,8 @@ fn character_grid_places_east_asian_text_on_the_pitch() {
  #[test]
  fn character_indents_on_a_line_grid_count_the_default_size_at_the_sides() {
      // A line grid has no character pitch: the left and right indents count the Normal style's
@@ -96,7 +115,7 @@ index 06e47e87..21190757 100644
      let d = with_grid(&"中".repeat(200), DocGridType::Lines, 0);
      let normal = para::Grid::of(&d, &d.last_section).font_size;
      let mark = normal + 6.0;
-@@ -290,7 +291,8 @@ fn character_indents_on_a_line_grid_count_the_default_size_at_the_sides() {
+@@ -292,7 +293,8 @@ fn character_indents_on_a_line_grid_count_the_default_size_at_the_sides() {
      assert!((base.lines[1].right - right.lines[1].right - 2.0 * normal).abs() < 0.01, "right {}", right.lines[1].right);
      let first = with(&|p| p.props.indent_first_chars = Some(2.0));
      let indent = first.lines[0].xs[0] - first.lines[1].xs[0];
@@ -106,3 +125,16 @@ index 06e47e87..21190757 100644
      // A paragraph that doesn't snap to the grid counts the same (WPS, `dc-policies-39de0888eb`).
      let off = with(&|p| {
          p.props.snap_to_grid = Some(false);
+@@ -416,10 +418,10 @@ fn table_cells_snap_to_the_line_grid_only_when_adjusted() {
+ #[test]
+ fn a_grid_lines_pitch_below_its_text_may_run_into_the_bottom_margin() {
+     let mut past_margin = 0;
+-    for shift in (0..18).step_by(2) {
++    for shift in 0..36 {
+         let mut d = with_grid(&"Several words wrap onto many lines of a long paragraph. ".repeat(60), DocGridType::Lines, 0);
+         if let Some(Block::Para(p)) = d.body.get_mut(0).map(std::sync::Arc::make_mut) {
+-            p.props.space_before = Some(shift as f32);
++            p.props.space_before = Some(shift as f32 * 0.5);
+             p.props.widow_control = Some(false);
+         }
+         let bottom = d.last_section.page_h - d.last_section.margin_bottom;

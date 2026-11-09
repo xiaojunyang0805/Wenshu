@@ -1,8 +1,9 @@
 Upstream: https://github.com/storytold/wordcraft/pull/5327 (draft); a custom style with the id Normal no longer replaces the default paragraph style
 diff --git a/crates/docx/src/read/styles.rs b/crates/docx/src/read/styles.rs
+index 6e972a76..2253de13 100644
 --- a/crates/docx/src/read/styles.rs
 +++ b/crates/docx/src/read/styles.rs
-@@ -54,14 +54,20 @@ impl Reader<'_> {
+@@ -56,14 +56,20 @@ impl Reader<'_> {
          /// Largest `w:latentStyles` kept (Word's has ~380 exceptions, ~40 KB).
          const MAX_LATENT_STYLES_XML: usize = 1 << 20;
          let Some(root) = self.xml(path)? else { return Ok(()) };
@@ -31,9 +32,10 @@ diff --git a/crates/docx/src/read/styles.rs b/crates/docx/src/read/styles.rs
          }
          // Word in other languages names the TOC styles' ids in that language (`toc 1` is `Sumrio1`
 diff --git a/crates/docx/tests/it/default_size.rs b/crates/docx/tests/it/default_size.rs
+index 65d5a1f9..6420cbcf 100644
 --- a/crates/docx/tests/it/default_size.rs
 +++ b/crates/docx/tests/it/default_size.rs
-@@ -67,3 +67,24 @@ fn an_unset_default_size_does_not_take_a_styles_size() {
+@@ -68,3 +68,24 @@ fn an_unset_default_size_does_not_take_a_styles_size() {
      assert_eq!(reopened.styles.default_chr.size, Some(DEFAULT_FONT_SIZE));
      assert_eq!(resolved(&reopened), resolved(&d));
  }

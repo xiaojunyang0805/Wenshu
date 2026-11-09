@@ -1,9 +1,9 @@
 Upstream: (not yet opened; app-bundled font folders for Wenshu's open 公文 fonts)
 diff --git a/crates/fonts/src/fontdb.rs b/crates/fonts/src/fontdb.rs
-index 44898b8..425ffa0 100644
+index 6ae53ac4..75ac62a9 100644
 --- a/crates/fonts/src/fontdb.rs
 +++ b/crates/fonts/src/fontdb.rs
-@@ -55,9 +55,10 @@ pub struct FontDb {
+@@ -63,9 +63,10 @@ pub struct FontDb {
      user: RwLock<user::UserFonts>,
      /// Bumped whenever user fonts are added or removed ([`FontDb::generation`]).
      generation: AtomicU64,
@@ -16,7 +16,7 @@ index 44898b8..425ffa0 100644
      /// Set once the font folders have been scanned. Lookups by family name wait for the first
      /// scan, so what they find doesn't depend on what ran before them.
      #[cfg(not(target_arch = "wasm32"))]
-@@ -110,7 +111,7 @@ impl FontDb {
+@@ -124,7 +125,7 @@ impl FontDb {
              catalog: RwLock::new(Vec::new()),
              user: RwLock::new(user::UserFonts::default()),
              generation: AtomicU64::new(0),
@@ -25,7 +25,7 @@ index 44898b8..425ffa0 100644
              #[cfg(not(target_arch = "wasm32"))]
              cataloged: std::sync::OnceLock::new(),
              #[cfg(not(target_arch = "wasm32"))]
-@@ -140,6 +141,35 @@ impl FontDb {
+@@ -154,6 +155,35 @@ impl FontDb {
          let _ = on;
      }
  
@@ -62,7 +62,7 @@ index 44898b8..425ffa0 100644
      /// first time a lookup by family name needs them (or ahead of time by
      /// [`FontDb::scan_in_background`]).
 diff --git a/crates/fonts/src/fontdb/catalog.rs b/crates/fonts/src/fontdb/catalog.rs
-index 5cd84c5..f749e53 100644
+index 5cd84c5f..f749e53e 100644
 --- a/crates/fonts/src/fontdb/catalog.rs
 +++ b/crates/fonts/src/fontdb/catalog.rs
 @@ -188,7 +188,7 @@ impl FontDb {
@@ -75,10 +75,10 @@ index 5cd84c5..f749e53 100644
          let mut visited = std::collections::HashSet::new();
          while let Some(d) = stack.pop() {
 diff --git a/crates/fonts/src/fontdb/tests/sysfonts.rs b/crates/fonts/src/fontdb/tests/sysfonts.rs
-index c95adb6..3ddfd68 100644
+index 4507c19d..ff64ece0 100644
 --- a/crates/fonts/src/fontdb/tests/sysfonts.rs
 +++ b/crates/fonts/src/fontdb/tests/sysfonts.rs
-@@ -135,6 +135,24 @@ fn rescanning_finds_fonts_installed_since() {
+@@ -136,6 +136,24 @@ fn rescanning_finds_fonts_installed_since() {
      assert!(db.has_family(FAMILY) && has(&db.families(), FAMILY));
  }
  

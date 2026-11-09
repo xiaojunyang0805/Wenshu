@@ -28,19 +28,19 @@
    "error": null,
    "pages": 29,
    "ref": 27,
-   "score": 0.9101
+   "score": 0.9105
   },
   "dc-administrative-3275566be0.docx": {
    "error": null,
    "pages": 2,
    "ref": 2,
-   "score": 0.9347
+   "score": 0.9352
   },
   "dc-administrative-43c2246cf6.docx": {
    "error": null,
    "pages": 4,
    "ref": 4,
-   "score": 0.9677
+   "score": 0.968
   },
   "dc-administrative-43e2a0386f.docx": {
    "error": null,
@@ -64,7 +64,7 @@
    "error": null,
    "pages": 19,
    "ref": 17,
-   "score": 0.9533
+   "score": 0.9532
   },
   "dc-administrative-89d77c0946.docx": {
    "error": null,
@@ -76,7 +76,7 @@
    "error": null,
    "pages": 5,
    "ref": 5,
-   "score": 0.9165
+   "score": 0.9228
   },
   "dc-administrative-a9f763a2b4.docx": {
    "error": null,
@@ -88,7 +88,7 @@
    "error": null,
    "pages": 14,
    "ref": 14,
-   "score": 0.9622
+   "score": 0.9623
   },
   "dc-administrative-bc2cf558d0.docx": {
    "error": null,
@@ -124,7 +124,7 @@
    "error": null,
    "pages": 4,
    "ref": 4,
-   "score": 0.9198
+   "score": 0.9197
   },
   "dc-administrative-f96ef99a79.docx": {
    "error": null,
@@ -202,7 +202,7 @@
    "error": null,
    "pages": 2,
    "ref": 2,
-   "score": 0.7811
+   "score": 0.9524
   },
   "dc-correspondence-ccbaad306d.docx": {
    "error": null,
@@ -214,13 +214,13 @@
    "error": null,
    "pages": 5,
    "ref": 5,
-   "score": 0.8624
+   "score": 0.8623
   },
   "dc-creative-274e32995c.docx": {
    "error": null,
    "pages": 3,
    "ref": 3,
-   "score": 0.9159
+   "score": 0.9161
   },
   "dc-creative-377b4bf861.docx": {
    "error": null,
@@ -250,13 +250,13 @@
    "error": null,
    "pages": 3,
    "ref": 3,
-   "score": 0.9056
+   "score": 0.906
   },
   "dc-creative-e67370879a.docx": {
    "error": null,
    "pages": 5,
    "ref": 5,
-   "score": 0.8974
+   "score": 0.8997
   },
   "dc-creative-f7d3afdfdb.docx": {
    "error": null,
@@ -274,7 +274,7 @@
    "error": null,
    "pages": 1,
    "ref": 1,
-   "score": 0.9581
+   "score": 0.9595
   },
   "dc-educational-92262161df.docx": {
    "error": null,
@@ -298,7 +298,7 @@
    "error": null,
    "pages": 31,
    "ref": 31,
-   "score": 0.9082
+   "score": 0.9087
   },
   "dc-educational-be4a26d95e.docx": {
    "error": null,
@@ -316,7 +316,7 @@
    "error": null,
    "pages": 4,
    "ref": 4,
-   "score": 0.9508
+   "score": 0.968
   },
   "dc-forms-0fa1839a73.docx": {
    "error": null,
@@ -334,7 +334,7 @@
    "error": null,
    "pages": 11,
    "ref": 11,
-   "score": 0.9703
+   "score": 0.9705
   },
   "dc-forms-19cd5f62ce.docx": {
    "error": null,
@@ -346,7 +346,7 @@
    "error": null,
    "pages": 2,
    "ref": 2,
-   "score": 0.9104
+   "score": 0.9102
   },
   "dc-forms-1ceb1d46a8.docx": {
    "error": null,
@@ -406,19 +406,19 @@
    "error": null,
    "pages": 4,
    "ref": 4,
-   "score": 0.9633
+   "score": 0.9626
   },
   "dc-forms-c4d000cc34.docx": {
    "error": null,
    "pages": 14,
    "ref": 14,
-   "score": 0.9415
+   "score": 0.9416
   },
   "dc-forms-e98a952d34.docx": {
    "error": null,
    "pages": 30,
    "ref": 30,
-   "score": 0.9626
+   "score": 0.9627
   },
   "dc-legal-04184d858d.docx": {
    "error": null,
@@ -436,7 +436,7 @@
    "error": null,
    "pages": 15,
    "ref": 15,
-   "score": 0.9135
+   "score": 0.9136
   },
   "dc-legal-2a32d09ff6.docx": {
    "error": null,
@@ -448,13 +448,13 @@
    "error": null,
    "pages": 11,
    "ref": 11,
-   "score": 0.9777
+   "score": 0.9781
   },
   "dc-legal-6f63e16a44.docx": {
    "error": null,
    "pages": 9,
    "ref": 9,
-   "score": 0.9065
+   "score": 0.9063
   },
   "dc-legal-8bb3586f93.docx": {
    "error": null,
@@ -490,7 +490,7 @@
    "error": null,
    "pages": 6,
    "ref": 6,
-   "score": 0.9252
+   "score": 0.9255
   },
   "dc-legal-cf046fe702.docx": {
    "error": null,
@@ -508,7 +508,7 @@
    "error": null,
    "pages": 7,
    "ref": 7,
-   "score": 0.956
+   "score": 0.9557
   },
   "dc-policies-03b324df33.docx": {
    "error": null,
@@ -520,7 +520,7 @@
    "error": null,
    "pages": 8,
    "ref": 8,
-   "score": 0.9632
+   "score": 0.963
   },
   "dc-policies-228229e95c.docx": {
    "error": null,
@@ -532,7 +532,7 @@
    "error": null,
    "pages": 10,
    "ref": 10,
-   "score": 0.9374
+   "score": 0.9378
   },
   "dc-policies-38bfeee828.docx": {
    "error": null,
@@ -544,7 +544,7 @@
    "error": null,
    "pages": 14,
    "ref": 13,
-   "score": 0.9444
+   "score": 0.9445
   },
   "dc-policies-5313b71db5.docx": {
    "error": null,
@@ -574,7 +574,7 @@
    "error": null,
    "pages": 28,
    "ref": 28,
-   "score": 0.9537
+   "score": 0.9593
   },
   "dc-policies-a5beccd773.docx": {
    "error": null,
@@ -592,13 +592,13 @@
    "error": null,
    "pages": 17,
    "ref": 17,
-   "score": 0.9373
+   "score": 0.9379
   },
   "dc-policies-b6747d9df3.docx": {
    "error": null,
    "pages": 6,
    "ref": 6,
-   "score": 0.9655
+   "score": 0.9654
   },
   "dc-policies-baf8affe64.docx": {
    "error": null,
@@ -610,7 +610,7 @@
    "error": null,
    "pages": 86,
    "ref": 86,
-   "score": 0.9731
+   "score": 0.9759
   },
   "dc-policies-ea10dc7972.docx": {
    "error": null,
@@ -628,7 +628,7 @@
    "error": null,
    "pages": 10,
    "ref": 10,
-   "score": 0.9468
+   "score": 0.9464
   },
   "dc-reference-13b329bb48.docx": {
    "error": null,
@@ -646,7 +646,7 @@
    "error": null,
    "pages": 16,
    "ref": 16,
-   "score": 0.9183
+   "score": 0.9187
   },
   "dc-reference-69d9f94c70.docx": {
    "error": null,
@@ -658,13 +658,13 @@
    "error": null,
    "pages": 12,
    "ref": 12,
-   "score": 0.9063
+   "score": 0.9067
   },
   "dc-reference-a598d05be9.docx": {
    "error": null,
    "pages": 8,
    "ref": 8,
-   "score": 0.915
+   "score": 0.9153
   },
   "dc-reference-ce8e10b9e6.docx": {
    "error": null,
@@ -688,7 +688,7 @@
    "error": null,
    "pages": 32,
    "ref": 32,
-   "score": 0.9542
+   "score": 0.9541
   },
   "dc-reports-200798ba75.docx": {
    "error": null,
@@ -718,7 +718,7 @@
    "error": null,
    "pages": 19,
    "ref": 19,
-   "score": 0.9113
+   "score": 0.9111
   },
   "dc-reports-70caf3a6de.docx": {
    "error": null,
@@ -772,7 +772,7 @@
    "error": null,
    "pages": 6,
    "ref": 6,
-   "score": 0.8855
+   "score": 0.8859
   },
   "dc-technical-41063c56dd.docx": {
    "error": null,
@@ -790,13 +790,13 @@
    "error": null,
    "pages": 15,
    "ref": 15,
-   "score": 0.9532
+   "score": 0.9528
   },
   "dc-technical-6204decfbe.docx": {
    "error": null,
    "pages": 11,
    "ref": 11,
-   "score": 0.983
+   "score": 0.9832
   },
   "dc-technical-6272d69b09.docx": {
    "error": null,
@@ -808,7 +808,7 @@
    "error": null,
    "pages": 32,
    "ref": 31,
-   "score": 0.9111
+   "score": 0.9107
   },
   "dc-technical-9c189a35a9.docx": {
    "error": null,
@@ -982,7 +982,7 @@
    "error": null,
    "pages": 1,
    "ref": 1,
-   "score": 0.9987
+   "score": 0.9933
   },
   "gen-probe-16-combine-vert.docx": {
    "error": null,
@@ -1006,7 +1006,7 @@
    "error": null,
    "pages": 1,
    "ref": 1,
-   "score": 0.9948
+   "score": 0.995
   },
   "gen-probe-20-numbering.docx": {
    "error": null,
@@ -1144,13 +1144,13 @@
    "error": null,
    "pages": 38,
    "ref": 38,
-   "score": 0.9232
+   "score": 0.9233
   },
   "gov-nmpa-6.docx": {
    "error": null,
    "pages": 26,
    "ref": 26,
-   "score": 0.9456
+   "score": 0.9457
   },
   "gov-nmpa-fb1.docx": {
    "error": null,
@@ -1202,7 +1202,7 @@
   }
  },
  "machine": "Windows-11-10.0.26200-SP0",
- "mean_score": 0.943,
+ "mean_score": 0.9435,
  "page_count_compared": 200,
  "page_count_matches": 186,
  "platform": "windows"

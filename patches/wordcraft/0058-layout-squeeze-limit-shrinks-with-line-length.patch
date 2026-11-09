@@ -1,9 +1,9 @@
 Upstream: (not opened; WPS measurement: in compatibility mode 15 a justified line may squeeze each of its k marks at most 1/(k + n/32) em, n the line length in em before its last unit; replaces 1 - 1/(2k) em measured on 20-character lines only)
 diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
-index 1131a657..518b994e 100644
+index b7ff573f..4a26bc92 100644
 --- a/crates/layout/src/para.rs
 +++ b/crates/layout/src/para.rs
-@@ -122,8 +122,10 @@ pub enum SqueezeRule {
+@@ -129,8 +129,10 @@ pub enum SqueezeRule {
      /// what the last unit is wider than an em.
      #[default]
      HalfEm,
@@ -16,7 +16,7 @@ index 1131a657..518b994e 100644
      Justified,
  }
  
-@@ -205,13 +207,19 @@ impl ParaLayout {
+@@ -225,13 +227,19 @@ impl ParaLayout {
          let k = marks.len() as f32;
          let rooms: f32 = marks.iter().map(|s| s.room).sum();
          let em = marks.iter().map(|s| s.em).sum::<f32>() / k;

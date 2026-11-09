@@ -1,10 +1,10 @@
 Upstream: (not yet opened; desktop embedding for Wenshu M2)
 diff --git a/apps/wordcraft/src/lib.rs b/apps/wordcraft/src/lib.rs
 new file mode 100644
-index 0000000..f0a73d2
+index 00000000..ba85f6a1
 --- /dev/null
 +++ b/apps/wordcraft/src/lib.rs
-@@ -0,0 +1,716 @@
+@@ -0,0 +1,847 @@
 +//! WordCraft desktop app, as a library: `main.rs` runs it with WordCraft's [`AppConfig`], and an app
 +//! built on WordCraft runs it with its own name, icon and start-up code ([`run`]).
 +//!
@@ -17,6 +17,8 @@ index 0000000..f0a73d2
 +#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 +
 +mod animations;
++#[cfg(target_os = "linux")]
++mod appimage_env;
 +#[cfg(target_os = "macos")]
 +mod apple_events;
 +mod clipboard;
@@ -36,7 +38,7 @@ index 0000000..f0a73d2
 +pub use wordcraft_ui_egui::brand::Brand;
 +use wordcraft_ui_egui::{
 +    Services, UiState, WordApp,
-+    window_geometry::{RawWindowState, WindowGeometry, take_rescue},
++    window_geometry::{RawWindowState, WindowGeometry, reachable, take_rescue},
 +};
 +
 +/// What an app built on WordCraft's desktop front end sets: its name, version and About text
@@ -103,13 +105,21 @@ index 0000000..f0a73d2
 +        apple_events::poll(&self.5, &mut self.0, ctx);
 +        self.0.logic(ctx);
 +        self.3.show(frame);
-+        let window = self.4;
++        let mut window = self.4;
++        // Only until the off-screen check below has run: it is the one reader.
++        if self.1.is_some() {
++            let (on_a_monitor, primary_monitor_rect) = monitor_geometry(frame, ctx.pixels_per_point());
++            window.on_a_monitor = on_a_monitor;
++            window.primary_monitor_rect = primary_monitor_rect;
++        }
 +        // A window that doesn't fit on its screen (the default size on a laptop) shrinks to fit
 +        // there, so all of the scroll bar can be dragged (#1215). Checked on the frame that first
 +        // knows the monitor: the off-screen check below takes the pending geometry then.
 +        if let Some((pos, size)) = self.1.and_then(|g| g.fit_on_monitor(&window)) {
 +            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(size));
 +            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos));
++            let b = self.0.window_builder().clone().with_inner_size(size);
++            self.0.set_window_builder(b);
 +        }
 +        // The geometry saved for the next start is the active window's.
 +        let prev = self.0.ui.window;
@@ -172,7 +182,39 @@ index 0000000..f0a73d2
 +        if let Some(key_file) = &self.2 {
 +            key_file.remove();
 +        }
++        self.0.start_pending_update();
 +    }
++}
++
++/// Whether a grippable part of the window is on a monitor, and the primary monitor bounds.
++/// Winit reports physical pixels; egui positions use points. `None` where the platform cannot
++/// report the window or primary monitor (Wayland, headless).
++fn monitor_geometry(frame: &eframe::Frame, pixels_per_point: f32) -> (Option<bool>, Option<egui::Rect>) {
++    let Some(w) = frame.winit_window() else {
++        return (None, None);
++    };
++    if !pixels_per_point.is_finite() || pixels_per_point <= 0.0 {
++        return (None, None);
++    }
++    let Some(pos) = w.outer_position().ok() else {
++        return (None, None);
++    };
++    let size = w.outer_size();
++    let physical_rect = |(x, y): (i32, i32), (width, height): (u32, u32)| {
++        egui::Rect::from_min_size(egui::pos2(x as f32, y as f32), egui::vec2(width as f32, height as f32))
++    };
++    let monitors: Vec<egui::Rect> =
++        w.available_monitors().map(|m| physical_rect((m.position().x, m.position().y), (m.size().width, m.size().height))).collect();
++    let on_a_monitor = (!monitors.is_empty()).then(|| reachable(physical_rect((pos.x, pos.y), (size.width, size.height)), &monitors));
++    let primary_monitor_rect = w.primary_monitor().map(|m| {
++        let pos = m.position();
++        let size = m.size();
++        egui::Rect::from_min_size(
++            egui::pos2(pos.x as f32, pos.y as f32) / pixels_per_point,
++            egui::vec2(size.width as f32, size.height as f32) / pixels_per_point,
++        )
++    });
++    (on_a_monitor, primary_monitor_rect)
 +}
 +
 +/// Quit the way Command-Q does, on the next turn of the main queue.
@@ -200,6 +242,8 @@ index 0000000..f0a73d2
 +    if let Some(key_file) = key_file {
 +        key_file.remove();
 +    }
++    // `terminate:` ends the process without dropping the app, so a ready update's helper starts here.
++    app.start_pending_update();
 +    dispatch2::DispatchQueue::main().exec_async(|| {
 +        if let Some(mtm) = objc2::MainThreadMarker::new() {
 +            objc2_app_kit::NSApplication::sharedApplication(mtm).terminate(None);
@@ -265,35 +309,66 @@ index 0000000..f0a73d2
 +    }
 +}
 +
-+/// The saved window geometry, read before the window opens (`load_prefs` runs after).
-+fn saved_window() -> Option<WindowGeometry> {
++/// The saved preferences, read before the window opens for its geometry and, on Linux and the
++/// BSDs, the display server (`load_prefs` runs after).
++fn saved_ui() -> Option<UiState> {
 +    if !prefs_enabled() {
 +        return None;
 +    }
 +    let bytes = std::fs::read(prefs_path()?).ok()?;
-+    UiState::from_json(&bytes)?.window?.sanitized()
++    UiState::from_json(&bytes)
++}
++
++/// Whether the window runs through XWayland (X11) rather than native Wayland, and the log line
++/// saying why. `WORDCRAFT_WAYLAND` wins (`0`, `false`, `no` or `off` asks for X11, any other value
++/// for Wayland), then File › Options › Advanced › Linux display server (#2184). Automatic is X11
++/// whenever there's an X server: winit has no file drag-and-drop on Wayland, so dropping files from
++/// the file manager showed a "no" cursor. X11 is only forced with an X server (`DISPLAY`), and
++/// unforced winit picks Wayland when it's there and X11 otherwise, so a choice that isn't
++/// available falls back to the other instead of failing to start.
++#[cfg(all(unix, not(target_os = "macos")))]
++fn uses_x11(setting: wordcraft_ui_egui::DisplayServer, env: impl Fn(&str) -> Option<std::ffi::OsString>) -> (bool, String) {
++    use wordcraft_ui_egui::DisplayServer;
++    let set = |name: &str| env(name).is_some_and(|v| !v.is_empty());
++    let (wanted, by) = match env("WORDCRAFT_WAYLAND") {
++        Some(v) if matches!(v.to_string_lossy().trim().to_ascii_lowercase().as_str(), "0" | "false" | "no" | "off") => {
++            (DisplayServer::X11, "WORDCRAFT_WAYLAND")
++        }
++        Some(_) => (DisplayServer::Wayland, "WORDCRAFT_WAYLAND"),
++        None => (setting, "the setting"),
++    };
++    let x11 = wanted != DisplayServer::Wayland && set("DISPLAY");
++    let runs = if x11 {
++        "X11"
++    } else if set("WAYLAND_DISPLAY") || set("WAYLAND_SOCKET") {
++        "native Wayland"
++    } else if set("DISPLAY") {
++        "X11 (no Wayland)"
++    } else {
++        "neither (no Wayland or X server found)"
++    };
++    (x11, format!("display: {runs}; {} asks for {}", by, wanted.code()))
 +}
 +
 +fn save_prefs(app: &WordApp) {
++    if let Err(e) = try_save_prefs(app) {
++        log::warn!("preferences: {e}");
++    }
++}
++
++/// Saves the preferences and says why when it could not. `Ok(false)`: nothing was written
++/// because preferences are switched off or there is no settings folder.
++fn try_save_prefs(app: &WordApp) -> Result<bool, String> {
 +    if !prefs_enabled() {
-+        return;
++        return Ok(false);
 +    }
-+    if let Some(p) = prefs_path() {
-+        if let Some(dir) = p.parent()
-+            && let Err(e) = std::fs::create_dir_all(dir)
-+        {
-+            log::warn!("preferences: cannot create {}: {e}", dir.display());
-+            return;
-+        }
-+        match serde_json::to_vec_pretty(&app.prefs()) {
-+            Ok(bytes) => {
-+                if let Err(e) = write_prefs(&p, &bytes) {
-+                    log::warn!("preferences: cannot save {}: {e}", p.display());
-+                }
-+            }
-+            Err(e) => log::warn!("preferences: cannot serialize: {e}"),
-+        }
++    let Some(p) = prefs_path() else { return Ok(false) };
++    if let Some(dir) = p.parent() {
++        std::fs::create_dir_all(dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
 +    }
++    let bytes = serde_json::to_vec_pretty(&app.prefs()).map_err(|e| format!("cannot serialize: {e}"))?;
++    write_prefs(&p, &bytes).map_err(|e| format!("cannot save {}: {e}", p.display()))?;
++    Ok(true)
 +}
 +
 +/// Writes `bytes` to a sibling temporary file and renames it over `path`, so a failed or
@@ -317,6 +392,7 @@ index 0000000..f0a73d2
 +        file_dialog: Some(file_dialog),
 +        printers: Some(print::discover()),
 +        print_native: Some(print::submit()),
++        cancel_print: Some(print::cancel()),
 +        clipboard_picture: Some(Box::new(clipboard::picture)),
 +        make_default_app: default_apps::hook(),
 +        // Personal templates live in `Templates` in the settings folder (#2852), made on first save.
@@ -324,9 +400,10 @@ index 0000000..f0a73d2
 +        animations_enabled: Some(animations::hook(ctx)),
 +        clipboard_text: Some(Box::new(clipboard::text)),
 +        clipboard_html: Some(Box::new(clipboard::html)),
-+        set_clipboard_html: Some(Box::new(clipboard::set_html)),
++        set_clipboard_rich: Some(Box::new(clipboard::set_rich)),
 +        clipboard_rtf: Some(Box::new(clipboard::rtf)),
 +        clipboard_formats: Some(Box::new(clipboard::formats)),
++        save_prefs: Some(Box::new(try_save_prefs)),
 +        ..Default::default()
 +    }
 +}
@@ -403,14 +480,15 @@ index 0000000..f0a73d2
 +
 +/// Open a file whose name isn't valid Unicode (#1440). `file.open` takes its path as text, so it
 +/// gets the file's bytes under the lossy name, and the document then keeps the real path to save to.
-+/// The bytes are read as `file.open` reads a path: only a regular file, and at most 2 GB.
++/// The bytes are read as `file.open` reads a path: only a regular file, and at most 2 GB. A Word
++/// template starts a new document instead ([`WordApp::open_from_platform`]), which has no path.
 +fn open_non_unicode(app: &mut WordApp, path: &std::path::Path) {
 +    let name = path.to_string_lossy();
 +    let opened = wordcraft_engine::io::read_document(path)
-+        .and_then(|bytes| app.run("file.open", serde_json::json!({"path": name, "data": wordcraft_engine::cmd::insert::base64_encode(&bytes)})));
++        .and_then(|bytes| app.open_from_platform(&name, Some(&wordcraft_engine::cmd::insert::base64_encode(&bytes))));
 +    match opened {
 +        // Not when it waits for a password: that open names the document itself.
-+        Ok(r) if r.get("pending").is_none() => app.session.path = Some(path.into()),
++        Ok(r) if r.get("pending").is_none() && !wordcraft_ui_egui::documents::is_word_template(&name) => app.session.path = Some(path.into()),
 +        Ok(_) => {}
 +        Err(e) => {
 +            app.report_open_failure(&name, &e);
@@ -425,14 +503,31 @@ index 0000000..f0a73d2
 +    wordcraft_control_key::set_folder_name(config.settings_folder);
 +    wordcraft_ui_egui::brand::set(config.brand);
 +    let name = config.brand.name;
++    #[cfg(windows)]
++    if let Some(code) = print::isolated::helper_mode() {
++        std::process::exit(code);
++    }
 +    // Windows: the update helper is a copy of this program started with `--finish-update`.
 +    #[cfg(windows)]
 +    if let Some(result) = craft_update::self_update::finish(&wordcraft_ui_egui::UPDATE_APP, &std::env::args_os().skip(1).collect::<Vec<_>>()) {
 +        std::process::exit(i32::from(result.is_err()));
 +    }
++    // Linux: before anything reads another program's AppImage variables, or a thread starts (#5653).
++    #[cfg(target_os = "linux")]
++    let start_over_failed = appimage_env::drop_inherited();
++    // Still carrying them, this process must never update itself: the update would replace the
++    // other program's file.
++    #[cfg(target_os = "linux")]
++    let updates_unsafe = start_over_failed.is_some();
++    #[cfg(not(target_os = "linux"))]
++    let updates_unsafe = false;
 +    // First, so the panic hook and every start-up warning are recorded (`logging`).
 +    let logger = logging::install();
 +    logging::install_panic_hook();
++    #[cfg(target_os = "linux")]
++    if let Some(e) = start_over_failed {
++        log::error!("couldn't start again without another program's AppImage variables, so the self-update is off in this window: {e}");
++    }
 +    if let Some(on_start) = config.on_start {
 +        on_start();
 +    }
@@ -508,25 +603,28 @@ index 0000000..f0a73d2
 +    // FXC, which needs no DLL of ours (#603; see graphics.rs).
 +    #[cfg(target_os = "windows")]
 +    graphics::configure(&mut options, eframe::wgpu::Backends::from_env());
-+    // Intel Macs: Metal's compiler aborts on wgpu's indirect-validation shaders (#2652).
++    // Intel Macs: Metal's compiler aborts on wgpu's indirect-validation shaders (#2652). An x86_64
++    // build under Rosetta on Apple silicon keeps them (#5199).
 +    #[cfg(target_os = "macos")]
 +    graphics::configure_indirect_validation(&mut options, graphics::skips_indirect_validation(true, cfg!(target_arch = "x86_64")));
 +    load_user_fonts();
 +    // Windows opened for further documents start like the first one, before its saved place.
 +    let window_builder = options.viewport.clone();
-+    let restored = saved_window();
++    let saved = saved_ui();
++    let restored = saved.as_ref().and_then(|ui| ui.window?.sanitized());
 +    if let Some(window) = restored {
 +        options.viewport = window.apply(options.viewport);
 +    }
 +    #[cfg(all(unix, not(target_os = "macos")))]
-+    // winit has no file drag-and-drop on Wayland (only on X11), so dropping files from the file
-+    // manager showed a "no" cursor. Run through XWayland when it's there; WORDCRAFT_WAYLAND=1
-+    // keeps the native Wayland backend.
-+    if std::env::var_os("DISPLAY").is_some() && std::env::var_os("WORDCRAFT_WAYLAND").is_none() {
-+        options.event_loop_builder = Some(Box::new(|b| {
-+            use winit::platform::x11::EventLoopBuilderExtX11;
-+            b.with_x11();
-+        }));
++    {
++        let (x11, why) = uses_x11(saved.as_ref().map(|ui| ui.display_server).unwrap_or_default(), |name| std::env::var_os(name));
++        log::info!("{why}");
++        if x11 {
++            options.event_loop_builder = Some(Box::new(|b| {
++                use winit::platform::x11::EventLoopBuilderExtX11;
++                b.with_x11();
++            }));
++        }
 +    }
 +    // Registered before the event loop starts, so it catches the Finder event that launched us as
 +    // well as later ones. Lives until the event loop returns; the app creator only borrows it.
@@ -550,12 +648,18 @@ index 0000000..f0a73d2
 +            let mut app = WordApp::new(session, services);
 +            app.set_startup_update_check(config.check_updates);
 +            load_prefs(&mut app);
++            // After the preferences, so the reason it gives is in the interface language.
++            if updates_unsafe {
++                app.disable_self_update();
++            }
 +            load_user_dictionary(&mut app);
++            // Language packs from the suite's font store; an Install click is the person's own.
++            wordcraft_engine::packs::use_font_store(true);
 +            // A region chosen in File › Options replaces the system's for the first blank
 +            // document too (#838).
 +            if !sample && app.session.prefs.region.is_some() {
 +                let doc = app.session.blank_document();
-+                app.session.set_document(doc);
++                app.replace_startup_document(doc);
 +            }
 +            app.watch_desktop_theme(&cc.egui_ctx);
 +            if prefs_enabled()
@@ -587,8 +691,9 @@ index 0000000..f0a73d2
 +            if files.is_empty() && other_files.is_empty() && !sample && control_port.is_none() {
 +                app.start_screen();
 +            }
++            // A Word template named here starts a new document based on it (#3433).
 +            for f in files {
-+                if let Err(e) = app.run("file.open", serde_json::json!({"path": f})) {
++                if let Err(e) = app.open_from_platform(&f, None) {
 +                    app.report_open_failure(&f, &e);
 +                }
 +            }
@@ -638,6 +743,32 @@ index 0000000..f0a73d2
 +        open_non_unicode(&mut app, &dir.join(std::ffi::OsString::from_vec(b"gon\xe9.txt".to_vec())));
 +        assert_eq!(app.session.path.as_deref(), Some(path.as_path()));
 +        let _ = std::fs::remove_dir_all(dir);
++    }
++
++    /// #2184: `WORDCRAFT_WAYLAND` beats the setting, Automatic keeps XWayland where there's an X
++    /// server, and a choice that isn't available falls back to the other.
++    #[test]
++    fn the_display_server_follows_the_variable_then_the_setting() {
++        use wordcraft_ui_egui::DisplayServer::{Auto, Wayland, X11};
++        let x11 = |setting, vars: &[(&str, &str)]| {
++            uses_x11(setting, |name| vars.iter().find(|(k, _)| *k == name).map(|(_, v)| std::ffi::OsString::from(v))).0
++        };
++        let both = [("DISPLAY", ":0"), ("WAYLAND_DISPLAY", "wayland-0")];
++        assert!(x11(Auto, &both), "Automatic keeps XWayland, for file drag-and-drop");
++        assert!(x11(X11, &both));
++        assert!(!x11(Wayland, &both));
++        for (value, wants_x11) in [("1", false), ("", false), ("yes", false), ("0", true), (" Off ", true), ("FALSE", true), ("no", true)] {
++            let vars = [both[0], both[1], ("WORDCRAFT_WAYLAND", value)];
++            for setting in [Auto, Wayland, X11] {
++                assert_eq!(x11(setting, &vars), wants_x11, "WORDCRAFT_WAYLAND={value:?} beats {setting:?}");
++            }
++        }
++        // Without an X server X11 isn't forced: winit connects to Wayland instead of failing.
++        let wayland_only = [("WAYLAND_DISPLAY", "wayland-0"), ("DISPLAY", "")];
++        assert!(!x11(X11, &wayland_only) && !x11(Auto, &wayland_only));
++        // Without Wayland, Wayland isn't forced either: unforced winit picks X11.
++        let (forced, why) = uses_x11(Wayland, |name| (name == "DISPLAY").then(|| ":0".into()));
++        assert!(!forced && why.contains("X11 (no Wayland)"), "{why}");
 +    }
 +
 +    /// A named pipe or a device under such a name is a warning, not a read: the pipe blocked
@@ -722,10 +853,10 @@ index 0000000..f0a73d2
 +    }
 +}
 diff --git a/apps/wordcraft/src/main.rs b/apps/wordcraft/src/main.rs
-index 1a9f25d..370c763 100644
+index 2360a2e5..370c7635 100644
 --- a/apps/wordcraft/src/main.rs
 +++ b/apps/wordcraft/src/main.rs
-@@ -1,662 +1,6 @@
+@@ -1,793 +1,6 @@
 -//! WordCraft desktop app.
 -//!
 -//! Usage: `wordcraft [--control <port>] [--sample] [files…]`; `--help` prints `USAGE`.
@@ -739,6 +870,8 @@ index 1a9f25d..370c763 100644
 -#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
  
 -mod animations;
+-#[cfg(target_os = "linux")]
+-mod appimage_env;
 -#[cfg(target_os = "macos")]
 -mod apple_events;
 -mod clipboard;
@@ -756,7 +889,7 @@ index 1a9f25d..370c763 100644
 -use wordcraft_engine::Session;
 -use wordcraft_ui_egui::{
 -    Services, UiState, WordApp,
--    window_geometry::{RawWindowState, WindowGeometry, take_rescue},
+-    window_geometry::{RawWindowState, WindowGeometry, reachable, take_rescue},
 -};
 -
 -/// The app, the restored window geometry (or, with none, the default: no position) until the
@@ -783,13 +916,21 @@ index 1a9f25d..370c763 100644
 -        apple_events::poll(&self.5, &mut self.0, ctx);
 -        self.0.logic(ctx);
 -        self.3.show(frame);
--        let window = self.4;
+-        let mut window = self.4;
+-        // Only until the off-screen check below has run: it is the one reader.
+-        if self.1.is_some() {
+-            let (on_a_monitor, primary_monitor_rect) = monitor_geometry(frame, ctx.pixels_per_point());
+-            window.on_a_monitor = on_a_monitor;
+-            window.primary_monitor_rect = primary_monitor_rect;
+-        }
 -        // A window that doesn't fit on its screen (the default size on a laptop) shrinks to fit
 -        // there, so all of the scroll bar can be dragged (#1215). Checked on the frame that first
 -        // knows the monitor: the off-screen check below takes the pending geometry then.
 -        if let Some((pos, size)) = self.1.and_then(|g| g.fit_on_monitor(&window)) {
 -            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(size));
 -            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos));
+-            let b = self.0.window_builder().clone().with_inner_size(size);
+-            self.0.set_window_builder(b);
 -        }
 -        // The geometry saved for the next start is the active window's.
 -        let prev = self.0.ui.window;
@@ -852,7 +993,39 @@ index 1a9f25d..370c763 100644
 -        if let Some(key_file) = &self.2 {
 -            key_file.remove();
 -        }
+-        self.0.start_pending_update();
 -    }
+-}
+-
+-/// Whether a grippable part of the window is on a monitor, and the primary monitor bounds.
+-/// Winit reports physical pixels; egui positions use points. `None` where the platform cannot
+-/// report the window or primary monitor (Wayland, headless).
+-fn monitor_geometry(frame: &eframe::Frame, pixels_per_point: f32) -> (Option<bool>, Option<egui::Rect>) {
+-    let Some(w) = frame.winit_window() else {
+-        return (None, None);
+-    };
+-    if !pixels_per_point.is_finite() || pixels_per_point <= 0.0 {
+-        return (None, None);
+-    }
+-    let Some(pos) = w.outer_position().ok() else {
+-        return (None, None);
+-    };
+-    let size = w.outer_size();
+-    let physical_rect = |(x, y): (i32, i32), (width, height): (u32, u32)| {
+-        egui::Rect::from_min_size(egui::pos2(x as f32, y as f32), egui::vec2(width as f32, height as f32))
+-    };
+-    let monitors: Vec<egui::Rect> =
+-        w.available_monitors().map(|m| physical_rect((m.position().x, m.position().y), (m.size().width, m.size().height))).collect();
+-    let on_a_monitor = (!monitors.is_empty()).then(|| reachable(physical_rect((pos.x, pos.y), (size.width, size.height)), &monitors));
+-    let primary_monitor_rect = w.primary_monitor().map(|m| {
+-        let pos = m.position();
+-        let size = m.size();
+-        egui::Rect::from_min_size(
+-            egui::pos2(pos.x as f32, pos.y as f32) / pixels_per_point,
+-            egui::vec2(size.width as f32, size.height as f32) / pixels_per_point,
+-        )
+-    });
+-    (on_a_monitor, primary_monitor_rect)
 -}
 -
 -/// Quit the way Command-Q does, on the next turn of the main queue.
@@ -880,6 +1053,8 @@ index 1a9f25d..370c763 100644
 -    if let Some(key_file) = key_file {
 -        key_file.remove();
 -    }
+-    // `terminate:` ends the process without dropping the app, so a ready update's helper starts here.
+-    app.start_pending_update();
 -    dispatch2::DispatchQueue::main().exec_async(|| {
 -        if let Some(mtm) = objc2::MainThreadMarker::new() {
 -            objc2_app_kit::NSApplication::sharedApplication(mtm).terminate(None);
@@ -945,35 +1120,66 @@ index 1a9f25d..370c763 100644
 -    }
 -}
 -
--/// The saved window geometry, read before the window opens (`load_prefs` runs after).
--fn saved_window() -> Option<WindowGeometry> {
+-/// The saved preferences, read before the window opens for its geometry and, on Linux and the
+-/// BSDs, the display server (`load_prefs` runs after).
+-fn saved_ui() -> Option<UiState> {
 -    if !prefs_enabled() {
 -        return None;
 -    }
 -    let bytes = std::fs::read(prefs_path()?).ok()?;
--    UiState::from_json(&bytes)?.window?.sanitized()
+-    UiState::from_json(&bytes)
+-}
+-
+-/// Whether the window runs through XWayland (X11) rather than native Wayland, and the log line
+-/// saying why. `WORDCRAFT_WAYLAND` wins (`0`, `false`, `no` or `off` asks for X11, any other value
+-/// for Wayland), then File › Options › Advanced › Linux display server (#2184). Automatic is X11
+-/// whenever there's an X server: winit has no file drag-and-drop on Wayland, so dropping files from
+-/// the file manager showed a "no" cursor. X11 is only forced with an X server (`DISPLAY`), and
+-/// unforced winit picks Wayland when it's there and X11 otherwise, so a choice that isn't
+-/// available falls back to the other instead of failing to start.
+-#[cfg(all(unix, not(target_os = "macos")))]
+-fn uses_x11(setting: wordcraft_ui_egui::DisplayServer, env: impl Fn(&str) -> Option<std::ffi::OsString>) -> (bool, String) {
+-    use wordcraft_ui_egui::DisplayServer;
+-    let set = |name: &str| env(name).is_some_and(|v| !v.is_empty());
+-    let (wanted, by) = match env("WORDCRAFT_WAYLAND") {
+-        Some(v) if matches!(v.to_string_lossy().trim().to_ascii_lowercase().as_str(), "0" | "false" | "no" | "off") => {
+-            (DisplayServer::X11, "WORDCRAFT_WAYLAND")
+-        }
+-        Some(_) => (DisplayServer::Wayland, "WORDCRAFT_WAYLAND"),
+-        None => (setting, "the setting"),
+-    };
+-    let x11 = wanted != DisplayServer::Wayland && set("DISPLAY");
+-    let runs = if x11 {
+-        "X11"
+-    } else if set("WAYLAND_DISPLAY") || set("WAYLAND_SOCKET") {
+-        "native Wayland"
+-    } else if set("DISPLAY") {
+-        "X11 (no Wayland)"
+-    } else {
+-        "neither (no Wayland or X server found)"
+-    };
+-    (x11, format!("display: {runs}; {} asks for {}", by, wanted.code()))
 -}
 -
 -fn save_prefs(app: &WordApp) {
+-    if let Err(e) = try_save_prefs(app) {
+-        log::warn!("preferences: {e}");
+-    }
+-}
+-
+-/// Saves the preferences and says why when it could not. `Ok(false)`: nothing was written
+-/// because preferences are switched off or there is no settings folder.
+-fn try_save_prefs(app: &WordApp) -> Result<bool, String> {
 -    if !prefs_enabled() {
--        return;
+-        return Ok(false);
 -    }
--    if let Some(p) = prefs_path() {
--        if let Some(dir) = p.parent()
--            && let Err(e) = std::fs::create_dir_all(dir)
--        {
--            log::warn!("preferences: cannot create {}: {e}", dir.display());
--            return;
--        }
--        match serde_json::to_vec_pretty(&app.prefs()) {
--            Ok(bytes) => {
--                if let Err(e) = write_prefs(&p, &bytes) {
--                    log::warn!("preferences: cannot save {}: {e}", p.display());
--                }
--            }
--            Err(e) => log::warn!("preferences: cannot serialize: {e}"),
--        }
+-    let Some(p) = prefs_path() else { return Ok(false) };
+-    if let Some(dir) = p.parent() {
+-        std::fs::create_dir_all(dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
 -    }
+-    let bytes = serde_json::to_vec_pretty(&app.prefs()).map_err(|e| format!("cannot serialize: {e}"))?;
+-    write_prefs(&p, &bytes).map_err(|e| format!("cannot save {}: {e}", p.display()))?;
+-    Ok(true)
 -}
 -
 -/// Writes `bytes` to a sibling temporary file and renames it over `path`, so a failed or
@@ -997,6 +1203,7 @@ index 1a9f25d..370c763 100644
 -        file_dialog: Some(file_dialog),
 -        printers: Some(print::discover()),
 -        print_native: Some(print::submit()),
+-        cancel_print: Some(print::cancel()),
 -        clipboard_picture: Some(Box::new(clipboard::picture)),
 -        make_default_app: default_apps::hook(),
 -        // Personal templates live in `Templates` in the settings folder (#2852), made on first save.
@@ -1004,9 +1211,10 @@ index 1a9f25d..370c763 100644
 -        animations_enabled: Some(animations::hook(ctx)),
 -        clipboard_text: Some(Box::new(clipboard::text)),
 -        clipboard_html: Some(Box::new(clipboard::html)),
--        set_clipboard_html: Some(Box::new(clipboard::set_html)),
+-        set_clipboard_rich: Some(Box::new(clipboard::set_rich)),
 -        clipboard_rtf: Some(Box::new(clipboard::rtf)),
 -        clipboard_formats: Some(Box::new(clipboard::formats)),
+-        save_prefs: Some(Box::new(try_save_prefs)),
 -        ..Default::default()
 -    }
 -}
@@ -1080,14 +1288,15 @@ index 1a9f25d..370c763 100644
 -
 -/// Open a file whose name isn't valid Unicode (#1440). `file.open` takes its path as text, so it
 -/// gets the file's bytes under the lossy name, and the document then keeps the real path to save to.
--/// The bytes are read as `file.open` reads a path: only a regular file, and at most 2 GB.
+-/// The bytes are read as `file.open` reads a path: only a regular file, and at most 2 GB. A Word
+-/// template starts a new document instead ([`WordApp::open_from_platform`]), which has no path.
 -fn open_non_unicode(app: &mut WordApp, path: &std::path::Path) {
 -    let name = path.to_string_lossy();
 -    let opened = wordcraft_engine::io::read_document(path)
--        .and_then(|bytes| app.run("file.open", serde_json::json!({"path": name, "data": wordcraft_engine::cmd::insert::base64_encode(&bytes)})));
+-        .and_then(|bytes| app.open_from_platform(&name, Some(&wordcraft_engine::cmd::insert::base64_encode(&bytes))));
 -    match opened {
 -        // Not when it waits for a password: that open names the document itself.
--        Ok(r) if r.get("pending").is_none() => app.session.path = Some(path.into()),
+-        Ok(r) if r.get("pending").is_none() && !wordcraft_ui_egui::documents::is_word_template(&name) => app.session.path = Some(path.into()),
 -        Ok(_) => {}
 -        Err(e) => {
 -            app.report_open_failure(&name, &e);
@@ -1099,14 +1308,31 @@ index 1a9f25d..370c763 100644
 -/// geometry, opens requested documents or the Start screen, starts the control server when
 -/// asked, and runs the eframe event loop.
  fn main() -> eframe::Result {
+-    #[cfg(windows)]
+-    if let Some(code) = print::isolated::helper_mode() {
+-        std::process::exit(code);
+-    }
 -    // Windows: the update helper is a copy of this program started with `--finish-update`.
 -    #[cfg(windows)]
 -    if let Some(result) = craft_update::self_update::finish(&wordcraft_ui_egui::UPDATE_APP, &std::env::args_os().skip(1).collect::<Vec<_>>()) {
 -        std::process::exit(i32::from(result.is_err()));
 -    }
+-    // Linux: before anything reads another program's AppImage variables, or a thread starts (#5653).
+-    #[cfg(target_os = "linux")]
+-    let start_over_failed = appimage_env::drop_inherited();
+-    // Still carrying them, this process must never update itself: the update would replace the
+-    // other program's file.
+-    #[cfg(target_os = "linux")]
+-    let updates_unsafe = start_over_failed.is_some();
+-    #[cfg(not(target_os = "linux"))]
+-    let updates_unsafe = false;
 -    // First, so the panic hook and every start-up warning are recorded (`logging`).
 -    let logger = logging::install();
 -    logging::install_panic_hook();
+-    #[cfg(target_os = "linux")]
+-    if let Some(e) = start_over_failed {
+-        log::error!("couldn't start again without another program's AppImage variables, so the self-update is off in this window: {e}");
+-    }
 -    let mut control_port: Option<u16> = std::env::var("WORDCRAFT_CONTROL_PORT").ok().and_then(|p| p.parse().ok());
 -    let mut files = Vec::new();
 -    let mut sample = false;
@@ -1178,25 +1404,28 @@ index 1a9f25d..370c763 100644
 -    // FXC, which needs no DLL of ours (#603; see graphics.rs).
 -    #[cfg(target_os = "windows")]
 -    graphics::configure(&mut options, eframe::wgpu::Backends::from_env());
--    // Intel Macs: Metal's compiler aborts on wgpu's indirect-validation shaders (#2652).
+-    // Intel Macs: Metal's compiler aborts on wgpu's indirect-validation shaders (#2652). An x86_64
+-    // build under Rosetta on Apple silicon keeps them (#5199).
 -    #[cfg(target_os = "macos")]
 -    graphics::configure_indirect_validation(&mut options, graphics::skips_indirect_validation(true, cfg!(target_arch = "x86_64")));
 -    load_user_fonts();
 -    // Windows opened for further documents start like the first one, before its saved place.
 -    let window_builder = options.viewport.clone();
--    let restored = saved_window();
+-    let saved = saved_ui();
+-    let restored = saved.as_ref().and_then(|ui| ui.window?.sanitized());
 -    if let Some(window) = restored {
 -        options.viewport = window.apply(options.viewport);
 -    }
 -    #[cfg(all(unix, not(target_os = "macos")))]
--    // winit has no file drag-and-drop on Wayland (only on X11), so dropping files from the file
--    // manager showed a "no" cursor. Run through XWayland when it's there; WORDCRAFT_WAYLAND=1
--    // keeps the native Wayland backend.
--    if std::env::var_os("DISPLAY").is_some() && std::env::var_os("WORDCRAFT_WAYLAND").is_none() {
--        options.event_loop_builder = Some(Box::new(|b| {
--            use winit::platform::x11::EventLoopBuilderExtX11;
--            b.with_x11();
--        }));
+-    {
+-        let (x11, why) = uses_x11(saved.as_ref().map(|ui| ui.display_server).unwrap_or_default(), |name| std::env::var_os(name));
+-        log::info!("{why}");
+-        if x11 {
+-            options.event_loop_builder = Some(Box::new(|b| {
+-                use winit::platform::x11::EventLoopBuilderExtX11;
+-                b.with_x11();
+-            }));
+-        }
 -    }
 -    // Registered before the event loop starts, so it catches the Finder event that launched us as
 -    // well as later ones. Lives until the event loop returns; the app creator only borrows it.
@@ -1218,12 +1447,18 @@ index 1a9f25d..370c763 100644
 -            let mut app = WordApp::new(session, services(file_dialog, &cc.egui_ctx));
 -            app.set_startup_update_check(true);
 -            load_prefs(&mut app);
+-            // After the preferences, so the reason it gives is in the interface language.
+-            if updates_unsafe {
+-                app.disable_self_update();
+-            }
 -            load_user_dictionary(&mut app);
+-            // Language packs from the suite's font store; an Install click is the person's own.
+-            wordcraft_engine::packs::use_font_store(true);
 -            // A region chosen in File › Options replaces the system's for the first blank
 -            // document too (#838).
 -            if !sample && app.session.prefs.region.is_some() {
 -                let doc = app.session.blank_document();
--                app.session.set_document(doc);
+-                app.replace_startup_document(doc);
 -            }
 -            app.watch_desktop_theme(&cc.egui_ctx);
 -            if prefs_enabled()
@@ -1255,8 +1490,9 @@ index 1a9f25d..370c763 100644
 -            if files.is_empty() && other_files.is_empty() && !sample && control_port.is_none() {
 -                app.start_screen();
 -            }
+-            // A Word template named here starts a new document based on it (#3433).
 -            for f in files {
--                if let Err(e) = app.run("file.open", serde_json::json!({"path": f})) {
+-                if let Err(e) = app.open_from_platform(&f, None) {
 -                    app.report_open_failure(&f, &e);
 -                }
 -            }
@@ -1306,6 +1542,32 @@ index 1a9f25d..370c763 100644
 -        open_non_unicode(&mut app, &dir.join(std::ffi::OsString::from_vec(b"gon\xe9.txt".to_vec())));
 -        assert_eq!(app.session.path.as_deref(), Some(path.as_path()));
 -        let _ = std::fs::remove_dir_all(dir);
+-    }
+-
+-    /// #2184: `WORDCRAFT_WAYLAND` beats the setting, Automatic keeps XWayland where there's an X
+-    /// server, and a choice that isn't available falls back to the other.
+-    #[test]
+-    fn the_display_server_follows_the_variable_then_the_setting() {
+-        use wordcraft_ui_egui::DisplayServer::{Auto, Wayland, X11};
+-        let x11 = |setting, vars: &[(&str, &str)]| {
+-            uses_x11(setting, |name| vars.iter().find(|(k, _)| *k == name).map(|(_, v)| std::ffi::OsString::from(v))).0
+-        };
+-        let both = [("DISPLAY", ":0"), ("WAYLAND_DISPLAY", "wayland-0")];
+-        assert!(x11(Auto, &both), "Automatic keeps XWayland, for file drag-and-drop");
+-        assert!(x11(X11, &both));
+-        assert!(!x11(Wayland, &both));
+-        for (value, wants_x11) in [("1", false), ("", false), ("yes", false), ("0", true), (" Off ", true), ("FALSE", true), ("no", true)] {
+-            let vars = [both[0], both[1], ("WORDCRAFT_WAYLAND", value)];
+-            for setting in [Auto, Wayland, X11] {
+-                assert_eq!(x11(setting, &vars), wants_x11, "WORDCRAFT_WAYLAND={value:?} beats {setting:?}");
+-            }
+-        }
+-        // Without an X server X11 isn't forced: winit connects to Wayland instead of failing.
+-        let wayland_only = [("WAYLAND_DISPLAY", "wayland-0"), ("DISPLAY", "")];
+-        assert!(!x11(X11, &wayland_only) && !x11(Auto, &wayland_only));
+-        // Without Wayland, Wayland isn't forced either: unforced winit picks X11.
+-        let (forced, why) = uses_x11(Wayland, |name| (name == "DISPLAY").then(|| ":0".into()));
+-        assert!(!forced && why.contains("X11 (no Wayland)"), "{why}");
 -    }
 -
 -    /// A named pipe or a device under such a name is a warning, not a read: the pipe blocked
@@ -1391,11 +1653,11 @@ index 1a9f25d..370c763 100644
 +    wordcraft::run(wordcraft::AppConfig::default())
  }
 diff --git a/crates/control-key/src/lib.rs b/crates/control-key/src/lib.rs
-index 1c562f4..066b4d5 100644
+index 1f56b586..0ca5d1c0 100644
 --- a/crates/control-key/src/lib.rs
 +++ b/crates/control-key/src/lib.rs
-@@ -2,24 +2,38 @@
- //! (which reads it): `<settings>/control-key.<instance>`. See `docs/control-protocol.md`, Keys.
+@@ -3,24 +3,38 @@
+ #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
  
  use std::path::{Path, PathBuf};
 +use std::sync::OnceLock;
@@ -1437,7 +1699,7 @@ index 1c562f4..066b4d5 100644
      }
  }
  
-@@ -53,6 +67,20 @@ mod tests {
+@@ -54,6 +68,20 @@ mod tests {
      use super::*;
      use std::path::Path;
  
@@ -1459,10 +1721,10 @@ index 1c562f4..066b4d5 100644
      fn instance_id_only_safe_values() {
          assert_eq!(parse_instance_id("[Instance]\ninstance-id=abc_123-X\n").as_deref(), Some("abc_123-X"));
 diff --git a/crates/engine/src/lib.rs b/crates/engine/src/lib.rs
-index 529ce06..b758097 100644
+index 60728898..1728f6eb 100644
 --- a/crates/engine/src/lib.rs
 +++ b/crates/engine/src/lib.rs
-@@ -35,7 +35,7 @@ pub use keymap::KeyMap;
+@@ -36,7 +36,7 @@ pub use keymap::KeyMap;
  pub use ribbon::RibbonLayout;
  pub use session::{
      CellRange, ColumnBlock, DocInfo, DocState, EditSnapshot, FindState, MathEdit, Prefs, Selection, Session, StylesPaneDock, UNDO_LIST_MAX,
@@ -1472,7 +1734,7 @@ index 529ce06..b758097 100644
  /// The outcome a command reports for IME receipt classification.
  ///
 diff --git a/crates/engine/src/session.rs b/crates/engine/src/session.rs
-index 8689864..0c0a34e 100644
+index f1a83900..9d5173e9 100644
 --- a/crates/engine/src/session.rs
 +++ b/crates/engine/src/session.rs
 @@ -36,7 +36,7 @@ use ime_state::ImeCaretState;
@@ -1485,10 +1747,10 @@ index 8689864..0c0a34e 100644
  use snapshot_types::{LayoutSlots, RunSnapshot};
  pub use view::{StylesPaneDock, ViewState};
 diff --git a/crates/engine/src/session/query.rs b/crates/engine/src/session/query.rs
-index fbefe1c..b9ce69d 100644
+index fdd1c503..09686fe9 100644
 --- a/crates/engine/src/session/query.rs
 +++ b/crates/engine/src/session/query.rs
-@@ -280,11 +280,26 @@ impl Session {
+@@ -292,11 +292,26 @@ impl Session {
      }
  }
  
@@ -1518,10 +1780,10 @@ index fbefe1c..b9ce69d 100644
  }
 diff --git a/crates/engine/tests/it/blank_document_hook.rs b/crates/engine/tests/it/blank_document_hook.rs
 new file mode 100644
-index 0000000..8d06408
+index 00000000..816f3fb6
 --- /dev/null
 +++ b/crates/engine/tests/it/blank_document_hook.rs
-@@ -0,0 +1,26 @@
+@@ -0,0 +1,27 @@
 +//! An app built on WordCraft adjusts new blank documents for its region (its Normal defaults).
 +//! The hook is process-wide, so no other test here makes a blank document.
 +
@@ -1529,8 +1791,9 @@ index 0000000..8d06408
 +
 +fn chinese_defaults(region: &Region, d: &mut wordcraft_doc::Document) {
 +    if region.language == "zh" {
-+        d.styles.default_chr.font_ea = Some("Hook EA Font".into());
-+        d.styles.default_chr.size = Some(10.5);
++        let styles = std::sync::Arc::make_mut(&mut d.styles);
++        styles.default_chr.font_ea = Some("Hook EA Font".into());
++        styles.default_chr.size = Some(10.5);
 +    }
 +}
 +
@@ -1549,7 +1812,7 @@ index 0000000..8d06408
 +    assert_eq!(us.styles.default_chr.size, Some(12.0));
 +}
 diff --git a/crates/engine/tests/it/main.rs b/crates/engine/tests/it/main.rs
-index 5b00084..18f31cd 100644
+index 322edc2d..0269a75b 100644
 --- a/crates/engine/tests/it/main.rs
 +++ b/crates/engine/tests/it/main.rs
 @@ -1,3 +1,4 @@
@@ -1558,10 +1821,10 @@ index 5b00084..18f31cd 100644
  mod date_fields;
  mod macro_packages;
 diff --git a/crates/ui-egui/src/app/commands.rs b/crates/ui-egui/src/app/commands.rs
-index a188c5d..e0962b6 100644
+index 568c7ef8..9c10eed1 100644
 --- a/crates/ui-egui/src/app/commands.rs
 +++ b/crates/ui-egui/src/app/commands.rs
-@@ -502,6 +502,24 @@ impl WordApp {
+@@ -511,6 +511,24 @@ impl WordApp {
      pub(crate) fn ui_command(&mut self, id: &str, p: &Value) -> Option<Result<Value, String>> {
          let s = |k: &str| p.get(k).and_then(Value::as_str);
          Some(Ok(match id {
@@ -1586,7 +1849,7 @@ index a188c5d..e0962b6 100644
              "ui.checkForUpdates" | "help.checkForUpdates" => {
                  crate::updates_ui::check(self);
                  Value::Null
-@@ -748,6 +766,9 @@ impl WordApp {
+@@ -769,6 +787,9 @@ impl WordApp {
                          .into(),
                  ));
              }
@@ -1596,32 +1859,30 @@ index a188c5d..e0962b6 100644
              "ui.discord" => {
                  self.canvas.open_url = Some("https://discord.gg/artcraft".into());
                  json!({})
-@@ -1035,6 +1056,7 @@ pub(crate) fn works_without_document(id: &str) -> bool {
+@@ -1117,6 +1138,7 @@ pub(crate) fn works_without_document(id: &str) -> bool {
              | "ui.fileBrowser"
              | "ui.makeDefaultApp"
              | "ui.discord"
 +            | "ui.appTool"
              | "ui.caretAnimation"
              | "ui.startScreen"
-             | "ui.checkForUpdates"
+             | "ui.recentRemove"
 diff --git a/crates/ui-egui/src/backstage.rs b/crates/ui-egui/src/backstage.rs
-index eb41eda..69c2841 100644
+index a17b0a45..5156af15 100644
 --- a/crates/ui-egui/src/backstage.rs
 +++ b/crates/ui-egui/src/backstage.rs
-@@ -124,7 +124,9 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
-                 }
-             }
-             ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
--                for (label, id) in [("About", "about"), ("Discord community", "discord")] {
-+                let community = crate::brand::get().community;
-+                for (label, id) in [("About", "about"), ("Discord community", "discord")].into_iter().filter(|(_, id)| community || *id != "discord")
-+                {
-                     let (r, resp) = ui.allocate_exact_size(vec2(200.0, 32.0), Sense::click());
-                     resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), tl!(label)));
-                     if resp.hovered() {
+@@ -60,7 +60,7 @@ fn back_chevron_c(band_min_x: f32, center_y: f32, fullscreen: bool, content_left
+ /// link with it.
+ fn bottom_links(app: &WordApp) -> Vec<(&'static str, &'static str)> {
+     let mut links = vec![("About", "about")];
+-    if app.ui.show_discord {
++    if app.ui.show_discord && crate::brand::get().community {
+         links.push(("Discord community", "discord"));
+     }
+     links
 diff --git a/crates/ui-egui/src/brand.rs b/crates/ui-egui/src/brand.rs
 new file mode 100644
-index 0000000..07450a5
+index 00000000..07450a51
 --- /dev/null
 +++ b/crates/ui-egui/src/brand.rs
 @@ -0,0 +1,63 @@
@@ -1689,19 +1950,19 @@ index 0000000..07450a5
 +    }
 +}
 diff --git a/crates/ui-egui/src/chrome.rs b/crates/ui-egui/src/chrome.rs
-index 2f0801f..1b67d2a 100644
+index f370ddb7..06065253 100644
 --- a/crates/ui-egui/src/chrome.rs
 +++ b/crates/ui-egui/src/chrome.rs
-@@ -356,7 +356,7 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
-                         let _ = app.run("ui.backstage", json!({"value": true, "page": "options", "pane": "general"}));
-                     }
-                     ui.add_space(8.0);
--                    if app.ui.show_discord {
-+                    if app.ui.show_discord && crate::brand::get().community {
-                         let (r, resp) = ui.allocate_exact_size(vec2(84.0, 22.0), Sense::click());
-                         ui.painter().rect_filled(r, 11.0, if resp.hovered() { t.accent_text } else { t.accent });
-                         icons::paint(
-@@ -379,7 +379,7 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
+@@ -368,7 +368,7 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
+                             let _ = app.run("ui.backstage", json!({"value": true, "page": "options", "pane": "general"}));
+                         }
+                         ui.add_space(8.0);
+-                        if app.ui.show_discord {
++                        if app.ui.show_discord && crate::brand::get().community {
+                             let (r, resp) = ui.allocate_exact_size(vec2(84.0, 22.0), Sense::click());
+                             ui.painter().rect_filled(r, 11.0, if resp.hovered() { t.accent_text } else { t.accent });
+                             icons::paint(
+@@ -399,7 +399,7 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
              // Centred title.
              let title = if !app.has_document() {
                  // No document open (#1129): the app's name alone.
@@ -1711,10 +1972,10 @@ index 2f0801f..1b67d2a 100644
                  format!(
                      "{} — {}",
 diff --git a/crates/ui-egui/src/dialogs.rs b/crates/ui-egui/src/dialogs.rs
-index ee9cac4..3772966 100644
+index 0caadcba..1469167c 100644
 --- a/crates/ui-egui/src/dialogs.rs
 +++ b/crates/ui-egui/src/dialogs.rs
-@@ -212,6 +212,11 @@ pub enum Dialog {
+@@ -214,6 +214,11 @@ pub enum Dialog {
      WordCount {
          stats: Value,
      },
@@ -1726,7 +1987,7 @@ index ee9cac4..3772966 100644
      Zoom {
          percent: f32,
      },
-@@ -493,6 +498,7 @@ impl Dialog {
+@@ -514,6 +519,7 @@ impl Dialog {
              Dialog::Link { .. } => "link",
              Dialog::Bookmark { .. } => "bookmark",
              Dialog::WordCount { .. } => "wordCount",
@@ -1735,10 +1996,10 @@ index ee9cac4..3772966 100644
              Dialog::Watermark { .. } => "watermark",
              Dialog::Phonetic { .. } => "phonetic",
 diff --git a/crates/ui-egui/src/dialogs/chrome.rs b/crates/ui-egui/src/dialogs/chrome.rs
-index 2cc1b6e..53f6e47 100644
+index 07f8ab8f..0df55727 100644
 --- a/crates/ui-egui/src/dialogs/chrome.rs
 +++ b/crates/ui-egui/src/dialogs/chrome.rs
-@@ -88,6 +88,7 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
+@@ -162,6 +162,7 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
          Dialog::Link { .. } => "Insert Hyperlink",
          Dialog::Bookmark { .. } => "Bookmark",
          Dialog::WordCount { .. } => "Word Count",
@@ -1746,7 +2007,7 @@ index 2cc1b6e..53f6e47 100644
          Dialog::Zoom { .. } => "Zoom",
          Dialog::Watermark { .. } => "Custom Watermark",
          Dialog::Phonetic { .. } => "Phonetic Guide",
-@@ -101,8 +102,8 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
+@@ -176,8 +177,8 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
          Dialog::Refs(d) => d.title(),
          Dialog::Icons { .. } => "Icons",
          Dialog::PasteSpecial { .. } => "Paste Special",
@@ -1758,7 +2019,7 @@ index 2cc1b6e..53f6e47 100644
          Dialog::RecipientList { .. } => "Recipient List",
          Dialog::SelectTable { .. } => "Select Table",
 diff --git a/crates/ui-egui/src/dialogs/dispatch.rs b/crates/ui-egui/src/dialogs/dispatch.rs
-index 46a9fca..86f851d 100644
+index ae4fca44..e3a35e37 100644
 --- a/crates/ui-egui/src/dialogs/dispatch.rs
 +++ b/crates/ui-egui/src/dialogs/dispatch.rs
 @@ -26,6 +26,7 @@ pub(super) fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
@@ -1769,7 +2030,7 @@ index 46a9fca..86f851d 100644
          Dialog::Zoom { .. } => zoom_dialog(app, ui, d),
          Dialog::Watermark { .. } => watermark_dialog(app, ui, d),
          Dialog::Phonetic { .. } => phonetic_dialog(app, ui, d),
-@@ -785,6 +786,17 @@ fn word_count_dialog(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
+@@ -837,6 +838,17 @@ fn word_count_dialog(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
      ok || cancel
  }
  
@@ -1787,9 +2048,9 @@ index 46a9fca..86f851d 100644
  fn zoom_dialog(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
      let Dialog::Zoom { percent } = d else {
          return false;
-@@ -1083,10 +1095,16 @@ fn about_dialog(ui: &mut Ui, d: &mut Dialog) -> bool {
-         1 => crate::credits::contributors_ui(ui),
+@@ -1171,10 +1183,16 @@ fn about_dialog(ui: &mut Ui, d: &mut Dialog) -> bool {
          2 => crate::credits::models_ui(ui),
+         3 => crate::language_packs::about_tab(ui),
          _ => {
 -            ui.label(egui::RichText::new(tl!("WordCraft")).font(semibold(22.0)));
 +            let brand = crate::brand::get();
@@ -1808,10 +2069,10 @@ index 46a9fca..86f851d 100644
              ui.hyperlink_to(tl!("getartcraft.com/apps/wordcraft"), "https://getartcraft.com/apps/wordcraft");
              ui.hyperlink_to(tl!("Join us on Discord: discord.gg/artcraft"), "https://discord.gg/artcraft");
 diff --git a/crates/ui-egui/src/keytips.rs b/crates/ui-egui/src/keytips.rs
-index 9ed3627..9f011f3 100644
+index 47b4c6b4..dd342f2f 100644
 --- a/crates/ui-egui/src/keytips.rs
 +++ b/crates/ui-egui/src/keytips.rs
-@@ -390,6 +390,7 @@ fn controls(tab: &str) -> Vec<Control> {
+@@ -395,6 +395,7 @@ fn controls(tab: &str) -> Vec<Control> {
              c("Full Screen", "view.fullScreen"),
              c("Macros", "tools.macros"),
          ],
@@ -1820,7 +2081,7 @@ index 9ed3627..9f011f3 100644
          "Table Design" => {
              vec![m("Shading", "table.shading"), m("Borders", "table.borders"), c("Border Painter", "table.borderPainter")]
 diff --git a/crates/ui-egui/src/lib.rs b/crates/ui-egui/src/lib.rs
-index 0e63602..f65cc65 100644
+index 516852fd..f7e159c7 100644
 --- a/crates/ui-egui/src/lib.rs
 +++ b/crates/ui-egui/src/lib.rs
 @@ -27,6 +27,7 @@ pub mod a11y_pane;
@@ -1831,9 +2092,9 @@ index 0e63602..f65cc65 100644
  pub mod canvas;
  pub mod caret_glide;
  pub mod chrome;
-@@ -110,7 +111,7 @@ mod state;
+@@ -113,7 +114,7 @@ mod state;
  use app::control_click_as_secondary;
- pub(crate) use app::{discards_document, works_without_document};
+ pub(crate) use app::works_without_document;
  pub use clock::now_ms;
 -pub use services::{HostSaveFn, Inbox, Services};
 +pub use services::{AppTool, HostSaveFn, Inbox, Services};
@@ -1841,7 +2102,7 @@ index 0e63602..f65cc65 100644
  
  /// Web: a save the browser's picker hasn't finished ([`async_saves`]).
 diff --git a/crates/ui-egui/src/ribbon/review.rs b/crates/ui-egui/src/ribbon/review.rs
-index 663e71e..2c1f7e2 100644
+index 663e71e8..2c1f7e22 100644
 --- a/crates/ui-egui/src/ribbon/review.rs
 +++ b/crates/ui-egui/src/ribbon/review.rs
 @@ -20,6 +20,15 @@ pub(super) fn review(app: &mut WordApp, ui: &mut Ui) {
@@ -1877,12 +2138,12 @@ index 663e71e..2c1f7e2 100644
      group(ui, "Agents", None, app, |ui, app| {
          big(ui, app, "macros", "Commands", "ui.dialog", json!({"name": "commands"}), false);
 diff --git a/crates/ui-egui/src/services.rs b/crates/ui-egui/src/services.rs
-index b591fbc..382e70b 100644
+index d9359b97..9d35aab9 100644
 --- a/crates/ui-egui/src/services.rs
 +++ b/crates/ui-egui/src/services.rs
 @@ -1,9 +1,24 @@
  use super::state::DefaultApp;
- use super::{FileDialogAnswer, FileDialogRequest, async_saves, paste_picture, printing};
+ use super::{FileDialogAnswer, FileDialogRequest, WordApp, async_saves, paste_picture, printing};
  
 +/// A tool an app built on WordCraft adds to the ribbon (Review, in a group named after the app's
 +/// brand): it gets the document saved as DOCX and returns a report the front end shows in a
@@ -1905,7 +2166,7 @@ index b591fbc..382e70b 100644
      /// Desktop: discover configured printers on a worker.
      pub printers: Option<printing::Discover>,
      /// Desktop: submit the PDF with the chosen settings on a worker.
-@@ -100,3 +115,27 @@ pub type Inbox = std::sync::Arc<std::sync::Mutex<Vec<(String, Vec<u8>)>>>;
+@@ -111,3 +126,27 @@ pub type Inbox = std::sync::Arc<std::sync::Mutex<Vec<(String, Vec<u8>)>>>;
  /// [`Services::host_save`]: `(file name, bytes, save_as)`. An error means the page didn't get
  /// the file, and the save failed.
  pub type HostSaveFn = Box<dyn Fn(&str, &[u8], bool) -> Result<(), String>>;
@@ -1934,10 +2195,10 @@ index b591fbc..382e70b 100644
 +    }
 +}
 diff --git a/crates/ui-egui/src/windows.rs b/crates/ui-egui/src/windows.rs
-index e23abb8..ff34e8a 100644
+index 4acbed1a..0ace9546 100644
 --- a/crates/ui-egui/src/windows.rs
 +++ b/crates/ui-egui/src/windows.rs
-@@ -38,7 +38,7 @@ use crate::{WordApp, documents, window_ui::WindowUi};
+@@ -40,7 +40,7 @@ pub(crate) mod arrange;
  
  /// The window title for a document called `name`.
  pub(crate) fn title(name: &str, dirty: bool) -> String {
@@ -1946,7 +2207,7 @@ index e23abb8..ff34e8a 100644
  }
  
  /// An open window.
-@@ -562,7 +562,7 @@ impl WordApp {
+@@ -579,7 +579,7 @@ impl WordApp {
      /// The drawn window's title: its document's name as View › Window › Switch Windows gives it.
      pub(crate) fn window_title(&self) -> String {
          if !self.has_document() {
@@ -1955,7 +2216,7 @@ index e23abb8..ff34e8a 100644
          }
          let mut name = self.windows.menu_title(self.windows.shown).map(str::to_string).unwrap_or_else(|| self.title_stem());
          // X11 converts window titles to C strings, which cannot contain NUL (#3634).
-@@ -597,7 +597,7 @@ impl WordApp {
+@@ -645,7 +645,7 @@ impl WordApp {
              &mut list,
              |_, key| match titles.get(key).filter(|t| !t.is_empty()) {
                  Some(t) => base.clone().with_title(t.clone()),

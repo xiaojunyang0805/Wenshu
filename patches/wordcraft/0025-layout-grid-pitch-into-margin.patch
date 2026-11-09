@@ -1,9 +1,9 @@
 Upstream: (not opened; WPS measurement: a single-spaced grid line's pitch below its text may run into the bottom margin, as multiple spacing's leading does; F18)
 diff --git a/crates/layout/src/flow.rs b/crates/layout/src/flow.rs
-index cdb9db2a..de485f12 100644
+index 233add4e..8db5e159 100644
 --- a/crates/layout/src/flow.rs
 +++ b/crates/layout/src/flow.rs
-@@ -628,12 +628,16 @@ fn notes_limit(pb: &PageBuilder, new_notes: &[NoteBox], line_notes: &[NoteBox])
+@@ -742,12 +742,16 @@ fn notes_limit(pb: &PageBuilder, new_notes: &[NoteBox], line_notes: &[NoteBox])
  /// bottom margin: only the text has to fit (observed: a double-spaced 12pt line stays on the page
  /// while its text ends above the margin, about half a line lower than when the whole line must
  /// fit). Only the bottom margin takes that leading: a footer taller than the margin, or
@@ -23,10 +23,10 @@ index cdb9db2a..de485f12 100644
      }
  }
 diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
-index 61e2b003..e4b69505 100644
+index 78eb08bd..74f5d033 100644
 --- a/crates/layout/src/tests/grid.rs
 +++ b/crates/layout/src/tests/grid.rs
-@@ -385,3 +385,37 @@ fn table_cells_snap_to_the_line_grid_only_when_adjusted() {
+@@ -387,3 +387,37 @@ fn table_cells_snap_to_the_line_grid_only_when_adjusted() {
      d.settings.adjust_line_height_in_table = true;
      assert!((height(&d, true) - body).abs() < 1e-3, "adjusted, the cell's line snaps like the body's");
  }

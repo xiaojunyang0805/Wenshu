@@ -22,19 +22,19 @@ index ab5d3c13..c3256198 100644
      pub fn snap_height(&self, h: f32) -> f32 {
          match self.line {
 diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
-index a0b1dca1..ad9b371e 100644
+index d67e90b6..61cdee4c 100644
 --- a/crates/layout/src/para/lines.rs
 +++ b/crates/layout/src/para/lines.rs
-@@ -489,7 +489,7 @@ impl<'e> Breaker<'e> {
+@@ -535,7 +535,7 @@ impl<'e> Breaker<'e> {
          // Document grid: the line takes whole line pitches, its text centred in them.
          let grid = self.grid.as_ref();
          let (height, centred) = match (rp.line_spacing, grid) {
 -            (LineSpacing::Multiple(m), Some(g)) => ((g.snap_height(natural) * m).max(g.snap_height(pictures)), true),
 +            (LineSpacing::Multiple(m), Some(g)) => (g.multiple_height(natural, m).max(g.snap_height(pictures)), true),
              (LineSpacing::AtLeast(v), Some(g)) => (g.snap_height(natural.max(pictures)).max(v), true),
-             (LineSpacing::Multiple(m), None) => ((text_natural * m + label_extra).max(text_pictures), false),
+             (LineSpacing::Multiple(m), None) => ((text_natural * m + label_extra).max(text_pictures + (m - 1.0).max(0.0) * text_natural), false),
              (LineSpacing::AtLeast(v), None) => (natural.max(text_pictures).max(v), false),
-@@ -575,7 +575,7 @@ impl<'e> Breaker<'e> {
+@@ -626,7 +626,7 @@ impl<'e> Breaker<'e> {
          let (asc, desc) = pl.styles.get(self.mark_style as usize).map(|s| (s.ascent, s.descent)).unwrap_or((10.0, 3.0));
          let natural = asc + desc;
          let h = match (rp.line_spacing, grid) {
@@ -44,10 +44,10 @@ index a0b1dca1..ad9b371e 100644
              (LineSpacing::Multiple(m), None) => natural * m,
              (LineSpacing::AtLeast(v), None) => natural.max(v),
 diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
-index e4b69505..3ca9586c 100644
+index 74f5d033..a210c2fc 100644
 --- a/crates/layout/src/tests/grid.rs
 +++ b/crates/layout/src/tests/grid.rs
-@@ -419,3 +419,25 @@ fn a_grid_lines_pitch_below_its_text_may_run_into_the_bottom_margin() {
+@@ -421,3 +421,25 @@ fn a_grid_lines_pitch_below_its_text_may_run_into_the_bottom_margin() {
      }
      assert!(past_margin > 0, "some shift should leave the last line's pitch past the margin");
  }

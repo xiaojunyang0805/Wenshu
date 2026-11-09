@@ -1,6 +1,6 @@
 Upstream: (not opened; bug fix: a document's embedded fonts belong to it: other documents in the process neither find them by name nor fall back to them, and an embedded copy carrying an installed font's names doesn't stop that font loading; gov-mct-keji after gov-fj-gaoxin)
 diff --git a/crates/doc/src/document.rs b/crates/doc/src/document.rs
-index fbc911c3..33fccd26 100644
+index 2c08391f..bcbb5663 100644
 --- a/crates/doc/src/document.rs
 +++ b/crates/doc/src/document.rs
 @@ -43,6 +43,18 @@ impl PartialEq for MediaIndex {
@@ -22,35 +22,35 @@ index fbc911c3..33fccd26 100644
  impl std::fmt::Debug for MediaIndex {
      fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
          f.write_str("MediaIndex")
-@@ -76,6 +88,7 @@ impl Document {
-             passthrough: BTreeMap::new(),
+@@ -77,6 +89,7 @@ impl Document {
              glossary: Vec::new(),
              media_index: MediaIndex::default(),
+             kept: Default::default(),
 +            embedded_fonts: EmbeddedFontsOwner::default(),
          }
      }
  
-@@ -152,6 +165,7 @@ impl Document {
-             passthrough,
+@@ -154,6 +167,7 @@ impl Document {
              glossary,
              media_index: _,
+             kept: _,
 +            embedded_fonts: _,
          } = self;
          let Document {
              body: other_body,
-@@ -171,6 +185,7 @@ impl Document {
-             passthrough: other_passthrough,
+@@ -174,6 +188,7 @@ impl Document {
              glossary: other_glossary,
              media_index: _,
+             kept: _,
 +            embedded_fonts: _,
          } = other;
          same_blocks(body, other_body)
              && same_parts(parts, other_parts)
 diff --git a/crates/doc/src/lib.rs b/crates/doc/src/lib.rs
-index d47d3328..d5b5e2c0 100644
+index f77df6c1..fe6b6bf5 100644
 --- a/crates/doc/src/lib.rs
 +++ b/crates/doc/src/lib.rs
-@@ -78,6 +78,7 @@ mod text_walk;
+@@ -82,6 +82,7 @@ mod text_walk;
  
  pub use block::{Block, Blocks, BoxBudget, MAX_TEXT_BOX_DEPTH};
  pub use compare::para_block;
@@ -58,10 +58,10 @@ index d47d3328..d5b5e2c0 100644
  use document::MediaIndex;
  pub use error::{DocError, Result};
  pub use parts::{MAX_LINKED_BOXES, MAX_TEXT_BOX_INSET, NoteSeparators, Part, PartKind, PermRange, TEXT_BOX_INSET, TextBody, free_id};
-@@ -126,6 +127,11 @@ pub struct Document {
-     /// by `==`).
+@@ -138,6 +139,11 @@ pub struct Document {
+     /// [`kept`]); never saved, ignored by `==`.
      #[serde(skip)]
-     media_index: MediaIndex,
+     pub kept: kept::Kept,
 +    /// The owner of the fonts this document embeds in the process-wide font database (0: none
 +    /// loaded), so layout sees them and other documents don't; not part of the document (never
 +    /// saved, ignored by `==`, kept by copies).
@@ -71,10 +71,10 @@ index d47d3328..d5b5e2c0 100644
  
  #[cfg(test)]
 diff --git a/crates/engine/src/io.rs b/crates/engine/src/io.rs
-index 96025503..f0719cac 100644
+index 583da36e..c33de036 100644
 --- a/crates/engine/src/io.rs
 +++ b/crates/engine/src/io.rs
-@@ -180,21 +180,24 @@ pub fn region_page(region: &wordcraft_geom::Region) -> wordcraft_doc::SectionPro
+@@ -201,21 +201,24 @@ pub fn region_page(region: &wordcraft_geom::Region) -> wordcraft_doc::SectionPro
  /// (see [`region_page`]); a document with its own page size keeps it.
  pub fn open_bytes_in(name: &str, bytes: &[u8], password: Option<&str>, region: &wordcraft_geom::Region) -> Result<(Document, bool), String> {
      let page = region_page(region);
@@ -105,12 +105,12 @@ index 96025503..f0719cac 100644
  }
  
 diff --git a/crates/engine/src/tests/fonts.rs b/crates/engine/src/tests/fonts.rs
-index 29a072b0..d0778981 100644
+index 960c5632..39188fdf 100644
 --- a/crates/engine/src/tests/fonts.rs
 +++ b/crates/engine/src/tests/fonts.rs
-@@ -192,3 +192,23 @@ fn a_subset_font_word_embeds_lays_out_text_set_in_its_table_name() {
-     let x = end_x(&docx_embedding(FAMILY, Some((&subset, "{6A0E3B57-1C2D-4E8F-9A7B-3D5C1E0F2B64}")), TEXT));
-     assert!((x - mono).abs() < 0.01, "measured with the embedded subset: {x} vs {mono} (missing {missing})");
+@@ -509,3 +509,23 @@ fn libreoffice_font_fallback_lists_are_not_reported_as_missing_when_installed()
+         "drawn: {drawn}"
+     );
  }
 +
 +/// Fonts a document embeds are its own: a document opened later that asks for the same family
@@ -120,7 +120,7 @@ index 29a072b0..d0778981 100644
 +#[test]
 +fn fonts_embedded_in_one_document_are_not_used_by_another() {
 +    const TEXT: &str = "illicit little lilies fill tiny jill";
-+    const FAMILY: &str = "JetBrains Scop";
++    const FAMILY: &str = "Embedded Scope";
 +    let end_x = |s: &mut Session| s.layout().caret_on(&Pos::body(0, TEXT.len()), 0).unwrap().x;
 +    let open = |bytes: &[u8]| Session::new(crate::io::open_bytes("e.docx", bytes).unwrap());
 +    let mono = end_x(&mut open(&docx_embedding("JetBrains Mono", None, TEXT)));
@@ -133,10 +133,10 @@ index 29a072b0..d0778981 100644
 +    assert!((end_x(&mut first) - mono).abs() < 0.01, "the embedding document keeps its font");
 +}
 diff --git a/crates/fonts/src/fontdb.rs b/crates/fonts/src/fontdb.rs
-index 425ffa04..955dc4e2 100644
+index 75ac62a9..8d345fc9 100644
 --- a/crates/fonts/src/fontdb.rs
 +++ b/crates/fonts/src/fontdb.rs
-@@ -21,6 +21,7 @@ mod fallback;
+@@ -23,6 +23,7 @@ mod fallback;
  mod fallback_data;
  mod lookup;
  mod names;
@@ -144,14 +144,14 @@ index 425ffa04..955dc4e2 100644
  
  use face::{BUNDLED, FontBytes};
  pub use face::{FALLBACK_FAMILY, FaceRef, FontFace, bundled};
-@@ -38,6 +39,7 @@ use names::{MAX_FILE_FACES, enumerate_faces, make_face};
- use names::{file_face_names, font_faces, mini_font, name};
+@@ -40,6 +41,7 @@ use names::{MAX_FILE_FACES, enumerate_faces, make_face};
+ use names::{MAX_NAME_CHARS, file_face_names, font_faces, mini_font, name};
  #[cfg(test)]
  pub(crate) use names::{last_resort_face, legacy_family};
 +pub use scope::DocumentFonts;
  
- /// Process-wide font database.
- pub struct FontDb {
+ static GLOBAL: std::sync::OnceLock<FontDb> = std::sync::OnceLock::new();
+ 
 diff --git a/crates/fonts/src/fontdb/catalog.rs b/crates/fonts/src/fontdb/catalog.rs
 index f749e53e..77da7697 100644
 --- a/crates/fonts/src/fontdb/catalog.rs
@@ -199,7 +199,7 @@ index f749e53e..77da7697 100644
          }
          let paths = self.family_paths(family);
 diff --git a/crates/fonts/src/fontdb/face.rs b/crates/fonts/src/fontdb/face.rs
-index f28507e0..d83b585a 100644
+index d3e9e01a..9c4eb7c3 100644
 --- a/crates/fonts/src/fontdb/face.rs
 +++ b/crates/fonts/src/fontdb/face.rs
 @@ -38,6 +38,10 @@ pub(super) enum FontBytes {
@@ -270,7 +270,7 @@ index 8c18abb3..9c374160 100644
          let maps_all = |ranges: &[(u32, u32)]| cps.iter().all(|cp| ranges_hold(ranges, *cp));
          let mut index = self.coverage.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 diff --git a/crates/fonts/src/fontdb/lookup.rs b/crates/fonts/src/fontdb/lookup.rs
-index dc181ca4..d45e1d93 100644
+index ba5f37f1..74c09522 100644
 --- a/crates/fonts/src/fontdb/lookup.rs
 +++ b/crates/fonts/src/fontdb/lookup.rs
 @@ -129,7 +129,7 @@ impl FontDb {
@@ -315,10 +315,10 @@ index dc181ca4..d45e1d93 100644
          }
          let ns = norm(style);
 diff --git a/crates/fonts/src/fontdb/names.rs b/crates/fonts/src/fontdb/names.rs
-index 579c2a9e..07a365c3 100644
+index 4d945859..7442a28a 100644
 --- a/crates/fonts/src/fontdb/names.rs
 +++ b/crates/fonts/src/fontdb/names.rs
-@@ -366,6 +366,7 @@ pub(super) fn make_face(
+@@ -373,6 +373,7 @@ pub(super) fn make_face(
          .unwrap_or(!matches!(a.style, skrifa::attribute::Style::Normal) || style_italic(&style));
      Some(FontFace {
          id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
@@ -385,10 +385,10 @@ index 00000000..1d34709c
 +    }
 +}
 diff --git a/crates/fonts/src/fontdb/tests/sysfonts.rs b/crates/fonts/src/fontdb/tests/sysfonts.rs
-index 3ddfd680..5709ac9a 100644
+index ff64ece0..2572a1b4 100644
 --- a/crates/fonts/src/fontdb/tests/sysfonts.rs
 +++ b/crates/fonts/src/fontdb/tests/sysfonts.rs
-@@ -690,7 +690,7 @@ fn circle_without_text_face() {
+@@ -724,7 +724,7 @@ fn circle_without_text_face() {
  fn circle_checks_face_coverage() {
      let db = FontDb::with_font_dirs(Vec::new());
      db.set_system_fallback(false);
@@ -397,7 +397,7 @@ index 3ddfd680..5709ac9a 100644
      let preferred = db.face("Times New Roman", "Regular");
      assert!(!preferred.covers('●'));
      let primary = db.face("Source Serif 4", "Regular");
-@@ -724,3 +724,22 @@ fn catalog_postscript_names() {
+@@ -758,3 +758,22 @@ fn catalog_postscript_names() {
      assert!(!has(&db.families(), "SysfontSans-Bold"));
      std::fs::remove_dir_all(dir).unwrap();
  }
@@ -421,10 +421,10 @@ index 3ddfd680..5709ac9a 100644
 +    let _ = std::fs::remove_dir_all(dir);
 +}
 diff --git a/crates/fonts/src/fontdb/user.rs b/crates/fonts/src/fontdb/user.rs
-index 0c8a0f69..edce9e1e 100644
+index 03f449cd..65013a5c 100644
 --- a/crates/fonts/src/fontdb/user.rs
 +++ b/crates/fonts/src/fontdb/user.rs
-@@ -388,9 +388,11 @@ impl FontDb {
+@@ -466,9 +466,11 @@ impl FontDb {
      /// with the name the document's font table gives it, which its faces answer to as well: Word
      /// embeds a subset ("embed only the characters used") under a made-up family
      /// (`___WRD_EMBED_SUB_46`), and the text asks for it by the table's name (#2240). Returns how
@@ -440,7 +440,7 @@ index 0c8a0f69..edce9e1e 100644
              self.fonts_changed();
          }
 diff --git a/crates/fonts/src/lib.rs b/crates/fonts/src/lib.rs
-index 3c70572c..a3960db8 100644
+index 7305f5af..893f75a3 100644
 --- a/crates/fonts/src/lib.rs
 +++ b/crates/fonts/src/lib.rs
 @@ -15,8 +15,8 @@ mod ui_fallback;
@@ -454,13 +454,121 @@ index 3c70572c..a3960db8 100644
  };
  pub use harfrust::Feature;
  use harfrust::{Direction, ShapeOptions, ShapePlan, ShapePlanKey, Shaper, Tag, UnicodeBuffer};
+diff --git a/crates/fonts/src/word.rs b/crates/fonts/src/word.rs
+index d446b1bb..dac22c5a 100644
+--- a/crates/fonts/src/word.rs
++++ b/crates/fonts/src/word.rs
+@@ -417,7 +417,7 @@ struct ListClass {
+ /// [`ListClass`] of the semicolon-separated `family`, memoised by its text.
+ fn list_class(family: &str) -> ListClass {
+     let key = family_list_key(family);
+-    let generation = FontDb::global().generation();
++    let generation = memo_scope(FontDb::global());
+     {
+         let mut c = fallback_list_cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+         if c.generation != generation {
+@@ -506,7 +506,7 @@ fn style_name(bold: bool, italic: bool) -> &'static str {
+     }
+ }
+ 
+-/// Resolutions by (family, bold, italic, document whose embedded fonts were visible).
++/// Resolutions by (family, bold, italic, document owner) for one [`FontDb::generation`].
+ type Memo = (u64, HashMap<(String, bool, bool, u64), Resolved>);
+ 
+ fn resolve_cache() -> &'static Mutex<Memo> {
+@@ -521,10 +521,11 @@ const FAMILY_KEY_MAX: usize = 256;
+ /// for candidate names not present in [`FontDb::families`].
+ const MAX_DIRECT_CANDIDATE_PROBES: usize = 32;
+ 
+-/// Memoised fallback-list resolutions and installed-family lookups for the current [`FontDb::generation`].
++/// Memoised fallback-list resolutions and installed-family lookups for the current
++/// [`FontDb::generation`] and document ([`memo_scope`]).
+ #[derive(Default)]
+ struct FallbackListMemo {
+-    generation: u64,
++    generation: (u64, u64),
+     families: std::collections::HashSet<String>,
+     probed: HashMap<String, bool>,
+     lists: HashMap<(u64, usize), (String, (String, bool))>,
+@@ -539,6 +540,12 @@ fn fallback_list_cache() -> &'static Mutex<FallbackListMemo> {
+ }
+ 
+ /// Hash and byte length of `family`, used as a compact cache key for fallback lists.
++/// What the memoised lookups depend on: the database's generation and the document whose embedded
++/// fonts this thread sees ([`crate::DocumentFonts`]; another document's are invisible to it).
++fn memo_scope(db: &FontDb) -> (u64, u64) {
++    (db.generation(), crate::DocumentFonts::current())
++}
++
+ fn family_list_key(family: &str) -> (u64, usize) {
+     use std::hash::{Hash, Hasher};
+     let mut h = std::collections::hash_map::DefaultHasher::new();
+@@ -553,7 +560,7 @@ fn candidate_has_family(db: &FontDb, cand: &str, direct_probes: &mut usize) -> b
+     if cand.is_empty() || cand.len() > FAMILY_KEY_MAX {
+         return false;
+     }
+-    let generation = db.generation();
++    let generation = memo_scope(db);
+     let lower = cand.to_ascii_lowercase();
+     {
+         let mut c = fallback_list_cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+@@ -586,7 +593,7 @@ fn candidate_has_family(db: &FontDb, cand: &str, direct_probes: &mut usize) -> b
+ }
+ 
+ /// Record a resolved `(family, substituted)` pair for a semicolon-separated fallback list.
+-fn remember_list_resolution(generation: u64, key: (u64, usize), family: &str, result: (String, bool)) -> (String, bool) {
++fn remember_list_resolution(generation: (u64, u64), key: (u64, usize), family: &str, result: (String, bool)) -> (String, bool) {
+     let mut c = fallback_list_cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+     if c.generation == generation {
+         if c.lists.len() >= FAMILY_CACHE_MAX {
+@@ -610,7 +617,7 @@ fn resolve_family(db: &FontDb, family: &str) -> (String, bool) {
+         };
+     }
+ 
+-    let generation = db.generation();
++    let generation = memo_scope(db);
+     let list_key = family_list_key(family);
+     {
+         let mut c = fallback_list_cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+@@ -691,8 +698,10 @@ pub fn resolve(family: &str, bold: bool, italic: bool) -> Resolved {
+     let cache = resolve_cache();
+     let db = FontDb::global();
+     let generation = db.generation();
++    let scope = memo_scope(db);
+     let cacheable = family.len() <= FAMILY_KEY_MAX;
+-    let key = (if cacheable { family.to_string() } else { String::new() }, bold, italic, crate::DocumentFonts::current());
++    // A document's embedded fonts answer to their names only for it: the owner is part of the key.
++    let key = (if cacheable { family.to_string() } else { String::new() }, bold, italic, scope.1);
+     let long_key = (!cacheable && family.contains(';')).then(|| {
+         let (h, len) = family_list_key(family);
+         (h, len, bold, italic)
+@@ -708,8 +717,8 @@ pub fn resolve(family: &str, bold: bool, italic: bool) -> Resolved {
+     }
+     if let Some(lk) = long_key {
+         let mut c = fallback_list_cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+-        if c.generation != generation {
+-            *c = FallbackListMemo { generation, ..Default::default() };
++        if c.generation != scope {
++            *c = FallbackListMemo { generation: scope, ..Default::default() };
+         } else if let Some((cached_family, r)) = c.long_resolved.get(&lk)
+             && cached_family == family
+         {
+@@ -729,7 +738,7 @@ pub fn resolve(family: &str, bold: bool, italic: bool) -> Resolved {
+         }
+     } else if let Some(lk) = long_key {
+         let mut c = fallback_list_cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+-        if c.generation == generation {
++        if c.generation == scope {
+             if c.long_resolved.len() >= FAMILY_CACHE_MAX {
+                 c.long_resolved.clear();
+             }
 diff --git a/crates/layout/src/lib.rs b/crates/layout/src/lib.rs
-index d3873e1d..1bfd0b55 100644
+index 018e06b4..cfed7931 100644
 --- a/crates/layout/src/lib.rs
 +++ b/crates/layout/src/lib.rs
-@@ -308,6 +308,8 @@ pub struct DocLayout {
- /// Lay out the whole document.
- pub fn layout(doc: &Document, cache: &mut LayoutCache, opts: &LayoutOptions) -> DocLayout {
+@@ -327,6 +327,8 @@ pub fn layout(doc: &Document, cache: &mut LayoutCache, opts: &LayoutOptions) ->
+     #[cfg(test)]
+     crate::test_fonts();
      let t0 = now_ms();
 +    // The fonts this document embeds, and no other document's, answer to their names.
 +    let _fonts = wordcraft_fonts::DocumentFonts::enter(doc.embedded_fonts.0);

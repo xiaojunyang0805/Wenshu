@@ -1,20 +1,19 @@
 Upstream: https://github.com/storytold/wordcraft/pull/5004
 diff --git a/crates/layout/src/kinsoku.rs b/crates/layout/src/kinsoku.rs
-index 6bf0cd7..bcb7150 100644
+index 58c76471..015a6e8c 100644
 --- a/crates/layout/src/kinsoku.rs
 +++ b/crates/layout/src/kinsoku.rs
-@@ -14,13 +14,15 @@
- 
- use unicode_segmentation::UnicodeSegmentation;
- 
--/// East Asian characters a line may not start with: closing brackets and quotes, the
-+/// East Asian characters a line may not start with: closing brackets and quotes (the curly ” ’
-+/// too: Unicode 15.1's LB19a lets a line break before them beside East Asian text), the
- /// ideographic comma and full stop, fullwidth and halfwidth punctuation, the middle dot,
--/// iteration and sound marks.
--const NO_START: &str = "、。，．・：；？！゛゜ヽヾゝゞ々〻〉》」』】〕〗〙〛〞〟）］｝｠｡｣､･ﾞﾟ％￠";
-+/// iteration and sound marks, and the per-mille and Celsius signs (GB/T 15834, W3C clreq).
-+const NO_START: &str = "、。，．・：；？！゛゜ヽヾゝゞ々〻〉》」』】〕〗〙〛〞〟）］｝｠｡｣､･ﾞﾟ％￠”’〃〆‰℃﹚﹜";
+@@ -25,11 +25,15 @@ use unicode_segmentation::UnicodeSegmentation;
+ /// - 長音記号 (the prolonged sound mark): `ー` and its halfwidth form `ｰ`;
+ /// - 繰り返し記号 (iteration marks, with the sound marks): `゛゜ヽヾゝゞ々〻ﾞﾟ`;
+ /// - 閉じ括弧類 and the rest: closing brackets and quotes, the ideographic comma and full stop,
+-///   the fullwidth and halfwidth punctuation, the middle dot, `％` and `￠`.
+-const NO_START: &str = "ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶㇰㇱㇲㇳㇴㇵㇶㇷㇸㇹㇺㇻㇼㇽㇾㇿｧｨｩｪｫｬｭｮｯーｰ゛゜ヽヾゝゞ々〻ﾞﾟ、。，．・：；？！〉》」』】〕〗〙〛〞〟）］｝｠｡｣､･％￠";
++///   the fullwidth and halfwidth punctuation, the middle dot, `％` and `￠`;
++/// - for Chinese (GB/T 15834, W3C clreq): the closing curly quotes `” ’` (Unicode 15.1's LB19a lets a
++///   line break before them beside East Asian text), the ditto and closing marks `〃〆`, the
++///   per-mille and Celsius signs `‰ ℃` and the small closing brackets `﹚﹜`.
++const NO_START: &str = "ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶㇰㇱㇲㇳㇴㇵㇶㇷㇸㇹㇺㇻㇼㇽㇾㇿｧｨｩｪｫｬｭｮｯーｰ゛゜ヽヾゝゞ々〻ﾞﾟ、。，．・：；？！〉》」』】〕〗〙〛〞〟）］｝｠｡｣､･％￠”’〃〆‰℃﹚﹜";
  
 -/// East Asian characters a line may not end with: opening brackets and quotes, currency signs.
 -const NO_END: &str = "〈《「『【〔〖〘〚〝（［｛｟｢＄￡￥";
@@ -24,7 +23,7 @@ index 6bf0cd7..bcb7150 100644
  
  /// Whether `c` is East Asian text: CJK ideographs, kana, bopomofo, CJK punctuation, and
  /// fullwidth/halfwidth forms (not spaces, not combining sound marks).
-@@ -46,7 +48,11 @@ pub fn apply(text: &str, opps: &mut Vec<usize>, kinsoku: bool, word_wrap: bool)
+@@ -55,7 +59,11 @@ pub fn apply(text: &str, opps: &mut Vec<usize>, kinsoku: bool, word_wrap: bool)
      let next_char = |i: usize| text.get(i..).and_then(|t| t.chars().next());
      let prev_char = |i: usize| text.get(..i).and_then(|t| t.chars().next_back());
      if kinsoku {
@@ -37,7 +36,7 @@ index 6bf0cd7..bcb7150 100644
      } else {
          // Between any two East Asian characters.
          for (i, c) in text.char_indices().skip(1) {
-@@ -142,6 +148,30 @@ mod tests {
+@@ -153,6 +161,30 @@ mod tests {
          for c in ["、", "」", "。", "漢"] {
              assert!(off.iter().any(|s| s == c), "kinsoku off: a line may start with {c}: {off:?}");
          }

@@ -51,10 +51,10 @@ index 77da7697..0e0c4512 100644
              );
              #[cfg(not(target_arch = "wasm32"))]
 diff --git a/crates/fonts/src/fontdb/tests/sysfonts.rs b/crates/fonts/src/fontdb/tests/sysfonts.rs
-index 95edb49d..628abf66 100644
+index e8ebfeef..ec23264f 100644
 --- a/crates/fonts/src/fontdb/tests/sysfonts.rs
 +++ b/crates/fonts/src/fontdb/tests/sysfonts.rs
-@@ -758,3 +758,20 @@ fn a_documents_copy_of_an_installed_font_does_not_stop_it_loading() {
+@@ -792,3 +792,20 @@ fn a_documents_copy_of_an_installed_font_does_not_stop_it_loading() {
      }
      let _ = std::fs::remove_dir_all(dir);
  }

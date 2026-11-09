@@ -1,9 +1,9 @@
 Upstream: (not opened; WPS measurement: a file without a styles part takes single spacing, no space after, 10.5 pt Calibri and 宋体, not a new document's styles; F19)
 diff --git a/crates/docx/src/read.rs b/crates/docx/src/read.rs
-index 8f77ec63..54f7daf8 100644
+index 4c6b1cb0..a6d1f41a 100644
 --- a/crates/docx/src/read.rs
 +++ b/crates/docx/src/read.rs
-@@ -201,6 +201,15 @@ pub(crate) fn read_opened(pkg: &Package) -> Result<Document, DocxError> {
+@@ -215,6 +215,15 @@ fn read_opened_in(pkg: &Package, chunks: ChunkState) -> Result<(Document, usize,
      }
      if let Some(p) = part(rt::STYLES) {
          lenient("styles", r.read_styles(&p));
@@ -15,15 +15,15 @@ index 8f77ec63..54f7daf8 100644
 +        sheet.default_para_present = false;
 +        sheet.default_chr =
 +            wordcraft_doc::props::CharProps { font: Some("Calibri".into()), font_ea: Some("宋体".into()), size: Some(10.5), ..Default::default() };
-+        r.doc.styles = sheet;
++        r.doc.styles = std::sync::Arc::new(sheet);
      }
      if let Some(p) = part(rt::NUMBERING) {
          lenient("numbering", r.read_numbering(&p));
 diff --git a/crates/docx/tests/it/default_size.rs b/crates/docx/tests/it/default_size.rs
-index 12e596da..30a542d1 100644
+index 6420cbcf..b6df1e72 100644
 --- a/crates/docx/tests/it/default_size.rs
 +++ b/crates/docx/tests/it/default_size.rs
-@@ -88,3 +88,21 @@ fn a_custom_style_with_the_id_normal_does_not_replace_the_default_paragraph_styl
+@@ -89,3 +89,21 @@ fn a_custom_style_with_the_id_normal_does_not_replace_the_default_paragraph_styl
      assert_eq!(size(0), 10.5);
      assert_eq!(size(1), 12.0);
  }

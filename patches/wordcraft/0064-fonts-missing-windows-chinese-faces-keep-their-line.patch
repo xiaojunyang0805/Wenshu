@@ -1,9 +1,9 @@
 Upstream: (not opened; a missing Windows Chinese system face (宋体, 黑体, 仿宋, 楷体 and their _GB2312 names, 微软雅黑, 微軟正黑體, 等线) keeps its own East Asian line, 1.3 times its win metrics, instead of the substitute taller one, and so does any missing font the application draws as one of those faces (新細明體 as 宋体); on Linux every line of a 宋体 document grew)
 diff --git a/crates/fonts/src/word.rs b/crates/fonts/src/word.rs
-index 39caaca1..bb120ee5 100644
+index 0b19b543..1da58546 100644
 --- a/crates/fonts/src/word.rs
 +++ b/crates/fonts/src/word.rs
-@@ -214,10 +214,30 @@ pub fn missing_font_line(family: &str, resolved: &Resolved) -> Option<(f64, f64)
+@@ -229,10 +229,30 @@ pub fn missing_font_line(family: &str, resolved: &Resolved) -> Option<(f64, f64)
          "方正小标宋简体" | "方正小标宋_gbk" => Some((1.038, 0.484)),
          "方正仿宋_gbk" => Some((1.031, 0.416)),
          "方正大标宋简体" => Some((1.046, 0.439)),
@@ -35,7 +35,7 @@ index 39caaca1..bb120ee5 100644
  /// Is a line's (ascent, descent) one `upem` em tall?
  fn one_em((ascent, descent): (f64, f64), upem: f64) -> bool {
      upem > 0.0 && ((ascent + descent) / upem - 1.0).abs() < 0.005
-@@ -669,10 +689,18 @@ mod tests {
+@@ -1023,10 +1043,18 @@ mod tests {
          // Arial Unicode MS: a 1.74 em line in WPS at any size, measured.
          let (a, d) = missing_font_line("Arial Unicode MS", &r).expect("a known missing font");
          assert!(((a + d) - 1.74).abs() < 0.005, "{a} + {d}");

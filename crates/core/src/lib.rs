@@ -72,7 +72,8 @@ pub fn blank_defaults(region: &wordcraft_engine::Region, d: &mut wordcraft_doc::
     // As WPS Office's own blank document (2026-11-04, created through COM and saved): Latin text
     // in Calibri (Carlito on Linux), 宋体, 10.5 pt, English proofing for Latin text, punctuation
     // compression on, compatibility mode 14, header 1.5 cm and footer 1.75 cm.
-    let c = &mut d.styles.default_chr;
+    let styles = std::sync::Arc::make_mut(&mut d.styles);
+    let c = &mut styles.default_chr;
     c.font = Some("Calibri".into());
     c.font_ea = Some(
         if traditional {
@@ -85,7 +86,7 @@ pub fn blank_defaults(region: &wordcraft_engine::Region, d: &mut wordcraft_doc::
     c.size = Some(10.5);
     c.lang = Some("en-US".into());
     c.lang_ea = Some(if traditional { "zh-TW" } else { "zh-CN" }.into());
-    let p = &mut d.styles.default_para;
+    let p = &mut styles.default_para;
     p.space_after = Some(0.0);
     p.line_spacing = Some(wordcraft_doc::props::LineSpacing::Multiple(1.0));
     p.align = Some(wordcraft_doc::Align::Justify);

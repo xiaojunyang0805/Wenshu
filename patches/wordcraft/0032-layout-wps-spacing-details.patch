@@ -1,9 +1,9 @@
 Upstream: (not opened; WPS measurements, F21: under balanceSingleByteDoubleByteWidth a space counts w:spacing twice; a line of only pictures has no descent; multiple spacing's leading may run into a footer taller than the bottom margin)
 diff --git a/crates/layout/src/flow.rs b/crates/layout/src/flow.rs
-index de485f12..fe923259 100644
+index 8db5e159..11720467 100644
 --- a/crates/layout/src/flow.rs
 +++ b/crates/layout/src/flow.rs
-@@ -634,10 +634,12 @@ fn notes_limit(pb: &PageBuilder, new_notes: &[NoteBox], line_notes: &[NoteBox])
+@@ -748,10 +748,12 @@ fn notes_limit(pb: &PageBuilder, new_notes: &[NoteBox], line_notes: &[NoteBox])
  /// text ending 1 pt above the margin and its pitches 4.2 pt below it). Other single-spaced
  /// lines end with their text, so this changes nothing for them.
  fn fit_height(pb: &PageBuilder, l: &para::Line, rp: &wordcraft_doc::resolve::ResolvedPara, free: bool) -> f32 {
@@ -19,10 +19,10 @@ index de485f12..fe923259 100644
      }
  }
 diff --git a/crates/layout/src/para/builder.rs b/crates/layout/src/para/builder.rs
-index f7f0211f..4f22ff0c 100644
+index 8293b441..0622fb94 100644
 --- a/crates/layout/src/para/builder.rs
 +++ b/crates/layout/src/para/builder.rs
-@@ -340,9 +340,10 @@ impl<'a> Builder<'a> {
+@@ -442,9 +442,10 @@ impl<'a> Builder<'a> {
                  });
                  // `balanceSingleByteDoubleByteWidth`: a space is half an em, whatever its font.
                  let adv = if s == " " && self.env.doc.settings.balance_sbcs_dbcs { st.size * 0.5 * hscale } else { adv };
@@ -37,79 +37,64 @@ index f7f0211f..4f22ff0c 100644
                  // Clusters index the document text, never the displayed text.
                  let (cs, ce) = if substituted { remap_range(&map_starts, &orig_of, sub.len(), gs, ge) } else { (gs, ge) };
 diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
-index cf03c5d5..f89cfd9c 100644
+index 24562c4d..ee05e45f 100644
 --- a/crates/layout/src/para/lines.rs
 +++ b/crates/layout/src/para/lines.rs
-@@ -415,7 +415,7 @@ impl<'e> Breaker<'e> {
-     /// tallest picture on it (which sits on the baseline).
-     fn extents(&self, pl: &ParaLayout, (c0, c1): (usize, usize)) -> Extents {
-         let rp = &self.rp;
--        let mut ex = Extents { asc: 0.0, desc: 0.0, obj_asc: 0.0 };
-+        let mut ex = Extents { asc: 0.0, desc: 0.0, obj_asc: 0.0, text: false };
-         let mut any = false;
-         let dropped = pl.drop_cap.map_or(0, |d| d.0);
-         for (k, c) in pl.clusters.get(c0..c1).into_iter().flatten().enumerate() {
-@@ -441,6 +441,7 @@ impl<'e> Breaker<'e> {
-                 }
-             } else {
-                 // `obj_h` is set on text clusters only under ruby text, which the line grows to fit.
-+                ex.text = true;
-                 let (a, d) = st.line_extent();
-                 (a.max(c.obj_h + st.shift), d)
-             };
-@@ -460,7 +461,13 @@ impl<'e> Breaker<'e> {
-     /// The line's height, baseline and text extent.
+@@ -484,6 +484,13 @@ impl<'e> Breaker<'e> {
      fn measure(&self, pl: &ParaLayout, range: (usize, usize)) -> Measure {
          let rp = &self.rp;
--        let Extents { mut asc, mut desc, obj_asc } = self.extents(pl, range);
-+        let Extents { mut asc, mut desc, obj_asc, text } = self.extents(pl, range);
-+        // A line of only pictures is as tall as its tallest picture: nothing below the baseline
-+        // (WPS: a 60 pt picture alone on a single-spaced line takes 60 pt, whatever the paragraph
-+        // mark's font and size).
-+        if !text && obj_asc > 0.0 {
+         let Extents { mut asc, mut desc, obj_asc, obj_desc, text } = self.extents(pl, range);
++        // A line of only pictures has nothing below the baseline but what they reach (WPS: a 60 pt
++        // picture alone on a single-spaced line takes 60 pt, whatever the paragraph mark's font
++        // and size; an 18 pt logo on an 18 pt line grid takes one pitch; a 公文's mark line holding
++        // only its shapes takes no descent either, `dc-policies-a78d52e7ee`).
++        if !text && obj_asc + obj_desc > 0.0 {
 +            desc = 0.0;
 +        }
-         let text_natural = asc + desc;
-         let (text_asc, text_desc) = (asc.max(obj_asc), desc);
-         let text_pictures = if obj_asc > asc { obj_asc + desc } else { 0.0 };
-@@ -659,6 +666,8 @@ struct Extents {
-     asc: f32,
-     desc: f32,
-     obj_asc: f32,
-+    /// The line has text, not only pictures.
-+    text: bool,
- }
- 
- /// A line's height and baseline, and the extent of its text.
+         let mut text_natural = asc + desc;
+         let font_desc = desc;
+         desc = desc.max(obj_desc);
+@@ -537,7 +544,12 @@ impl<'e> Breaker<'e> {
+         let (height, centred) = match (rp.line_spacing, grid) {
+             (LineSpacing::Multiple(m), Some(g)) => (g.multiple_height(natural, m).max(g.snap_height(pictures)), true),
+             (LineSpacing::AtLeast(v), Some(g)) => (g.snap_height(natural.max(pictures)).max(v), true),
+-            (LineSpacing::Multiple(m), None) => ((text_natural * m + label_extra).max(text_pictures + (m - 1.0).max(0.0) * text_natural), false),
++            // WPS: pictures alone take their own height, without the spacing's share of the font's
++            // (a 144 pt picture on a 1.15-spaced line is 144 pt; Word adds 0.15 of the font height).
++            (LineSpacing::Multiple(m), None) => {
++                let share = if pictures_alone { 0.0 } else { (m - 1.0).max(0.0) * text_natural };
++                ((text_natural * m + label_extra).max(text_pictures + share), false)
++            }
+             (LineSpacing::AtLeast(v), None) => (natural.max(text_pictures).max(v), false),
+             (LineSpacing::Exactly(v), _) => (v, false),
+         };
 diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
-index c52580c6..6deab289 100644
+index 8a696e81..4b7860ea 100644
 --- a/crates/layout/src/tests.rs
 +++ b/crates/layout/src/tests.rs
-@@ -4816,9 +4816,9 @@ fn line_spacing_does_not_scale_pictures() {
-     let l = lay(&d);
-     let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
-     let line = &para.lines[0];
--    let desc = para.styles[0].descent;
--    // Word: the picture plus the font's descent, not (picture + descent) x 1.15.
--    assert!((line.height - (144.0 + desc)).abs() < 0.01, "line {} for a 144pt picture (descent {desc})", line.height);
+@@ -5684,7 +5684,9 @@ fn line_spacing_does_not_scale_pictures() {
+     // Word, measured (Aptos, Arial, Times; 10 and 20 pt; single, 1.15, 1.5): a line of only a
+     // picture is the picture plus the spacing's share of the text's height, with no descent below
+     // it, not (picture + descent) x 1.15.
+-    assert!((line.height - (144.0 + 0.15 * natural)).abs() < 0.01, "line {} for a 144pt picture (text {natural})", line.height);
 +    // WPS: a line of only a picture is the picture's height, not scaled by 1.15 and with no
 +    // descent below it (Word adds the font's descent).
 +    assert!((line.height - 144.0).abs() < 0.01, "line {} for a 144pt picture", line.height);
      assert!((line.baseline - line.top - 144.0).abs() < 0.01, "the picture stands on the baseline");
  }
  
-@@ -4875,8 +4875,8 @@ fn list_label_does_not_inflate_an_inline_picture_floor() {
-         let l = lay(&d);
-         let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
-         let line = &para.lines[0];
--        let desc = para.styles[para.clusters[0].style as usize].descent;
--        assert!((line.height - (144.0 + desc)).abs() < 0.01, "{spacing:?}: {}", line.height);
+@@ -5753,7 +5755,9 @@ fn list_label_does_not_inflate_an_inline_picture_floor() {
+             LineSpacing::Multiple(m) => 144.0 + (m - 1.0) * (a + d),
+             _ => 144.0 + st.descent,
+         };
+-        assert!((line.height - want).abs() < 0.01, "{spacing:?}: {} (want {want})", line.height);
++        let _ = want; // Word's height; WPS differs:
 +        // The picture alone sets the line (WPS: no descent below it).
 +        assert!((line.height - 144.0).abs() < 0.01, "{spacing:?}: {}", line.height);
          assert!((line.baseline - line.top - 144.0).abs() < 0.01);
      }
  }
-@@ -12128,5 +12128,8 @@ fn balanced_single_byte_width_doubles_east_asian_character_spacing() {
+@@ -15326,5 +15330,8 @@ fn balanced_single_byte_width_doubles_east_asian_character_spacing() {
          let want = if balance { -0.6 } else { -0.3 };
          assert!((cjk - want).abs() < 0.01, "balance {balance}: 中 changes by {cjk}");
          assert!((latin + 0.3).abs() < 0.01, "balance {balance}: H changes by {latin}");
@@ -119,13 +104,13 @@ index c52580c6..6deab289 100644
      }
  }
 diff --git a/crates/layout/src/tests/pages.rs b/crates/layout/src/tests/pages.rs
-index c211f33c..93e410af 100644
+index e55c2692..b6c2aa36 100644
 --- a/crates/layout/src/tests/pages.rs
 +++ b/crates/layout/src/tests/pages.rs
-@@ -159,8 +159,14 @@ fn outside_floating_tables_swap_sides_on_even_pages() {
- 
+@@ -163,8 +163,14 @@ fn outside_floating_tables_swap_sides_on_even_pages() {
  #[test]
  fn a_tall_footer_pushes_the_body_up() {
+     crate::test_fonts();
 -    // #453: an eight-line footer reaches far above the 72pt bottom margin.
 +    // #453: an eight-line footer reaches far above the 72pt bottom margin. Single-spaced body
 +    // lines: multiple spacing's leading below the text may run into the footer (WPS).
@@ -138,9 +123,9 @@ index c211f33c..93e410af 100644
      let id = d.add_part(PartKind::Footer, paras("Footer line", 8));
      d.last_section.footers.default = Some(id);
      let l = lay(&d);
-@@ -612,3 +618,34 @@ fn a_page_ends_when_a_multiple_spaced_lines_text_no_longer_fits() {
-         assert!(past_margin > 0, "{multiple}: some shift should leave the last line's leading past the margin");
-     }
+@@ -716,3 +722,34 @@ fn table_cell_page_field_uses_the_section_number_format() {
+         .collect();
+     assert_eq!(shown, "one");
  }
 +
 +#[test]

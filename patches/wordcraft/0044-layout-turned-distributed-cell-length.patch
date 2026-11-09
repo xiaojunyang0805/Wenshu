@@ -1,9 +1,9 @@
 Upstream: (not opened; layout fix: turned cell text is as long as its own text, not its justified length (distributed text asked for the longest turned line, and a five-character rating-scale header filled a page), and at least as long as an at-least row height)
 diff --git a/crates/layout/src/table.rs b/crates/layout/src/table.rs
-index 701aad2f..644b345e 100644
+index 9ea31912..c2f1a14e 100644
 --- a/crates/layout/src/table.rs
 +++ b/crates/layout/src/table.rs
-@@ -97,8 +97,11 @@ fn natural_length(items: &[Placed]) -> f32 {
+@@ -113,8 +113,11 @@ fn natural_length(items: &[Placed]) -> f32 {
                  (lo, hi) = (*a, *b);
              }
              let hy = l.hyphen.map_or(0.0, |h| h.2);
@@ -16,7 +16,7 @@ index 701aad2f..644b345e 100644
              }
          }
      }
-@@ -624,10 +627,16 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
+@@ -611,10 +614,16 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
                  let snap = (ctx.counters.clone(), ctx.eq_count);
                  let len = match (row.props.height, row.props.height_rule) {
                      (Some(h), HeightRule::Exact) if h > 0.0 => (h + row_bottom - insets).clamp(4.0, TURNED_LIMIT),
@@ -36,10 +36,10 @@ index 701aad2f..644b345e 100644
                  };
                  let BoxLayout { items, height, floats_bottom, .. } = layout_box(ctx, BoxInput::cell(story, &cell.blocks, &cpath, len, text, depth));
 diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
-index 2c6f4212..d39c63c9 100644
+index 6466713e..7367938e 100644
 --- a/crates/layout/src/tests.rs
 +++ b/crates/layout/src/tests.rs
-@@ -2118,6 +2118,30 @@ fn turned_lines(l: &DocLayout) -> &Placed {
+@@ -2415,6 +2415,30 @@ fn turned_lines(l: &DocLayout) -> &Placed {
      l.pages[0].items.iter().find(|it| matches!(it, Placed::Lines { path, .. } if path.0 == [1, 0, 1, 0])).unwrap()
  }
  

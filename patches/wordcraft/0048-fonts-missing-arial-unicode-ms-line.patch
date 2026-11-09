@@ -1,9 +1,9 @@
 Upstream: (not opened; WPS measurement: a missing Arial Unicode MS keeps its own line box, its win ascent and descent with the East Asian 1.3, a 1.74 em line at 10, 12 and 16 pt, whatever substitute draws the text)
 diff --git a/crates/fonts/src/word.rs b/crates/fonts/src/word.rs
-index 6f5094a3..005f65b1 100644
+index 1f075fbf..de981ecf 100644
 --- a/crates/fonts/src/word.rs
 +++ b/crates/fonts/src/word.rs
-@@ -205,6 +205,10 @@ pub fn missing_font_line(family: &str, resolved: &Resolved) -> Option<(f64, f64)
+@@ -220,6 +220,10 @@ pub fn missing_font_line(family: &str, resolved: &Resolved) -> Option<(f64, f64)
      }
      match family.trim().to_lowercase().as_str() {
          "標楷體" | "标楷体" | "dfkai-sb" | "dfkai" => Some((0.95, 0.35)),
@@ -14,7 +14,7 @@ index 6f5094a3..005f65b1 100644
          _ => None,
      }
  }
-@@ -655,9 +659,13 @@ mod tests {
+@@ -1009,9 +1013,13 @@ mod tests {
              assert_eq!(missing_font_line(name, &r), Some((0.95, 0.35)), "{name}");
          }
          assert_eq!(missing_font_line("Arial", &r), None);

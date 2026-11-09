@@ -1,9 +1,9 @@
 Upstream: (not opened; WPS measurement: text after a paragraph leading page or column breaks is still the first line and keeps the first-line or hanging indent in the next column or page; after a leading line break, or a column break after text, the other lines indent applies)
 diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
-index 53333815..02b383ed 100644
+index 73b6fd6e..4ec95048 100644
 --- a/crates/layout/src/para/lines.rs
 +++ b/crates/layout/src/para/lines.rs
-@@ -357,6 +357,15 @@ impl<'e> Breaker<'e> {
+@@ -364,6 +364,15 @@ impl<'e> Breaker<'e> {
              self.first_x0 = sc.xs.first().copied();
          }
          let end = sc.end;
@@ -19,7 +19,7 @@ index 53333815..02b383ed 100644
          let mut line = Line {
              top: self.top,
              height: v.height,
-@@ -381,7 +390,7 @@ impl<'e> Breaker<'e> {
+@@ -388,7 +397,7 @@ impl<'e> Breaker<'e> {
              reorder_line(pl, &mut line, self.width);
          }
          self.lines.push(line);
@@ -29,10 +29,10 @@ index 53333815..02b383ed 100644
          self.i = j;
          end
 diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
-index cc9af3b9..c8c7d418 100644
+index 54992ec4..513bfce5 100644
 --- a/crates/layout/src/tests.rs
 +++ b/crates/layout/src/tests.rs
-@@ -12304,3 +12304,42 @@ fn balanced_single_byte_width_doubles_east_asian_character_spacing() {
+@@ -15506,3 +15506,42 @@ fn balanced_single_byte_width_doubles_east_asian_character_spacing() {
          assert!((space - want).abs() < 0.01, "balance {balance}: a space changes by {space}");
      }
  }

@@ -1,9 +1,9 @@
 Upstream: (not opened; WPS measurement: in compatibility mode 15 a closing mark hangs past the margin on justified and distributed lines only; left, centred and right lines send the character before it over too; older modes hang on every line)
 diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
-index 6172de06..cb35c0a8 100644
+index 37d42fb5..f5292910 100644
 --- a/crates/layout/src/para/paragraph.rs
 +++ b/crates/layout/src/para/paragraph.rs
-@@ -661,8 +661,10 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+@@ -758,8 +758,10 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
      // `w:overflowPunct` (on unless turned off) in runs whose East Asian language is Chinese,
      // Japanese or Korean (WPS; text tagged en-US gets only the blank half of
      // `end_marks`, and only under compression), unless `w:useAltKinsokuLineBreakRules` is set.

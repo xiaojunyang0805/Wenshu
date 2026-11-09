@@ -1,6 +1,6 @@
 Upstream: (not opened; reader fix: a VML text box carrying an empty v:imagedata (WPS writes one) is a text box; it was dropped with its text, in groups too, and lost on save)
 diff --git a/crates/docx/src/read/story/vml.rs b/crates/docx/src/read/story/vml.rs
-index 75faa2c9..a9ce7259 100644
+index e40d38b3..9b9d8449 100644
 --- a/crates/docx/src/read/story/vml.rs
 +++ b/crates/docx/src/read/story/vml.rs
 @@ -130,8 +130,11 @@ impl Reader<'_> {
@@ -16,12 +16,12 @@ index 75faa2c9..a9ce7259 100644
 +        {
              let media = self.media_for(rels, id)?;
              let alt = shape.attr("alt").or_else(|| img.attr("o:title")).unwrap_or("").to_string();
-             return Some(InlineObject::Image { media, w, h, alt, float, crop: [0.0; 4], ole: None });
+             // Brightness and contrast (Word's picture watermark "Washout" sets them, #1711).
 diff --git a/crates/docx/tests/it/fixtures.rs b/crates/docx/tests/it/fixtures.rs
-index c388b09f..44b65ab7 100644
+index b2b45ee8..a9e71f96 100644
 --- a/crates/docx/tests/it/fixtures.rs
 +++ b/crates/docx/tests/it/fixtures.rs
-@@ -4231,3 +4231,27 @@ fn a_break_inside_a_text_element_is_kept() {
+@@ -4827,3 +4827,27 @@ fn a_break_inside_a_text_element_is_kept() {
      assert_eq!(paras(&d)[0].text, "苏州-合肥\n早餐后\t游览");
  }
  

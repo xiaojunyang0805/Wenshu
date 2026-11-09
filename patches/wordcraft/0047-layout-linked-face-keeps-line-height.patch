@@ -1,19 +1,19 @@
 Upstream: (not opened; WPS measurement: CJK compatibility ideographs drawn in a face standing in for the run fonts (font linking, 0046) add no height to the line; the line keeps the run font height. It grew by the stand-in face East Asian line height)
 diff --git a/crates/layout/src/para/builder.rs b/crates/layout/src/para/builder.rs
-index 6315f884..40e2fdb9 100644
+index 6478d281..c9bbc827 100644
 --- a/crates/layout/src/para/builder.rs
 +++ b/crates/layout/src/para/builder.rs
-@@ -18,6 +18,9 @@ pub(super) struct Builder<'a> {
-     pub(super) levels: Vec<u8>,
-     /// Text drawn by clusters that stand for an object, by cluster index (see `ParaLayout::shown`).
-     pub(super) shown: Vec<(usize, String, Vec<std::ops::Range<usize>>)>,
+@@ -22,6 +22,9 @@ pub(super) struct Builder<'a> {
+     /// Fonts asked for that aren't installed, and the faces drawn instead (see
+     /// `ParaLayout::substituted`).
+     pub(super) substituted: Vec<(String, FaceRef)>,
 +    /// By style index: the face its line height came from, when not its own (see
 +    /// [`Builder::style_with_line`]).
 +    pub(super) line_faces: Vec<Option<u32>>,
  }
  
- struct SegmentInput<'a> {
-@@ -93,6 +96,12 @@ impl<'a> Builder<'a> {
+ /// The fonts a run asks for that aren't installed (see [`Builder::note_missing_fonts`]).
+@@ -109,6 +112,12 @@ impl<'a> Builder<'a> {
  
      /// Style index for a resolved char in `face` (caps-scaled `size` override for small caps).
      pub(super) fn style(&mut self, rc: &Arc<ResolvedChar>, face_override: Option<FaceRef>, small: bool) -> u32 {
@@ -26,7 +26,7 @@ index 6315f884..40e2fdb9 100644
          let r = wordcraft_fonts::word::resolve(lookup_family(self.env.doc, &rc.font), rc.bold, rc.italic);
          let face = face_override.unwrap_or(r.face);
          // The display list reads every run's format (link target, strike kind, underline colour,
-@@ -104,8 +113,10 @@ impl<'a> Builder<'a> {
+@@ -120,8 +129,10 @@ impl<'a> Builder<'a> {
              let mut h = std::collections::hash_map::DefaultHasher::new();
              (face.id(), small, &rc.font, rc.size.to_bits(), rc.bold, rc.italic, rc.color, rc.highlight, rc.shading).hash(&mut h);
              (rc.underline_color, rc.strike, rc.double_strike, &rc.link, rc.ins, rc.del, rc.hidden).hash(&mut h);
@@ -37,7 +37,7 @@ index 6315f884..40e2fdb9 100644
          let bucket = self.style_index.entry(key).or_default();
          // Formats that never compare equal (a NaN from a hostile file) get their own styles; a capped
          // scan keeps such a bucket from turning quadratic.
-@@ -113,6 +124,7 @@ impl<'a> Builder<'a> {
+@@ -129,6 +140,7 @@ impl<'a> Builder<'a> {
              if s == small
                  && let Some(st) = self.styles.get(i as usize)
                  && st.face.id() == face.id()
@@ -45,7 +45,7 @@ index 6315f884..40e2fdb9 100644
                  && (Arc::ptr_eq(&st.rc, rc) || *st.rc == **rc)
              {
                  return i;
-@@ -121,11 +133,12 @@ impl<'a> Builder<'a> {
+@@ -137,11 +149,12 @@ impl<'a> Builder<'a> {
          let size = rc.draw_size() * if small { 0.8 } else { 1.0 };
          // A symbol font that isn't installed, or is installed one em tall (Apple's Symbol), takes
          // the height Word gives it.
@@ -61,7 +61,7 @@ index 6315f884..40e2fdb9 100644
          // A fallback face (letters the requested font lacks) is emboldened or slanted when it has
          // no bold or italic of its own.
          let (synth_bold, synth_italic) = match face_override {
-@@ -146,6 +159,7 @@ impl<'a> Builder<'a> {
+@@ -162,6 +175,7 @@ impl<'a> Builder<'a> {
          // hold in memory, so every format keeps its own style.
          let i = u32::try_from(self.styles.len()).unwrap_or(u32::MAX);
          self.styles.push(st);
@@ -69,7 +69,7 @@ index 6315f884..40e2fdb9 100644
          self.style_index.entry(key).or_default().push((i, small));
          i
      }
-@@ -239,7 +253,15 @@ impl<'a> Builder<'a> {
+@@ -336,7 +350,15 @@ impl<'a> Builder<'a> {
              };
              let rc = &rc;
              let small = key.small;
@@ -87,32 +87,22 @@ index 6315f884..40e2fdb9 100644
              let upper = rc.caps || small;
              // All Caps and Small Caps draw a letter's full capital, which can be several
 diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
-index 52919a85..ab715965 100644
+index b1fcf4a4..185e72d3 100644
 --- a/crates/layout/src/para/paragraph.rs
 +++ b/crates/layout/src/para/paragraph.rs
-@@ -587,7 +587,16 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
-     let rp = paragraph_props(p, env);
-     let res = Resolver { doc, style: p.props.style.as_deref(), table: env.table.map(|t| &t.chr) };
-     let levels = bidi_levels(&p.text, rp.bidi);
--    let b = Builder { env, styles: Vec::new(), style_index: Default::default(), glyphs: Vec::new(), clusters: Vec::new(), levels, shown: Vec::new() };
-+    let b = Builder {
-+        env,
-+        styles: Vec::new(),
-+        style_index: Default::default(),
-+        glyphs: Vec::new(),
-+        clusters: Vec::new(),
-+        levels,
-+        shown: Vec::new(),
+@@ -690,6 +690,7 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+         levels,
+         shown: Vec::new(),
+         substituted: Vec::new(),
 +        line_faces: Vec::new(),
-+    };
-     let cx = Cx { p, env, rp: &rp, res, math_props: doc.settings.math.clone().unwrap_or_default(), drop_first: drop_cap_char(p, &rp) };
-     let mut sh = Shaped::new(b, env.eq_number);
-     let mark_rc = cx.res.char(&p.mark);
+     };
+     let mut cx =
+         Cx { p, env, rp: &rp, res, math_props: doc.settings.math.clone().unwrap_or_default(), drop_first: drop_cap_char(p, &rp), shown: None };
 diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
-index d39c63c9..cc9af3b9 100644
+index 7367938e..54992ec4 100644
 --- a/crates/layout/src/tests.rs
 +++ b/crates/layout/src/tests.rs
-@@ -1334,6 +1334,23 @@ fn a_missing_roman_font_with_its_own_substitute_keeps_it() {
+@@ -1439,6 +1439,23 @@ fn a_missing_roman_font_with_its_own_substitute_keeps_it() {
      assert_eq!(para.styles[first.style as usize].face, wordcraft_fonts::word::resolve("Times New Roman", false, false).face);
  }
  
@@ -135,4 +125,4 @@ index d39c63c9..cc9af3b9 100644
 +
  #[test]
  fn an_empty_section_mark_stays_on_a_full_page() {
-     use wordcraft_doc::section::SectionProps;
+     crate::test_fonts();

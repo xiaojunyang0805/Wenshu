@@ -1,9 +1,9 @@
 Upstream: (not opened; reader fix: VML WordArt letters take the opacity of the shape fill (a transparent w14:textFill) and filled="f" (unfilled); a WPS tracing watermark with opacity 0 was drawn, and after a save shown by WPS, across the page)
 diff --git a/crates/docx/src/read/story/vml.rs b/crates/docx/src/read/story/vml.rs
-index a9ce7259..39b292b9 100644
+index 9b9d8449..35a49289 100644
 --- a/crates/docx/src/read/story/vml.rs
 +++ b/crates/docx/src/read/story/vml.rs
-@@ -193,11 +193,26 @@ impl Reader<'_> {
+@@ -196,11 +196,26 @@ impl Reader<'_> {
                  .and_then(|i| VML_TEXT_WARPS.get(i as usize))
                  .copied()
                  .and_then(TextWarp::new);
@@ -32,10 +32,10 @@ index a9ce7259..39b292b9 100644
              };
              let id = self.doc.add_part(PartKind::TextBox, vec![para_block(Paragraph::with_text(&text, props))]);
 diff --git a/crates/docx/tests/it/fixtures.rs b/crates/docx/tests/it/fixtures.rs
-index 3fa782be..7b3d5196 100644
+index b370cae9..f934cbce 100644
 --- a/crates/docx/tests/it/fixtures.rs
 +++ b/crates/docx/tests/it/fixtures.rs
-@@ -1355,6 +1355,28 @@ fn vml_textpath_in_body_is_shown() {
+@@ -1466,6 +1466,28 @@ fn vml_textpath_in_body_is_shown() {
  
      assert!(paras(&read(&art.replace("<v:textpath ", r#"<v:textpath on="f" "#)))[0].objects.is_empty());
      assert!(paras(&read(&art.replace(r#"string="Sale""#, r#"string=" ""#)))[0].objects.is_empty());

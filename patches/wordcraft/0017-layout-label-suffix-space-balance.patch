@@ -1,8 +1,9 @@
 Upstream: (not opened; fold into the F7 change with 0009: under balanceSingleByteDoubleByteWidth a list label's suffix space is half an em; F7)
 diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
+index 0eab43a6..031d6a0e 100644
 --- a/crates/layout/src/para/lines.rs
 +++ b/crates/layout/src/para/lines.rs
-@@ -27,6 +27,12 @@ struct Breaker<'e> {
+@@ -29,6 +29,12 @@ struct Breaker<'e> {
      shrink_spaces: bool,
      /// Word stretches a justified line ending in a manual line break unless the document says not to.
      expand_break: bool,
@@ -15,8 +16,8 @@ diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
      /// Hyphenation Options: the zone, and how many lines in a row may end with a hyphen.
      zone: f32,
      hyph_limit: usize,
-@@ -188,6 +194,8 @@ impl<'e> Breaker<'e> {
-             hanging_at: if rp.indent_first < 0.0 { Some(rp.indent_left) } else { None },
+@@ -191,6 +197,8 @@ impl<'e> Breaker<'e> {
+             tab_origin: if settings.odf.is_some_and(|o| o.tabs_from_indent) { rp.indent_left } else { 0.0 },
              shrink_spaces: rp.align == Align::Justify && settings.compat_mode >= wordcraft_doc::COMPAT_MODE_CURRENT,
              expand_break: !settings.do_not_expand_shift_return,
 +            label_space: if settings.balance_sbcs_dbcs { 0.5 } else { 0.25 },
@@ -24,7 +25,7 @@ diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
              zone: Some(settings.hyphenation_zone).filter(|z| z.is_finite() && *z >= 0.0).unwrap_or(HYPHENATION_ZONE).min(1584.0),
              hyph_limit: settings.consecutive_hyphen_limit as usize,
              widths: word_widths(&pl.clusters, &pl.hyph_after),
-@@ -302,7 +310,7 @@ impl<'e> Breaker<'e> {
+@@ -309,7 +317,7 @@ impl<'e> Breaker<'e> {
                      _ => t,
                  }
              }
@@ -34,9 +35,10 @@ diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
          }
      }
 diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+index eefa6a25..18241502 100644
 --- a/crates/layout/src/tests.rs
 +++ b/crates/layout/src/tests.rs
-@@ -12080,3 +12080,29 @@ fn balanced_single_byte_width_makes_spaces_half_an_em() {
+@@ -15278,3 +15278,29 @@ fn balanced_single_byte_width_makes_spaces_half_an_em() {
      assert!(plain_spaces < 60.0, "without the setting a space keeps its font's width: {plain_spaces}");
      assert!((letters - plain_letters).abs() < 0.01, "letters keep their widths");
  }

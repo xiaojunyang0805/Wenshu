@@ -1,6 +1,6 @@
 Upstream: (not opened; a list of save formats the embedding app adds, io::set_app_formats: file.save writes them by extension through the app's function, Save As offers them in its type list and File › Export as buttons, after WordCraft's own and never in place of one; Wenshu adds OFD)
 diff --git a/apps/wordcraft/src/file_dialogs.rs b/apps/wordcraft/src/file_dialogs.rs
-index b7f1bc68..866e5acc 100644
+index d6e11ef8..bba2aa19 100644
 --- a/apps/wordcraft/src/file_dialogs.rs
 +++ b/apps/wordcraft/src/file_dialogs.rs
 @@ -209,11 +209,12 @@ fn save_exts(name: &str) -> Vec<String> {
@@ -19,7 +19,7 @@ index b7f1bc68..866e5acc 100644
      exts
  }
  
-@@ -243,7 +244,10 @@ fn format_name(ext: &str) -> String {
+@@ -245,7 +246,10 @@ fn format_name(ext: &str) -> String {
          "png" => "PNG Image".into(),
          "json" => "JSON".into(),
          "xml" => "XML".into(),
@@ -32,12 +32,12 @@ index b7f1bc68..866e5acc 100644
  }
  
 diff --git a/crates/engine/src/io.rs b/crates/engine/src/io.rs
-index f31e1fda..fdc20340 100644
+index c33de036..bd58e6d7 100644
 --- a/crates/engine/src/io.rs
 +++ b/crates/engine/src/io.rs
-@@ -30,6 +30,36 @@ pub const OPEN_EXTS: &[&str] = &[
- /// Formats WordCraft saves (Save As).
- pub const SAVE_EXTS: &[&str] = &["docx", "docm", "dotx", "dotm", "pdf", "txt", "md", "html", "rtf", "odt", "tex", "png", "json", "xml"];
+@@ -35,6 +35,36 @@ pub const OPEN_EXTS: &[&str] = &[
+ pub const SAVE_EXTS: &[&str] =
+     &["docx", "docm", "dotx", "dotm", "pdf", "txt", "md", "html", "rtf", "odt", "ott", "fodt", "tex", "png", "json", "xml"];
  
 +/// A format the embedding app saves (an export: the document keeps its own file), offered by Save
 +/// As and File › Export after WordCraft's own and written by `write`. Wenshu adds OFD this way.
@@ -72,7 +72,7 @@ index f31e1fda..fdc20340 100644
  /// Magic number for ZIP package signatures (used by .docx/.docm/.dotx/.dotm).
  const ZIP_SIG: &[u8] = b"PK\x03\x04";
  /// Magic number for OLE compound document signatures (used by .doc/.dot).
-@@ -388,6 +418,10 @@ pub fn save_bytes_opts(name: &str, doc: &Document, opts: &ExportOptions) -> Resu
+@@ -455,6 +485,10 @@ pub fn save_bytes_opts(name: &str, doc: &Document, opts: &ExportOptions) -> Resu
              Ok(if opts.markup && opts.comments { wordcraft_formats::comments::append("txt", doc, bytes) } else { bytes })
          }
          "json" => serde_json::to_vec_pretty(doc).map_err(|e| e.to_string()),
@@ -83,6 +83,18 @@ index f31e1fda..fdc20340 100644
          other => match crate::io_ext::save(other, doc, opts) {
              Some(r) => r,
              None => Err(format!("{name}: can't save as `.{other}`")),
+diff --git a/crates/engine/src/tests.rs b/crates/engine/src/tests.rs
+index 79e6558d..b01d75b1 100644
+--- a/crates/engine/src/tests.rs
++++ b/crates/engine/src/tests.rs
+@@ -15,6 +15,7 @@ mod documents;
+ mod find_apostrophes;
+ mod font_sizes;
+ mod fonts;
++mod app_formats;
+ mod ime_noop;
+ mod para_tools;
+ mod revision_checks;
 diff --git a/crates/engine/src/tests/app_formats.rs b/crates/engine/src/tests/app_formats.rs
 new file mode 100644
 index 00000000..84b213b0
@@ -118,10 +130,10 @@ index 00000000..84b213b0
 +    assert!(save_bytes("out.pdf", &doc).unwrap().starts_with(b"%PDF"));
 +}
 diff --git a/crates/ui-egui/src/print_page.rs b/crates/ui-egui/src/print_page.rs
-index 78ec2ce3..812aa898 100644
+index edb6f87e..6222e1a8 100644
 --- a/crates/ui-egui/src/print_page.rs
 +++ b/crates/ui-egui/src/print_page.rs
-@@ -370,4 +370,12 @@ pub fn export_formats(app: &mut WordApp, ui: &mut Ui) {
+@@ -476,6 +476,14 @@ pub fn export_formats(app: &mut WordApp, ui: &mut Ui) {
          }
          ui.add_space(4.0);
      }
@@ -134,15 +146,5 @@ index 78ec2ce3..812aa898 100644
 +        ui.add_space(4.0);
 +    }
  }
-diff --git a/crates/engine/src/tests.rs b/crates/engine/src/tests.rs
-index 89aab700..378287b1 100644
---- a/crates/engine/src/tests.rs
-+++ b/crates/engine/src/tests.rs
-@@ -13,6 +13,7 @@ mod bidi;
- mod documents;
- mod font_sizes;
- mod fonts;
-+mod app_formats;
- mod ime_noop;
- mod revision_checks;
- mod typing;
+ 
+ #[cfg(test)]

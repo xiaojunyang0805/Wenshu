@@ -1,6 +1,6 @@
 Upstream: https://github.com/storytold/wordcraft/pull/5003
 diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
-index df370aa..e27201b 100644
+index df370aa2..e27201b8 100644
 --- a/crates/layout/src/para/grid.rs
 +++ b/crates/layout/src/para/grid.rs
 @@ -29,6 +29,17 @@ impl Grid {
@@ -45,10 +45,10 @@ index df370aa..e27201b 100644
          for g in b.glyphs.get_mut(c.g0 as usize..c.g1 as usize).into_iter().flatten() {
              g.dx += shift;
 diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
-index f5fdb3c..5925b31 100644
+index 6b2605e3..fb0d0a27 100644
 --- a/crates/layout/src/para/paragraph.rs
 +++ b/crates/layout/src/para/paragraph.rs
-@@ -95,9 +95,14 @@ fn paragraph_props(p: &Paragraph, env: &ParaEnv) -> ResolvedPara {
+@@ -104,9 +104,14 @@ fn paragraph_props(p: &Paragraph, env: &ParaEnv) -> ResolvedPara {
      if let Some(spacing) = env.read_line_spacing.filter(|s| s.is_finite() && (1.0..=2.0).contains(s)) {
          rp.line_spacing = wordcraft_doc::props::LineSpacing::Multiple(spacing);
      }
@@ -64,12 +64,12 @@ index f5fdb3c..5925b31 100644
 +        rp.set_char_unit(unit.unwrap_or(size));
      }
      list_indents(&mut rp, p, env);
-     rp
+     // ODF (XSL's box model): padding takes room whether or not a side has a border.
 diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
-index 87ae674..bfc2968 100644
+index 7e4d0a94..44b8e42b 100644
 --- a/crates/layout/src/tests/grid.rs
 +++ b/crates/layout/src/tests/grid.rs
-@@ -63,6 +63,108 @@ fn line_grid_snaps_line_heights_and_fixes_lines_per_page() {
+@@ -64,6 +64,108 @@ fn line_grid_snaps_line_heights_and_fixes_lines_per_page() {
      assert_eq!(lines(&lay(&off)).1[0], lines(&lay(&plain)).1[0]);
  }
  
@@ -177,4 +177,4 @@ index 87ae674..bfc2968 100644
 +
  #[test]
  fn character_grid_places_east_asian_text_on_the_pitch() {
-     let text = "日本語の文書abc";
+     crate::test_fonts();

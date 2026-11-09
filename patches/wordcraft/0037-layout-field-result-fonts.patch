@@ -1,9 +1,9 @@
 Upstream: (not opened; layout fix: a field result shaped in more than one font (a date picture yyyy年M月d日: digits in the Latin font, 年月日 in the East Asian one) is a cluster per font; one cluster drew every glyph in the first font, with the other fonts' glyph ids (wrong glyphs on screen, and a PDF face krilla could not subset, drawn as outlines without text))
 diff --git a/crates/layout/src/para/builder.rs b/crates/layout/src/para/builder.rs
-index 4f22ff0c..6315f884 100644
+index 0622fb94..6478d281 100644
 --- a/crates/layout/src/para/builder.rs
 +++ b/crates/layout/src/para/builder.rs
-@@ -434,6 +434,14 @@ impl<'a> Builder<'a> {
+@@ -536,6 +536,14 @@ impl<'a> Builder<'a> {
              });
              return;
          };
@@ -18,7 +18,7 @@ index 4f22ff0c..6315f884 100644
          let order = if lv.is_empty() {
              (0..added.len()).collect()
          } else {
-@@ -467,6 +475,53 @@ impl<'a> Builder<'a> {
+@@ -569,6 +577,53 @@ impl<'a> Builder<'a> {
          self.clusters.push(Cluster { start, end, adv: x, kind: ClKind::Text, style, g0, g1, break_after: false, obj_h: 0.0, obj_d: 0.0, dot: false });
      }
  
@@ -72,7 +72,7 @@ index 4f22ff0c..6315f884 100644
      /// Shape `texts` on top of one another as one cluster for `start..end`: each aligned within
      /// the cluster (at least `width` wide) and raised `dy`. Returns the cluster's index.
      fn shape_overstruck(
-@@ -545,10 +600,14 @@ pub(super) fn overstrike(
+@@ -647,10 +702,14 @@ pub(super) fn overstrike(
      let s = rc.size.clamp(1.0, 1638.0);
      // The widest text at the run's own size.
      let (c0, g0, s0) = (b.clusters.len(), b.glyphs.len(), b.shown.len());
@@ -89,13 +89,13 @@ index 4f22ff0c..6315f884 100644
      b.glyphs.truncate(g0);
      b.shown.truncate(s0);
 diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
-index 6deab289..e65e3f90 100644
+index 1e7ccdcf..c69d98ea 100644
 --- a/crates/layout/src/tests.rs
 +++ b/crates/layout/src/tests.rs
-@@ -9,6 +9,7 @@ mod bidi;
- mod budget;
+@@ -11,6 +11,7 @@ mod cell_floats;
  mod complex;
  mod compress;
+ mod float_top;
 +mod field_fonts;
  mod grid;
  mod ligature;

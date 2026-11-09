@@ -1,9 +1,9 @@
 Upstream: (not opened; layout fix, measured in WPS with compatibility settings: an empty mark of a section before a new page, right after a paragraph ending with a page break, takes no line on the page the break started; its line sits beside the break mark on the page before, and the next section starts on the break page instead of after a blank one)
 diff --git a/crates/layout/src/flow.rs b/crates/layout/src/flow.rs
-index ee362f92..a1f2f752 100644
+index 0918e07e..a3f6f1b3 100644
 --- a/crates/layout/src/flow.rs
 +++ b/crates/layout/src/flow.rs
-@@ -34,14 +34,20 @@ pub(crate) fn place_para(ctx: &mut Ctx, pb: &mut PageBuilder, p: &Paragraph, blo
+@@ -37,14 +37,20 @@ pub(crate) fn place_para(ctx: &mut Ctx, pb: &mut PageBuilder, p: &Paragraph, blo
          // Its (empty) line stays where the text ended, even at the bottom of a full column.
          let (y, prev, bottom, content_bottom, at) = (pb.y, pb.prev.clone(), pb.bottom, pb.content_bottom, (pb.pages.len(), pb.col));
          let drawn = pb.page().map_or(0, |page| page.items.len());
@@ -25,10 +25,10 @@ index ee362f92..a1f2f752 100644
          return;
      }
 diff --git a/crates/layout/src/page.rs b/crates/layout/src/page.rs
-index be5fee1d..6b26b996 100644
+index db3519b2..94a6ac19 100644
 --- a/crates/layout/src/page.rs
 +++ b/crates/layout/src/page.rs
-@@ -266,6 +266,28 @@ impl PageBuilder<'_> {
+@@ -284,6 +284,28 @@ impl PageBuilder<'_> {
      /// Takes back the page a page break has just started while nothing is on it, so a page start
      /// that follows (a next-page section) doesn't leave it blank: Word keeps the break's mark on
      /// the page before, and starts one page.
@@ -58,21 +58,10 @@ index be5fee1d..6b26b996 100644
          let empty = self.after_break_mark
              && self.at_top()
 diff --git a/crates/layout/src/pass.rs b/crates/layout/src/pass.rs
-index a87f1d25..2ce8b82e 100644
+index 6abe32c4..1355d3cf 100644
 --- a/crates/layout/src/pass.rs
 +++ b/crates/layout/src/pass.rs
-@@ -10,8 +10,8 @@ use super::page::{PageBuilder, body_top_for, foot_top_for, item_bottom};
- use super::placed::Placed;
- use super::table_flow::place_table;
- use super::{
--    Arc, Block, Counters, DocLayout, Document, FieldCtx, HashMap, LayoutOptions, Page, Path, SectionProps, SectionStart, StoryRef, TextDirection,
--    ViewMode, balloons, para, vertical,
-+    Arc, Block, Counters, DocLayout, Document, FieldCtx, HashMap, InlineObject, LayoutOptions, Page, Paragraph, Path, SectionProps, SectionStart,
-+    StoryRef, TextDirection, ViewMode, balloons, para, vertical,
- };
- 
- /// How the view lays the document out: `web` for the continuous views, `reflow` for those and
-@@ -124,6 +124,26 @@ fn section_marks(doc: &Document, opts: &LayoutOptions, sections: &[(usize, &Sect
+@@ -127,6 +127,26 @@ fn section_marks(doc: &Document, opts: &LayoutOptions, sections: &[(usize, &Sect
              // Only a leading run mark is quiet; later marks stack at the page bottom (Word, #3907).
              end.checked_sub(1).and_then(|i| doc.body.get(i)).and_then(|b| b.as_para()).is_some_and(|p| p.section.is_some() && p.text.is_empty())
          });
@@ -97,13 +86,13 @@ index a87f1d25..2ce8b82e 100644
 +            .filter(|end| end.checked_sub(1).and_then(|i| doc.body.get(i)).and_then(|b| b.as_para()).is_some_and(ends_with_break)),
 +    );
      if !opts.show_hidden {
-         quiet.extend(
-             doc.body
+         quiet.extend(doc.body.iter().enumerate().filter_map(|(i, b)| {
+             b.as_para().filter(|p| p.mark.hidden == Some(true) && p.plain_text().is_empty() && !has_inline_content(doc, opts, p)).map(|_| i)
 diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
-index b89d50cf..ed7118a6 100644
+index 2ca5bd58..f1502dc3 100644
 --- a/crates/layout/src/tests.rs
 +++ b/crates/layout/src/tests.rs
-@@ -1428,6 +1428,26 @@ fn a_page_break_then_a_new_page_makes_one_page() {
+@@ -1536,6 +1536,26 @@ fn a_page_break_then_a_new_page_makes_one_page() {
      }
  }
  
@@ -129,4 +118,4 @@ index b89d50cf..ed7118a6 100644
 +
  #[test]
  fn page_numbers_can_restart_at_zero() {
-     // `w:pgNumType w:start="0"`: a cover page numbered 0, so the page after it reads 1.
+     crate::test_fonts();

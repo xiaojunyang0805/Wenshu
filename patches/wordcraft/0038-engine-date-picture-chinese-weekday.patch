@@ -1,9 +1,9 @@
 Upstream: (not opened; date pictures: W, either case, is the Chinese weekday as WPS shows it: 二, 周二, 星期二 for 1, 2, 3+ letters; Sunday 日 (unmeasured))
 diff --git a/crates/engine/src/cmd/insert/items.rs b/crates/engine/src/cmd/insert/items.rs
-index 78e08b5f..d0778931 100644
+index d703e8f2..0bd035c3 100644
 --- a/crates/engine/src/cmd/insert/items.rs
 +++ b/crates/engine/src/cmd/insert/items.rs
-@@ -89,6 +89,24 @@ pub fn format_date_parts(fmt: &str, y: i64, m: usize, d: u32, (hh, mm, ss): (u32
+@@ -113,6 +113,24 @@ pub fn format_date_parts(fmt: &str, y: i64, m: usize, d: u32, (hh, mm, ss): (u32
              i += 5;
              continue;
          }
@@ -29,10 +29,10 @@ index 78e08b5f..d0778931 100644
          while chars.get(i + n) == Some(&c) {
              n += 1;
 diff --git a/crates/engine/src/cmd/insert/tests.rs b/crates/engine/src/cmd/insert/tests.rs
-index fbff175e..591b6c78 100644
+index d6f88ccd..873cb655 100644
 --- a/crates/engine/src/cmd/insert/tests.rs
 +++ b/crates/engine/src/cmd/insert/tests.rs
-@@ -343,6 +343,12 @@ fn date_pictures() {
+@@ -370,6 +370,12 @@ fn date_pictures() {
      assert_eq!(format_date_parts("hh:mm", 2026, 10, 21, (17, 27, 3), 0), "05:27");
      assert_eq!(format_date_parts("h:mm", 2026, 10, 21, (17, 27, 3), 0), "5:27");
      assert_eq!(format_date_parts("HH:mm", 2026, 10, 21, (5, 7, 3), 0), "05:07");

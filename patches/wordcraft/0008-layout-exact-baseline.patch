@@ -1,11 +1,11 @@
 Upstream: (not opened; WPS measurement, Word unmeasured: exact-spaced lines put the baseline at 0.8 of the line, probe 31)
 diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
-index 62c36e5..000db66 100644
+index f1c1439b..29bd521e 100644
 --- a/crates/layout/src/para/lines.rs
 +++ b/crates/layout/src/para/lines.rs
-@@ -568,12 +568,14 @@ impl<'e> Breaker<'e> {
-             (LineSpacing::AtLeast(v), None) => natural.max(v),
-             (LineSpacing::Exactly(v), _) => v,
+@@ -626,12 +626,14 @@ impl<'e> Breaker<'e> {
+             Align::Right => slack,
+             _ => 0.0,
          };
 +        let exact = matches!(rp.line_spacing, LineSpacing::Exactly(_));
 +        let baseline = if grid.is_some() && !exact { h - desc } else { baseline_offset(rp.line_spacing, asc, h, desc) };
@@ -19,7 +19,7 @@ index 62c36e5..000db66 100644
              text_asc: asc,
              text_desc: desc,
              c0: self.n,
-@@ -1002,15 +1004,23 @@ const MIN_SPAN: f32 = 20.0;
+@@ -1104,15 +1106,23 @@ const MIN_SPAN: f32 = 20.0;
  /// How far below a line's top its baseline sits. Multiple spacing at or above single keeps the
  /// text at the top of the line and puts the extra leading below the baseline; below single it
  /// shrinks the whole box, ascent included (Word's output for docxide-pdf's fixtures: 1.15-spaced
@@ -47,10 +47,10 @@ index 62c36e5..000db66 100644
  /// the exclusions, left to right (Square wrapping uses both sides of an object). `Err(y)`: none
  /// here, try again at `y` (below what's in the way).
 diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
-index a5d9374..ca0a257 100644
+index d2b503fd..f169c664 100644
 --- a/crates/layout/src/tests.rs
 +++ b/crates/layout/src/tests.rs
-@@ -4845,15 +4845,20 @@ fn multiple_line_spacing_adds_its_leading_below_the_text() {
+@@ -5712,15 +5712,20 @@ fn multiple_line_spacing_adds_its_leading_below_the_text() {
              );
          }
      }

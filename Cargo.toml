@@ -51,7 +51,7 @@ unimplemented = "deny"
 
 # Mirrors upstream/wordcraft/Cargo.toml: a dependent workspace must repeat its patches.
 [patch.crates-io]
-krilla = { git = "https://github.com/storytold/craft-libs", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0" }
+krilla = { git = "https://github.com/storytold/craft-libs", rev = "1b34eba41e62138fc2438d2734523b302840b45d" }
 # The desktop front end (apps/wenshu-desktop) builds on WordCraft's patched egui and winit;
 # keep these in step with upstream/wordcraft/Cargo.toml.
 ecolor = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }

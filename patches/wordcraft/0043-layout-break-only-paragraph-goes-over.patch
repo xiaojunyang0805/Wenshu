@@ -1,9 +1,9 @@
 Upstream: (not opened; layout, measured in WPS: a line holding only a page break stays at the bottom of a full page only when its paragraph goes on after the break; a paragraph of nothing but the break that does not fit goes over, its break leaving the next page blank. Word keeps it, so this is WPS behaviour)
 diff --git a/crates/layout/src/flow.rs b/crates/layout/src/flow.rs
-index a1f2f752..0f8fa507 100644
+index a3f6f1b3..7422c335 100644
 --- a/crates/layout/src/flow.rs
 +++ b/crates/layout/src/flow.rs
-@@ -439,7 +439,13 @@ impl<'a> Flow<'a> {
+@@ -478,7 +478,13 @@ impl<'a> Flow<'a> {
      /// one of its own).
      fn stays_at_bottom(&self, pb: &PageBuilder, l: &para::Line) -> bool {
          let p = self.p;
@@ -18,10 +18,10 @@ index a1f2f752..0f8fa507 100644
          only_break || (pb.next_starts_page && p.section.is_some() && p.text.is_empty())
      }
 diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
-index ed7118a6..2c6f4212 100644
+index f1502dc3..6466713e 100644
 --- a/crates/layout/src/tests.rs
 +++ b/crates/layout/src/tests.rs
-@@ -8606,6 +8606,36 @@ fn a_page_break_inside_a_kept_paragraph_ends_what_is_kept() {
+@@ -10562,6 +10562,36 @@ fn a_page_break_inside_a_kept_paragraph_ends_what_is_kept() {
      }
  }
  

@@ -1,8 +1,9 @@
 Upstream: folded into #5006 as 0ac59db8; automatic spaces share the squeeze pool (WPS, F13)
 diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
+index b5a69d1c..fb79e42e 100644
 --- a/crates/layout/src/para.rs
 +++ b/crates/layout/src/para.rs
-@@ -110,7 +110,8 @@ pub struct ParaLayout {
+@@ -117,7 +117,8 @@ pub struct ParaLayout {
  /// marks in the last unit and without). The line has a pool: the base below, plus an amount for
  /// each compressible mark in its last unit (what can't be broken off the line's end, `《瑞` or
  /// `中。`): a closing mark's free blank half at the line end comes out of the pool, and the marks
@@ -12,7 +13,7 @@ diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
  #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
  pub enum SqueezeRule {
      /// Compatibility mode 14 and older (any alignment): half an em, however many marks, and a
-@@ -132,6 +133,12 @@ pub struct Squeeze {
+@@ -139,6 +140,12 @@ pub struct Squeeze {
      /// The blank is on the mark's left (an opening mark): the mark itself moves left. Else the
      /// clusters after it do.
      pub left: bool,
@@ -25,7 +26,7 @@ diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
  }
  
  impl ParaLayout {
-@@ -169,7 +176,8 @@ impl ParaLayout {
+@@ -189,7 +196,8 @@ impl ParaLayout {
      fn squeeze_marks(&self, c0: usize, c1: usize) -> &[Squeeze] {
          let from = self.squeeze.partition_point(|s| s.k < c0);
          let mut to = self.squeeze.partition_point(|s| s.k < c1).max(from);
@@ -35,7 +36,7 @@ diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
              to -= 1;
          }
          self.squeeze.get(from..to).unwrap_or_default()
-@@ -183,15 +191,14 @@ impl ParaLayout {
+@@ -203,15 +211,14 @@ impl ParaLayout {
          }
          let k = marks.len() as f32;
          let rooms: f32 = marks.iter().map(|s| s.room).sum();
@@ -54,9 +55,10 @@ diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
          let free = if self.ends_in_free_mark(c0, c1) { 0.5 } else { 0.0 };
          ((base + per_mark * in_unit - free).max(0.0) * em).min(rooms)
 diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
+index 1d636ece..16d53757 100644
 --- a/crates/layout/src/para/grid.rs
 +++ b/crates/layout/src/para/grid.rs
-@@ -160,7 +169,7 @@ pub(super) fn compress_punct(b: &Builder, text: &str) -> (Vec<Squeeze>, Vec<(usi
+@@ -160,7 +160,7 @@ pub(super) fn compress_punct(b: &Builder, text: &str) -> (Vec<Squeeze>, Vec<(usi
              continue;
          }
          if let Some(side) = crate::kinsoku::squeeze_side(ch) {
@@ -66,9 +68,10 @@ diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
          if crate::kinsoku::end_blank(ch) {
              end.push((k, (size / 2.0).min(200.0)));
 diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
+index a616fa06..b21518d1 100644
 --- a/crates/layout/src/para/paragraph.rs
 +++ b/crates/layout/src/para/paragraph.rs
-@@ -596,7 +596,17 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+@@ -701,7 +701,17 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
      let compresses = doc.settings.char_spacing.compresses_punctuation() && (justified || squeeze_rule == super::SqueezeRule::HalfEm);
      let mut end_marks = Vec::new();
      let squeeze = if compresses {
@@ -88,6 +91,7 @@ diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragr
          for (k, room) in end_blank {
              match auto_space.binary_search_by_key(&k, |a| a.0) {
 diff --git a/crates/layout/src/tests/compress.rs b/crates/layout/src/tests/compress.rs
+index f2689542..42a1ba14 100644
 --- a/crates/layout/src/tests/compress.rs
 +++ b/crates/layout/src/tests/compress.rs
 @@ -260,3 +260,26 @@ fn marks_in_the_last_unit_enlarge_the_lines_squeeze() {

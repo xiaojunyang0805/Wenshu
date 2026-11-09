@@ -1,9 +1,9 @@
 Upstream: (not opened; WPS measurement: lines in table cells snap to the line grid only under w:adjustLineHeightInTable, now read and written back; F18)
 diff --git a/crates/doc/src/settings.rs b/crates/doc/src/settings.rs
-index db9845cd..3e4199ec 100644
+index 6ba30d9f..63c23ab8 100644
 --- a/crates/doc/src/settings.rs
 +++ b/crates/doc/src/settings.rs
-@@ -135,6 +135,10 @@ pub struct Settings {
+@@ -139,6 +139,10 @@ pub struct Settings {
      /// digits and punctuation keep their own widths.
      #[serde(default, skip_serializing_if = "std::ops::Not::not")]
      pub balance_sbcs_dbcs: bool,
@@ -14,7 +14,7 @@ index db9845cd..3e4199ec 100644
      /// Keep contextual paragraph spacing inside legacy table cells (`allowSpaceOfSameStyleInTable`).
      /// Word ignores the layout override in compatibility mode 15, but the flag still round-trips.
      pub allow_space_of_same_style_in_table: bool,
-@@ -345,6 +349,7 @@ impl Default for Settings {
+@@ -366,6 +370,7 @@ impl Default for Settings {
              sum_paragraph_spacing: false,
              do_not_expand_shift_return: false,
              balance_sbcs_dbcs: false,
@@ -23,7 +23,7 @@ index db9845cd..3e4199ec 100644
              grid_h: DEFAULT_GRID,
              grid_v: DEFAULT_GRID,
 diff --git a/crates/docx/src/read/meta.rs b/crates/docx/src/read/meta.rs
-index 7685889e..c6d8d449 100644
+index f85399aa..2b5ad09c 100644
 --- a/crates/docx/src/read/meta.rs
 +++ b/crates/docx/src/read/meta.rs
 @@ -40,6 +40,7 @@ impl Reader<'_> {
@@ -49,10 +49,10 @@ index 39a3f43e..56432108 100644
          w.empty("w:doNotUseHTMLParagraphAutoSpacing", &[]);
      }
 diff --git a/crates/docx/tests/it/fixtures.rs b/crates/docx/tests/it/fixtures.rs
-index 82ce4b56..e51e0dda 100644
+index 80048371..d0921e13 100644
 --- a/crates/docx/tests/it/fixtures.rs
 +++ b/crates/docx/tests/it/fixtures.rs
-@@ -3741,6 +3741,22 @@ fn balance_single_byte_double_byte_width_is_read_and_kept() {
+@@ -4055,6 +4055,22 @@ fn balance_single_byte_double_byte_width_is_read_and_kept() {
      assert_eq!(settings(""), (false, false));
  }
  
@@ -76,10 +76,10 @@ index 82ce4b56..e51e0dda 100644
  /// corner cut-outs drawn as isosceles triangles pointed the wrong way.
  #[test]
 diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
-index e89cdc8d..a0b1dca1 100644
+index 90875e13..d67e90b6 100644
 --- a/crates/layout/src/para/lines.rs
 +++ b/crates/layout/src/para/lines.rs
-@@ -200,7 +200,10 @@ impl<'e> Breaker<'e> {
+@@ -203,7 +203,10 @@ impl<'e> Breaker<'e> {
              hyph_limit: settings.consecutive_hyphen_limit as usize,
              widths: word_widths(&pl.clusters, &pl.hyph_after),
              rtl_para: rp.bidi,
@@ -92,10 +92,10 @@ index e89cdc8d..a0b1dca1 100644
              est_h,
              // Exact spacing fixes the table-contact boundary even when the mark has other metrics.
 diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
-index 00d83b30..61e2b003 100644
+index 8a6b82e7..78eb08bd 100644
 --- a/crates/layout/src/tests/grid.rs
 +++ b/crates/layout/src/tests/grid.rs
-@@ -355,3 +355,33 @@ fn a_character_grid_narrows_the_column_to_whole_pitches() {
+@@ -357,3 +357,33 @@ fn a_character_grid_narrows_the_column_to_whole_pitches() {
      // A line grid alone changes nothing.
      assert!((right(&with_grid("x", DocGridType::Lines, 0)) - full).abs() < 0.01);
  }

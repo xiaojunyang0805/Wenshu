@@ -1,9 +1,9 @@
 Upstream: (not opened; WPS measurement: on a line grid without a character pitch, leftChars/rightChars count the Normal style's size, firstLineChars the mark's; probe 34)
 diff --git a/crates/doc/src/resolve.rs b/crates/doc/src/resolve.rs
-index fd51066..aaa9401 100644
+index 87ea2ea3..c96a52e8 100644
 --- a/crates/doc/src/resolve.rs
 +++ b/crates/doc/src/resolve.rs
-@@ -228,9 +228,16 @@ impl ResolvedPara {
+@@ -246,9 +246,16 @@ impl ResolvedPara {
      /// Turn the indents given in characters into points, one character being `size` points: the
      /// size of the paragraph mark's font (as Word measures `w:firstLineChars` and friends).
      pub fn set_char_unit(&mut self, size: f32) {
@@ -23,10 +23,10 @@ index fd51066..aaa9401 100644
                  *pts = (chars * size).clamp(-MAX_INDENT, MAX_INDENT);
              }
 diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
-index 8788881..1f0c9aa 100644
+index 31b1331a..6bee0d36 100644
 --- a/crates/layout/src/para/paragraph.rs
 +++ b/crates/layout/src/para/paragraph.rs
-@@ -98,11 +98,16 @@ fn paragraph_props(p: &Paragraph, env: &ParaEnv) -> ResolvedPara {
+@@ -107,11 +107,16 @@ fn paragraph_props(p: &Paragraph, env: &ParaEnv) -> ResolvedPara {
      // Indents in characters are measured in the paragraph mark's font size, or in the character
      // pitch when the paragraph sits on a character grid (two characters of indent are two cells,
      // so a 28-character grid line holds 26 after a two-character first-line indent, whatever the
@@ -45,12 +45,12 @@ index 8788881..1f0c9aa 100644
 +        }
      }
      list_indents(&mut rp, p, env);
-     rp
+     // ODF (XSL's box model): padding takes room whether or not a side has a border.
 diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
-index d858556..0fbc414 100644
+index 23810cfc..3710d21c 100644
 --- a/crates/layout/src/tests/grid.rs
 +++ b/crates/layout/src/tests/grid.rs
-@@ -246,3 +246,28 @@ fn character_grid_places_east_asian_text_on_the_pitch() {
+@@ -248,3 +248,28 @@ fn character_grid_places_east_asian_text_on_the_pitch() {
          }
      }
  }

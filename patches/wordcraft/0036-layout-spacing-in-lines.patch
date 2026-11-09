@@ -1,9 +1,9 @@
 Upstream: (not opened; w:beforeLines / w:afterLines are read, written back and laid out: lines of the section line grid, 12 pt without one, overriding the spacing in points; 0 is ignored (WPS); they were dropped)
 diff --git a/crates/doc/src/props/para_props.rs b/crates/doc/src/props/para_props.rs
-index 29a8b868..e81a4319 100644
+index a4854024..20806a7f 100644
 --- a/crates/doc/src/props/para_props.rs
 +++ b/crates/doc/src/props/para_props.rs
-@@ -281,6 +281,13 @@ pub struct ParaProps {
+@@ -414,6 +414,13 @@ pub struct ParaProps {
      /// HTML-style automatic space after (`w:afterAutospacing`): 14 pt, none at the end of a cell.
      #[serde(skip_serializing_if = "Option::is_none")]
      pub space_after_auto: Option<bool>,
@@ -17,20 +17,20 @@ index 29a8b868..e81a4319 100644
      #[serde(skip_serializing_if = "Option::is_none")]
      pub line_spacing: Option<LineSpacing>,
      /// Ignore space before/after between paragraphs of the same style.
-@@ -374,7 +381,7 @@ impl ParaProps {
+@@ -517,7 +524,7 @@ impl ParaProps {
  
      fn overlay_layout(&mut self, patch: &ParaProps) {
          overlay_fields!(self, patch; style, align, indent_left, indent_right, indent_first, indent_left_chars, indent_right_chars, indent_first_chars,
--            space_before, space_after, space_before_auto, space_after_auto, line_spacing, contextual_spacing, mirror_indents, tabs, shading, borders);
-+            space_before, space_after, space_before_auto, space_after_auto, space_before_lines, space_after_lines, line_spacing, contextual_spacing, mirror_indents, tabs, shading, borders);
+-            space_before, space_after, space_before_auto, space_after_auto, line_spacing, contextual_spacing, mirror_indents, adjust_right_indent, tabs, shading, borders);
++            space_before, space_after, space_before_auto, space_after_auto, space_before_lines, space_after_lines, line_spacing, contextual_spacing, mirror_indents, adjust_right_indent, tabs, shading, borders);
      }
  
      fn overlay_pagination(&mut self, patch: &ParaProps) {
 diff --git a/crates/doc/src/resolve.rs b/crates/doc/src/resolve.rs
-index 012d32fc..5aaff432 100644
+index 0afedf2e..bb07bdab 100644
 --- a/crates/doc/src/resolve.rs
 +++ b/crates/doc/src/resolve.rs
-@@ -174,6 +174,12 @@ pub struct ResolvedPara {
+@@ -185,6 +185,12 @@ pub struct ResolvedPara {
      pub before_auto: bool,
      #[serde(default)]
      pub after_auto: bool,
@@ -43,7 +43,7 @@ index 012d32fc..5aaff432 100644
      pub line_spacing: LineSpacing,
      pub contextual_spacing: bool,
      /// Left/right indents are inside/outside: they swap on even pages.
-@@ -265,6 +271,8 @@ impl ResolvedPara {
+@@ -283,6 +289,8 @@ impl ResolvedPara {
              space_after: if p.space_after_auto == Some(true) { AUTO_SPACING } else { p.space_after.unwrap_or(0.0).clamp(0.0, 1584.0) },
              before_auto: p.space_before_auto == Some(true),
              after_auto: p.space_after_auto == Some(true),
@@ -53,11 +53,11 @@ index 012d32fc..5aaff432 100644
                  LineSpacing::Multiple(m) => LineSpacing::Multiple(if m.is_finite() { m.clamp(0.06, 132.0) } else { 1.0 }),
                  LineSpacing::AtLeast(v) => LineSpacing::AtLeast(if v.is_finite() { v.clamp(0.0, 1584.0) } else { 0.0 }),
 diff --git a/crates/docx/src/read/props.rs b/crates/docx/src/read/props.rs
-index 26b3db8b..0e0eb53a 100644
+index a4675aea..32e0f10b 100644
 --- a/crates/docx/src/read/props.rs
 +++ b/crates/docx/src/read/props.rs
-@@ -377,6 +377,16 @@ impl PropCtx {
-                     if let Some(v) = tw(k, "w:after") {
+@@ -416,6 +416,16 @@ impl PropCtx {
+                     if let Some(v) = tw_u16(k, "w:after") {
                          p.space_after = Some(v.max(0.0));
                      }
 +                    // Spacing in hundredths of a line (`w:beforeLines`, `w:afterLines`).
@@ -74,10 +74,10 @@ index 26b3db8b..0e0eb53a 100644
                      let auto = |name| k.attr(name).map(|v| matches!(v.trim(), "1" | "true" | "on"));
                      if let Some(a) = auto("w:beforeAutospacing") {
 diff --git a/crates/docx/src/write/props.rs b/crates/docx/src/write/props.rs
-index 634ca39f..f238bbc1 100644
+index d47a9480..46ebc552 100644
 --- a/crates/docx/src/write/props.rs
 +++ b/crates/docx/src/write/props.rs
-@@ -377,6 +377,8 @@ fn write_text_flow(w: &mut W, p: &ParaProps) {
+@@ -391,6 +391,8 @@ fn write_text_flow(w: &mut W, p: &ParaProps) {
  fn write_spacing(w: &mut W, p: &ParaProps) {
      if p.space_before.is_some()
          || p.space_after.is_some()
@@ -86,7 +86,7 @@ index 634ca39f..f238bbc1 100644
          || p.line_spacing.is_some()
          || p.space_before_auto.is_some()
          || p.space_after_auto.is_some()
-@@ -388,16 +390,25 @@ fn write_spacing(w: &mut W, p: &ParaProps) {
+@@ -402,16 +404,25 @@ fn write_spacing(w: &mut W, p: &ParaProps) {
              LineSpacing::AtLeast(v) => (twips(v.abs()), "atLeast"),
              LineSpacing::Exactly(v) => (twips(v.abs()), "exact"),
          });
@@ -113,10 +113,10 @@ index 634ca39f..f238bbc1 100644
              a.push(("w:afterAutospacing", if on { "1" } else { "0" }));
          }
 diff --git a/crates/docx/tests/it/fixtures.rs b/crates/docx/tests/it/fixtures.rs
-index 44b65ab7..3fa782be 100644
+index a9e71f96..b370cae9 100644
 --- a/crates/docx/tests/it/fixtures.rs
 +++ b/crates/docx/tests/it/fixtures.rs
-@@ -4255,3 +4255,17 @@ fn a_vml_text_box_with_empty_image_data_is_kept() {
+@@ -4851,3 +4851,17 @@ fn a_vml_text_box_with_empty_image_data_is_kept() {
      assert_eq!(t2, t, "the text boxes survive a save");
  }
  
@@ -135,10 +135,10 @@ index 44b65ab7..3fa782be 100644
 +    assert_eq!((q.space_before_lines, q.space_after_lines), (Some(0.5), Some(0.25)));
 +}
 diff --git a/crates/docx/tests/it/roundtrip.rs b/crates/docx/tests/it/roundtrip.rs
-index f6466743..bf28f967 100644
+index 6c41e14e..cc52501f 100644
 --- a/crates/docx/tests/it/roundtrip.rs
 +++ b/crates/docx/tests/it/roundtrip.rs
-@@ -173,6 +173,8 @@ fn every_para_prop_round_trips() {
+@@ -174,6 +174,8 @@ fn every_para_prop_round_trips() {
          space_after: Some(12.0),
          space_before_auto: Some(true),
          space_after_auto: Some(false),
@@ -148,10 +148,10 @@ index f6466743..bf28f967 100644
          contextual_spacing: Some(true),
          mirror_indents: Some(true),
 diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
-index f8aa9822..52919a85 100644
+index f14b5206..b1fcf4a4 100644
 --- a/crates/layout/src/para/paragraph.rs
 +++ b/crates/layout/src/para/paragraph.rs
-@@ -92,6 +92,17 @@ fn is_special(c: char) -> bool {
+@@ -101,6 +101,17 @@ fn is_special(c: char) -> bool {
  fn paragraph_props(p: &Paragraph, env: &ParaEnv) -> ResolvedPara {
      let doc = env.doc;
      let mut rp = doc.styles.resolve_para_in(&p.props, env.table.map(|t| &t.para));
@@ -169,11 +169,24 @@ index f8aa9822..52919a85 100644
      if let Some(spacing) = env.read_line_spacing.filter(|s| s.is_finite() && (1.0..=2.0).contains(s)) {
          rp.line_spacing = wordcraft_doc::props::LineSpacing::Multiple(spacing);
      }
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+index 4b7860ea..1e7ccdcf 100644
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -5680,7 +5680,7 @@ fn line_spacing_does_not_scale_pictures() {
+     let l = lay(&d);
+     let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
+     let line = &para.lines[0];
+-    let natural = para.styles[0].ascent + para.styles[0].descent;
++    let _natural = para.styles[0].ascent + para.styles[0].descent;
+     // Word, measured (Aptos, Arial, Times; 10 and 20 pt; single, 1.15, 1.5): a line of only a
+     // picture is the picture plus the spacing's share of the text's height, with no descent below
+     // it, not (picture + descent) x 1.15.
 diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
-index 3ca9586c..c7632bf5 100644
+index a210c2fc..fa7e71a5 100644
 --- a/crates/layout/src/tests/grid.rs
 +++ b/crates/layout/src/tests/grid.rs
-@@ -441,3 +441,42 @@ fn multiple_spacing_on_a_line_grid_takes_the_larger_of_the_pitches_and_m_pitches
+@@ -443,3 +443,42 @@ fn multiple_spacing_on_a_line_grid_takes_the_larger_of_the_pitches_and_m_pitches
      assert!((height(30.0, 1.5) - big).abs() < 1e-3, "1.5 × 18 is less than its pitches: unchanged");
      assert!((height(10.0, 2.5) - 45.0).abs() < 1e-3, "small text at 2.5 spacing takes 2.5 pitches ({})", height(10.0, 2.5));
  }

@@ -1,8 +1,9 @@
 Upstream: (not opened; fold into the F7 change with 0009/0017: under balanceSingleByteDoubleByteWidth an East Asian character counts w:spacing twice, per byte; F15)
 diff --git a/crates/layout/src/para/builder.rs b/crates/layout/src/para/builder.rs
+index 8078c51e..936f067c 100644
 --- a/crates/layout/src/para/builder.rs
 +++ b/crates/layout/src/para/builder.rs
-@@ -340,7 +340,10 @@ impl<'a> Builder<'a> {
+@@ -442,7 +442,10 @@ impl<'a> Builder<'a> {
                  });
                  // `balanceSingleByteDoubleByteWidth`: a space is half an em, whatever its font.
                  let adv = if s == " " && self.env.doc.settings.balance_sbcs_dbcs { st.size * 0.5 * hscale } else { adv };
@@ -15,6 +16,7 @@ diff --git a/crates/layout/src/para/builder.rs b/crates/layout/src/para/builder.
                  let (cs, ce) = if substituted { remap_range(&map_starts, &orig_of, sub.len(), gs, ge) } else { (gs, ge) };
                  self.clusters.push(Cluster {
 diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
+index 628bbea8..ab5d3c13 100644
 --- a/crates/layout/src/para/grid.rs
 +++ b/crates/layout/src/para/grid.rs
 @@ -85,8 +85,10 @@ pub(super) fn snap_chars(b: &mut Builder, text: &str, grid: &Grid) {
@@ -31,9 +33,10 @@ diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
              grid.advance(size).map_or(pitch, |a| (a + spacing).max(0.0))
          } else {
 diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+index 18241502..8a696e81 100644
 --- a/crates/layout/src/tests.rs
 +++ b/crates/layout/src/tests.rs
-@@ -12106,3 +12106,27 @@ fn balanced_single_byte_width_makes_a_label_s_suffix_space_half_an_em() {
+@@ -15304,3 +15304,27 @@ fn balanced_single_byte_width_makes_a_label_s_suffix_space_half_an_em() {
      assert!((text_x(true) - 8.0).abs() < 0.01, "half an em: {}", text_x(true));
      assert!((text_x(false) - 4.0).abs() < 0.01, "a quarter: {}", text_x(false));
  }

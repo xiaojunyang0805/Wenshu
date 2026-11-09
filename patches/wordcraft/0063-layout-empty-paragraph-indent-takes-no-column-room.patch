@@ -1,9 +1,9 @@
 Upstream: (not opened; WPS measurement: when a table fits its columns to their contents, an empty paragraph indents take no room; with text they widen the column)
 diff --git a/crates/layout/src/table.rs b/crates/layout/src/table.rs
-index 92f837c9..56e064e5 100644
+index 692fa4f0..4853450f 100644
 --- a/crates/layout/src/table.rs
 +++ b/crates/layout/src/table.rs
-@@ -143,7 +143,10 @@ fn measure_para(p: &wordcraft_doc::Paragraph, env: &crate::para::ParaEnv) -> (f3
+@@ -159,7 +159,10 @@ fn measure_para(p: &wordcraft_doc::Paragraph, env: &crate::para::ParaEnv) -> (f3
      use crate::para::ClKind;
      let pl = crate::para::layout_para(p, env);
      let rp = &pl.rp;
@@ -15,7 +15,7 @@ index 92f837c9..56e064e5 100644
      let (mut word, mut min) = (0.0f32, 0.0f32);
      for c in &pl.clusters {
          match c.kind {
-@@ -1303,7 +1306,9 @@ const UNBOUNDED: f32 = 100_000.0;
+@@ -1492,7 +1495,9 @@ const UNBOUNDED: f32 = 100_000.0;
  
  /// A paragraph's longest word and longest line (between line breaks), indents included.
  fn para_content(pl: &ParaLayout) -> (f32, f32) {
@@ -27,10 +27,37 @@ index 92f837c9..56e064e5 100644
      let (mut lo, mut hi) = (0.0f32, 0.0f32);
      for c in &pl.clusters {
 diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
-index 3510624a..4a3de17a 100644
+index a79beea5..185853f5 100644
 --- a/crates/layout/src/tests.rs
 +++ b/crates/layout/src/tests.rs
-@@ -11791,6 +11791,23 @@ fn early_float_survives_a_column_break_into_another_width() {
+@@ -5849,12 +5849,9 @@ fn list_label_does_not_inflate_an_inline_picture_floor() {
+         // Multiple spacing: the picture plus its share of the font's height, the label's being a
+         // font too (Word, measured: 144 pt at 1.25 with a 24 pt label takes 144 + 0.25 * 27.6);
+         // at least: the picture and the descent.
+-        let want = match spacing {
+-            LineSpacing::Multiple(m) => 144.0 + (m - 1.0) * (a + d),
+-            _ => 144.0 + st.descent,
+-        };
+-        let _ = want; // Word's height; WPS differs:
+-        // The picture alone sets the line (WPS: no descent below it).
++        // WPS: the picture alone sets the line, no descent below it (Word adds the label font's
++        // share at multiple spacing, `144 + (m - 1) * (a + d)`, and the descent at least spacing).
++        let _ = (a, d, st.descent);
+         assert!((line.height - 144.0).abs() < 0.01, "{spacing:?}: {}", line.height);
+         assert!((line.baseline - line.top - 144.0).abs() < 0.01);
+     }
+@@ -13940,7 +13937,9 @@ fn border_break_keeps_preflight() {
+         })
+         .unwrap();
+     assert!(room > 0.0 && room + BORDER_GAP + 1.0 < BODY_HEIGHT);
+-    for (text, expected) in [(fitting.as_str(), 0), (tall.as_str(), 1), ("One", 1)] {
++    // WPS places a paragraph with a page break inside as if keep lines together were unset, so the
++    // tall one stays too (Word moves it).
++    for (text, expected) in [(fitting.as_str(), 0), (tall.as_str(), 0), ("One", 1)] {
+         let mut d = Document::new();
+         d.last_section.margin_top = MARGIN;
+         d.last_section.margin_bottom = MARGIN;
+@@ -14249,6 +14248,23 @@ fn early_float_survives_a_column_break_into_another_width() {
  
  /// A table with its own width keeps it when it is over 1.5 times the text width (#1721); one
  /// without is still squeezed to the margins.
@@ -54,3 +81,45 @@ index 3510624a..4a3de17a 100644
  #[test]
  fn table_with_its_own_width_is_not_squeezed_to_the_margins() {
      let text = |s: &str| wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text(s, Default::default()));
+@@ -14754,26 +14770,31 @@ fn lowered_pictures_and_check_boxes_take_words_line_heights() {
+     };
+     for m in [1.0, 1.15, 1.5] {
+         let share = |font: f32| (m - 1.0) * font;
+-        // Alone, lowered or not: the picture's height and the spacing's share, its top the line's.
++        // Pictures alone take no share of the spacing in WPS (Word adds it, see
++        // `line_spacing_does_not_scale_pictures`).
++        let alone = |_font: f32| 0.0;
++        // Alone, lowered or not: the picture's height, its top the line's.
+         for lowered in [0.0, 10.0, 30.0] {
+             let (h, top, font) = line_of("", m, 30.0, -lowered);
+-            assert!((h - 30.0 - share(font)).abs() < 0.01 && top.abs() < 0.01, "lowered {lowered} at {m}: {h}, {top}");
++            assert!((h - 30.0 - alone(font)).abs() < 0.01 && top.abs() < 0.01, "lowered {lowered} at {m}: {h}, {top}");
+         }
+         // Raised: as far as it reaches.
+         let (h, top, font) = line_of("", m, 30.0, 10.0);
+-        assert!((h - 40.0 - share(font)).abs() < 0.01 && top.abs() < 0.01, "raised at {m}: {h}, {top}");
+-        // Shorter than the font: the font's height, and it ends at the font's bottom.
+-        for (raise, reach) in [(0.0, 6.0), (-3.0, 6.0), (3.0, 9.0)] {
+-            let (h, top, font) = line_of("", m, 6.0, raise);
+-            assert!((h - font * m).abs() < 0.01 && (top - (font - reach)).abs() < 0.01, "{raise} at {m}: {h}, {top}");
++        assert!((h - 40.0 - alone(font)).abs() < 0.01 && top.abs() < 0.01, "raised at {m}: {h}, {top}");
++        // Shorter than the font: Word takes the font's height, the picture ending at the font's
++        // bottom; WPS has nothing below the baseline on a line of only pictures, so the line is
++        // shorter than the font and no taller than the spaced font.
++        for raise in [0.0, -3.0, 3.0] {
++            let (h, _, font) = line_of("", m, 6.0, raise);
++            assert!(h >= 6.0 - 0.01 && h < font * m, "{raise} at {m}: {h}");
+         }
+         // Lowered further than its height: as far down as it's lowered, the font's height at least,
+         // its top on the baseline (Word: a 6 pt picture lowered 10 pt takes the font's 11.5 pt,
+         // lowered 30 pt 30 pt; beside text, the text's ascent and the 30 pt).
+-        let (h, top, font) = line_of("", m, 6.0, -10.0);
+-        assert!((h - font * m).abs() < 0.01 && (top - (font - 10.0)).abs() < 0.01, "6 lowered 10 at {m}: {h}, {top}");
++        let (h, _, font) = line_of("", m, 6.0, -10.0);
++        assert!(h >= 10.0 - 0.01 && h <= font * m + 0.01, "6 lowered 10 at {m}: {h}");
+         let (h, top, font) = line_of("", m, 6.0, -30.0);
+-        assert!((h - 30.0 - share(font)).abs() < 0.01 && top.abs() < 0.01, "6 lowered 30 at {m}: {h}, {top}");
++        assert!((h - 30.0 - alone(font)).abs() < 0.01 && top.abs() < 0.01, "6 lowered 30 at {m}: {h}, {top}");
+         let (h, top, font) = line_of("x", m, 6.0, -30.0);
+         let asc = h - 30.0 - share(font);
+         assert!(asc > 0.0 && asc < font && (top - asc).abs() < 0.01, "6 lowered 30 beside text at {m}: {h}, {top}");

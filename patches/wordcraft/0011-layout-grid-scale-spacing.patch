@@ -1,6 +1,6 @@
 Upstream: folded into #5003 as 902f8efe (https://github.com/storytold/wordcraft/pull/5003); w:w scales the size the grid adjustment is added to, w:spacing on top (WPS, probe 35)
 diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
-index 845816e..e3e3554 100644
+index 845816ef..e3e35545 100644
 --- a/crates/layout/src/para/grid.rs
 +++ b/crates/layout/src/para/grid.rs
 @@ -58,8 +58,9 @@ pub fn is_east_asian(c: char) -> bool {
@@ -34,10 +34,10 @@ index 845816e..e3e3554 100644
          for g in b.glyphs.get_mut(c.g0 as usize..c.g1 as usize).into_iter().flatten() {
              g.dx += shift;
 diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
-index 0fbc414..9901f38 100644
+index 3710d21c..f770492f 100644
 --- a/crates/layout/src/tests/grid.rs
 +++ b/crates/layout/src/tests/grid.rs
-@@ -271,3 +271,20 @@ fn character_indents_on_a_line_grid_count_the_default_size_at_the_sides() {
+@@ -273,3 +273,20 @@ fn character_indents_on_a_line_grid_count_the_default_size_at_the_sides() {
      let indent = first.lines[0].xs[0] - first.lines[1].xs[0];
      assert!((indent - 2.0 * mark).abs() < 0.01, "first-line indent {indent} for a {mark} pt mark");
  }

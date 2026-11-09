@@ -1,9 +1,9 @@
 Upstream: (not opened; WPS measurement: a line spacing of at least 0 (w:line="0" w:lineRule="atLeast") is no rule at all to WPS, the line keeps its natural height off the document grid; any other minimum, 0.05 pt included, still snaps)
 diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
-index f89cfd9c..53333815 100644
+index ee05e45f..73b6fd6e 100644
 --- a/crates/layout/src/para/lines.rs
 +++ b/crates/layout/src/para/lines.rs
-@@ -497,9 +497,11 @@ impl<'e> Breaker<'e> {
+@@ -543,14 +543,16 @@ impl<'e> Breaker<'e> {
          let grid = self.grid.as_ref();
          let (height, centred) = match (rp.line_spacing, grid) {
              (LineSpacing::Multiple(m), Some(g)) => (g.multiple_height(natural, m).max(g.snap_height(pictures)), true),
@@ -11,13 +11,18 @@ index f89cfd9c..53333815 100644
 +            // At least 0 (`w:line="0" w:lineRule="atLeast"`) is no rule at all to WPS: the
 +            // natural height, off the grid (any other minimum, 0.05 pt included, snaps).
 +            (LineSpacing::AtLeast(v), Some(g)) if v > 0.0 => (g.snap_height(natural.max(pictures)).max(v), true),
-             (LineSpacing::Multiple(m), None) => ((text_natural * m + label_extra).max(text_pictures), false),
+             // WPS: pictures alone take their own height, without the spacing's share of the font's
+             // (a 144 pt picture on a 1.15-spaced line is 144 pt; Word adds 0.15 of the font height).
+             (LineSpacing::Multiple(m), None) => {
+                 let share = if pictures_alone { 0.0 } else { (m - 1.0).max(0.0) * text_natural };
+                 ((text_natural * m + label_extra).max(text_pictures + share), false)
+             }
 -            (LineSpacing::AtLeast(v), None) => (natural.max(text_pictures).max(v), false),
 +            (LineSpacing::AtLeast(v), _) => (natural.max(text_pictures).max(v), false),
              (LineSpacing::Exactly(v), _) => (v, false),
          };
          let baseline = if centred {
-@@ -590,13 +592,14 @@ impl<'e> Breaker<'e> {
+@@ -646,9 +648,9 @@ impl<'e> Breaker<'e> {
          let natural = asc + desc;
          let h = match (rp.line_spacing, grid) {
              (LineSpacing::Multiple(m), Some(g)) => g.multiple_height(natural, m),
@@ -28,6 +33,10 @@ index f89cfd9c..53333815 100644
 +            (LineSpacing::AtLeast(v), _) => natural.max(v),
              (LineSpacing::Exactly(v), _) => v,
          };
+         // The empty line's caret follows the alignment, as an empty paragraph's does.
+@@ -659,7 +661,8 @@ impl<'e> Breaker<'e> {
+             _ => 0.0,
+         };
          let exact = matches!(rp.line_spacing, LineSpacing::Exactly(_));
 -        let baseline = if grid.is_some() && !exact { h - desc } else { baseline_offset(rp.line_spacing, asc, h, desc) };
 +        let off_grid = matches!(rp.line_spacing, LineSpacing::AtLeast(v) if v <= 0.0);
@@ -36,10 +45,10 @@ index f89cfd9c..53333815 100644
          let (x0, left, right) = if self.rtl_para { (width - x0, width - self.base_right, width - x0) } else { (x0, x0, self.base_right) };
          self.lines.push(Line {
 diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
-index c7632bf5..06e47e87 100644
+index fa7e71a5..3e59820e 100644
 --- a/crates/layout/src/tests/grid.rs
 +++ b/crates/layout/src/tests/grid.rs
-@@ -63,6 +63,27 @@ fn line_grid_snaps_line_heights_and_fixes_lines_per_page() {
+@@ -64,6 +64,27 @@ fn line_grid_snaps_line_heights_and_fixes_lines_per_page() {
      assert_eq!(lines(&lay(&off)).1[0], lines(&lay(&plain)).1[0]);
  }
  

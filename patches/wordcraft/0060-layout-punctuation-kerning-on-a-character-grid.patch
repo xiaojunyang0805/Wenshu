@@ -28,10 +28,10 @@ index 1a0816b0..db538ab4 100644
          }
      }
 diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
-index cb35c0a8..2b71fdca 100644
+index f5292910..5e93a8d9 100644
 --- a/crates/layout/src/para/paragraph.rs
 +++ b/crates/layout/src/para/paragraph.rs
-@@ -618,11 +618,12 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+@@ -715,11 +715,12 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
      if rp.snap_to_grid {
          snap_chars(&mut sh.b, &p.text, &env.grid);
      }
@@ -48,10 +48,44 @@ index cb35c0a8..2b71fdca 100644
      // Text on a character grid keeps to its cells; compression applies there too (WPS).
      let mut auto_space =
 diff --git a/crates/layout/src/tests/compress.rs b/crates/layout/src/tests/compress.rs
-index 99d572c3..8139327a 100644
+index 99d572c3..06cab9dd 100644
 --- a/crates/layout/src/tests/compress.rs
 +++ b/crates/layout/src/tests/compress.rs
-@@ -405,6 +405,21 @@ fn kerned_text_closes_up_adjacent_marks_by_half_an_em() {
+@@ -186,7 +186,7 @@ fn a_closing_mark_ending_a_line_needs_no_room_for_its_blank_half() {
+     // no squeeze, so it goes down with the ideograph before it.
+     let mut d = doc(&text('”'), CharSpacing::CompressPunctuation, Some(19.6));
+     if let Some(Block::Para(p)) = d.body.first_mut().map(Arc::make_mut) {
+-        p.runs[0].props.hint_ea = Some(true);
++        p.runs[0].props.hint_ea = Some(false);
+     }
+     let g = first_para(&lay(&d));
+     // (Only where a font draws the quote full-width; else it is a narrow Latin quote that fits.)
+@@ -243,11 +243,19 @@ fn a_line_may_break_before_an_opening_curly_quote_between_ideographs() {
+     // never broke beside a curly quote, so the line lost 保 as well. Kinsoku still keeps the
+     // closing quote off the next line's start.
+     let text = format!("{}确保“双减”，工作平稳有序", "中".repeat(18));
+-    let mut d = doc(&text, CharSpacing::DoNotCompress, Some(20.2));
+-    if let Some(Block::Para(p)) = d.body.first_mut().map(Arc::make_mut) {
+-        p.runs[0].props.hint_ea = Some(true);
+-    }
+-    let g = first_para(&lay(&d));
++    let hinted = |width_em| {
++        let mut d = doc(&text, CharSpacing::DoNotCompress, width_em);
++        if let Some(Block::Para(p)) = d.body.first_mut().map(Arc::make_mut) {
++            p.runs[0].props.hint_ea = Some(true);
++        }
++        d
++    };
++    // Room for the first 20 characters and a fifth of one more, whatever face draws them (the
++    // test fonts have no CJK face).
++    let wide = first_para(&lay(&hinted(None)));
++    let adv: Vec<f32> = wide.clusters.iter().map(|c| c.adv).collect();
++    let room = adv.iter().take(20).sum::<f32>() + 0.2 * adv.first().copied().unwrap_or(SIZE);
++    let g = first_para(&lay(&hinted(Some(room / SIZE))));
+     assert_eq!(g.lines[0].c1 - g.lines[0].c0, 20, "the first line ends after 保");
+     for l in &g.lines {
+         let first = g.clusters.get(l.c0).and_then(|c| text.get(c.start..)).and_then(|t| t.chars().next());
+@@ -405,6 +413,21 @@ fn kerned_text_closes_up_adjacent_marks_by_half_an_em() {
      assert!((adv("中》《中", Some(1.0), true) - SIZE).abs() < 0.01, "noPunctuationKerning");
      assert!((adv("中》《中", Some(20.0), false) - SIZE).abs() < 0.01, "below the kerning threshold");
      assert!(adv("中）“中", Some(1.0), false) > SIZE * 0.9, "curly quotes stay");

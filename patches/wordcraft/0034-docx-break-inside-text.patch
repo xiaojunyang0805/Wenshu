@@ -1,6 +1,6 @@
 Upstream: (not opened; reader fix: a w:br, w:cr or w:tab inside a w:t (against the schema, from some generators) breaks the line as WPS shows it; the text ran together)
 diff --git a/crates/docx/src/read/story/runs.rs b/crates/docx/src/read/story/runs.rs
-index 9dec4c5b..707fd4b9 100644
+index d43cc3a2..c0bf21de 100644
 --- a/crates/docx/src/read/story/runs.rs
 +++ b/crates/docx/src/read/story/runs.rs
 @@ -166,6 +166,9 @@ impl Reader<'_> {
@@ -36,7 +36,7 @@ index 9dec4c5b..707fd4b9 100644
      pub(super) fn emit_text(&mut self, sc: &mut StoryCtx, pb: &mut PB, s: &str, props: &CharProps) {
          match sink(sc) {
              Some(f) => {
-@@ -387,3 +406,8 @@ impl Reader<'_> {
+@@ -395,3 +414,8 @@ impl Reader<'_> {
          }
      }
  }
@@ -46,14 +46,13 @@ index 9dec4c5b..707fd4b9 100644
 +    k.kids.iter().any(|n| matches!(n, crate::xml::Node::El(e) if matches!(e.name.as_str(), "w:br" | "w:cr" | "w:tab")))
 +}
 diff --git a/crates/docx/tests/it/fixtures.rs b/crates/docx/tests/it/fixtures.rs
-index e51e0dda..c388b09f 100644
+index d0921e13..b2b45ee8 100644
 --- a/crates/docx/tests/it/fixtures.rs
 +++ b/crates/docx/tests/it/fixtures.rs
-@@ -4221,3 +4221,13 @@ fn vml_textbox_style_anchor_and_fit() {
-     assert_eq!(tb.body.anchor, wordcraft_doc::props::VAlign::Center);
-     assert!(tb.body.auto_fit);
+@@ -4818,3 +4818,12 @@ fn vml_horizontal_rules_are_read_and_kept() {
+     let d = read_body(&body);
+     assert_eq!(rules(&d).iter().map(|r| r.0).collect::<Vec<_>>(), [None, None]);
  }
-+
 +/// A line break or tab inside a text element (`<w:t>苏州-合肥<w:br/></w:t>`, against the schema,
 +/// from a travel-itinerary generator) breaks the line as WPS shows it; the text ran together.
 +#[test]

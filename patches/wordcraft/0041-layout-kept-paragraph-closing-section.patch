@@ -1,9 +1,9 @@
 Upstream: (not opened; layout fix, measured in WPS: the last paragraph of a section before one that starts a new page is placed as if keep with next were unset, and an empty one as if keep lines together were unset too; a kept closing paragraph moved over and the break began another page)
 diff --git a/crates/layout/src/flow.rs b/crates/layout/src/flow.rs
-index cd76c499..ee362f92 100644
+index 20524c37..0918e07e 100644
 --- a/crates/layout/src/flow.rs
 +++ b/crates/layout/src/flow.rs
-@@ -312,11 +312,20 @@ impl<'a> Flow<'a> {
+@@ -342,6 +342,15 @@ impl<'a> Flow<'a> {
          if break_line(&self.pl).is_some() {
              return before;
          }
@@ -16,21 +16,30 @@ index cd76c499..ee362f92 100644
 +            return before;
 +        }
 +        let keep_next = rp.keep_next && !closes_section;
-         let height = self.pl.height + rooms.top + rooms.bottom;
+         // A terminal page-break mark stays with the break and draws no bottom border there.
+         let break_mark = !pb.web
+             && self.pl.lines.len() >= 2
+@@ -349,10 +358,13 @@ impl<'a> Flow<'a> {
+                 line.end == LineEnd::PageBreak && self.pl.lines.last().is_some_and(|mark| only_markers(self.p, mark.start..mark.stop))
+             });
+         let height = self.pl.height + rooms.top + if break_mark { 0.0 } else { rooms.bottom };
 -        if !(rp.keep_lines || (rp.keep_next && pb.y + height <= pb.bottom + 0.01)) {
 +        if !(rp.keep_lines || (keep_next && pb.y + height <= pb.bottom + 0.01)) {
              return before;
          }
 -        let need = height + if rp.keep_next { next_first_line(ctx, self.block, self.width, 0, &mut ctx.counters.clone()) } else { 0.0 };
 +        let need = height + if keep_next { next_first_line(ctx, self.block, self.width, 0, &mut ctx.counters.clone()) } else { 0.0 };
++        // Without a next line to keep with, the last line's leading below its text may run into
++        // the bottom margin, as it does when the lines are placed (`fit_height`).
++        let need = if keep_next { need } else { need - self.pl.lines.last().map_or(0.0, |l| (l.height - fit_height(pb, l, rp, true)).max(0.0)) };
          // (Against the whole column: balanced columns grow to hold it.)
          // With the 0.01 pt of slack the other fit checks take.
          if pb.y + need > pb.bottom + 0.01 && !pb.fresh() && need <= pb.next_room(self.body_top) {
 diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
-index 39d1b730..b89d50cf 100644
+index 038cc6e1..2ca5bd58 100644
 --- a/crates/layout/src/tests.rs
 +++ b/crates/layout/src/tests.rs
-@@ -1357,6 +1357,33 @@ fn an_empty_section_mark_stays_on_a_full_page() {
+@@ -1463,6 +1463,33 @@ fn an_empty_section_mark_stays_on_a_full_page() {
      assert_eq!(pages(false), 3);
  }
  
@@ -63,4 +72,4 @@ index 39d1b730..b89d50cf 100644
 +
  #[test]
  fn a_bookmark_after_a_page_break_takes_no_line() {
-     // "Before", a page break, then a bookmark start (Word writes the next heading's TOC bookmark
+     crate::test_fonts();

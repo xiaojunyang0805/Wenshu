@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # The Linux half of the regression gate, from Windows through WSL:
 #   MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu-22.04 -- bash /mnt/d/27_Project/Wenshu/corpus/tools/gate_wsl.sh
-# Brings a Linux clone (~/wenshu) to the Windows checkout's main, applies the patch queue, builds
+# Brings a Linux clone (~/wenshu) to the Windows checkout's main (or $BRANCH), applies the patch queue, builds
 # the CLI and runs the gate there with the packaged fonts (the installed wenshu .deb), reading the
 # corpus and its WPS references from the Windows checkout. Nothing is pushed or fetched remotely.
 set -euo pipefail
 WIN=${WIN:-/mnt/d/27_Project/Wenshu}
 cd ~/wenshu
-git fetch -q "$WIN" main
+git fetch -q "$WIN" "${BRANCH:-main}"
 git checkout -q --detach FETCH_HEAD
 git log --oneline -1
 sh scripts/sync-upstream.sh > /dev/null

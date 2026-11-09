@@ -1,9 +1,33 @@
 Upstream: LB19a quote breaks in #5004 as db13aa60, the never-squeezed line-end mark in #5006 as 0ac59db8; the *Chars grid indents stay here (they need 0010)
+diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
+index 0393a7d1..f513205e 100644
+--- a/crates/layout/src/para.rs
++++ b/crates/layout/src/para.rs
+@@ -181,12 +181,15 @@ impl ParaLayout {
+     fn ends_in_free_mark(&self, c0: usize, c1: usize) -> bool {
+         c1 > c0 && self.end_marks.binary_search(&(c1 - 1)).is_ok()
+     }
+-    /// The marks of the clusters `c0..c1` that may give up room: not a closing mark ending the
+-    /// line, whose blank half is free already.
++    /// The marks of the clusters `c0..c1` that may give up room: not the right side of the mark
++    /// ending the line (WPS squeezes neither a closing mark whose blank half is free there nor a
++    /// closing quote, whose isn't).
+     fn squeeze_marks(&self, c0: usize, c1: usize) -> &[Squeeze] {
+         let from = self.squeeze.partition_point(|s| s.k < c0);
+-        let end = if self.ends_in_free_mark(c0, c1) { c1 - 1 } else { c1 };
+-        let to = self.squeeze.partition_point(|s| s.k < end).max(from);
++        let mut to = self.squeeze.partition_point(|s| s.k < c1).max(from);
++        if to > from && self.squeeze.get(to - 1).is_some_and(|s| c1 > 0 && s.k == c1 - 1 && !s.left) {
++            to -= 1;
++        }
+         self.squeeze.get(from..to).unwrap_or_default()
+     }
+     /// How much the clusters `c0..c1` may squeeze in all: each mark at most its blank half
 diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
-index 089b41e..c46755b 100644
+index f4b861c3..a616fa06 100644
 --- a/crates/layout/src/para/paragraph.rs
 +++ b/crates/layout/src/para/paragraph.rs
-@@ -95,16 +95,23 @@ fn paragraph_props(p: &Paragraph, env: &ParaEnv) -> ResolvedPara {
+@@ -104,16 +104,23 @@ fn paragraph_props(p: &Paragraph, env: &ParaEnv) -> ResolvedPara {
      if let Some(spacing) = env.read_line_spacing.filter(|s| s.is_finite() && (1.0..=2.0).contains(s)) {
          rp.line_spacing = wordcraft_doc::props::LineSpacing::Multiple(spacing);
      }
@@ -35,10 +59,10 @@ index 089b41e..c46755b 100644
              (true, None, Some(_)) => rp.set_char_units(env.grid.font_size, size),
              _ => rp.set_char_unit(size),
          }
-@@ -784,7 +791,34 @@ fn break_positions(text: &str, rp: &wordcraft_doc::resolve::ResolvedPara) -> Vec
-         found.sort_unstable();
-         found.dedup();
-     }
+@@ -902,11 +909,38 @@ fn break_positions(text: &str, rp: &wordcraft_doc::resolve::ResolvedPara) -> Vec
+     // UAX #14 breaks between a full stop and an opening parenthesis; Word keeps
+     // "2023.(Example" whole and wraps it at the space before.
+     found.retain(|&i| !(text.get(..i).is_some_and(|t| t.ends_with('.')) && text.get(i..).is_some_and(|t| t.starts_with('('))));
 +    // Unicode 15.1 (LB19a) lets a line break before an opening curly quote and after a closing
 +    // one between East Asian characters ("确保|“双减”|工作"); unicode-linebreak follows 15.0, which
 +    // never breaks beside them, so a Chinese line ending before “ lost its last character.
@@ -52,7 +76,7 @@ index 089b41e..c46755b 100644
      crate::kinsoku::apply(text, &mut found, rp.kinsoku, rp.word_wrap);
      found
  }
-+
+ 
 +/// LB19a's break opportunities beside curly quotes with East Asian characters on both sides:
 +/// before an opening quote (“ ‘) and after a closing one (” ’). Kinsoku then removes those a line
 +/// may not take (a closing mark starting the next line).
@@ -70,32 +94,12 @@ index 089b41e..c46755b 100644
 +    }
 +    out
 +}
-diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
-index 1b58795..484bc2d 100644
---- a/crates/layout/src/para.rs
-+++ b/crates/layout/src/para.rs
-@@ -161,12 +161,15 @@ impl ParaLayout {
-     fn ends_in_free_mark(&self, c0: usize, c1: usize) -> bool {
-         c1 > c0 && self.end_marks.binary_search(&(c1 - 1)).is_ok()
-     }
--    /// The marks of the clusters `c0..c1` that may give up room: not a closing mark ending the
--    /// line, whose blank half is free already.
-+    /// The marks of the clusters `c0..c1` that may give up room: not the right side of the mark
-+    /// ending the line (WPS squeezes neither a closing mark whose blank half is free there nor a
-+    /// closing quote, whose isn't).
-     fn squeeze_marks(&self, c0: usize, c1: usize) -> &[Squeeze] {
-         let from = self.squeeze.partition_point(|s| s.k < c0);
--        let end = if self.ends_in_free_mark(c0, c1) { c1 - 1 } else { c1 };
--        let to = self.squeeze.partition_point(|s| s.k < end).max(from);
-+        let mut to = self.squeeze.partition_point(|s| s.k < c1).max(from);
-+        if to > from && self.squeeze.get(to - 1).is_some_and(|s| c1 > 0 && s.k == c1 - 1 && !s.left) {
-+            to -= 1;
-+        }
-         self.squeeze.get(from..to).unwrap_or_default()
-     }
-     /// How much the clusters `c0..c1` may squeeze in all: each mark at most its blank half
++
+ #[cfg(test)]
+ mod padding_tests {
+     /// ODF padding is physical: a right-to-left paragraph's left padding widens its end indent
 diff --git a/crates/layout/src/tests/compress.rs b/crates/layout/src/tests/compress.rs
-index 564babe..afc575e 100644
+index 564babed..afc575ef 100644
 --- a/crates/layout/src/tests/compress.rs
 +++ b/crates/layout/src/tests/compress.rs
 @@ -168,7 +168,17 @@ fn a_closing_mark_ending_a_line_needs_no_room_for_its_blank_half() {
@@ -140,10 +144,10 @@ index 564babe..afc575e 100644
 +    }
 +}
 diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
-index 9901f38..9c71bdc 100644
+index f770492f..aeea89f7 100644
 --- a/crates/layout/src/tests/grid.rs
 +++ b/crates/layout/src/tests/grid.rs
-@@ -288,3 +288,34 @@ fn grid_advance_follows_character_scaling_and_spacing() {
+@@ -290,3 +290,34 @@ fn grid_advance_follows_character_scaling_and_spacing() {
          }
      }
  }

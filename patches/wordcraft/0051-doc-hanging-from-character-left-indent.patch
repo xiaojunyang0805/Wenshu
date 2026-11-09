@@ -1,9 +1,9 @@
 Upstream: (not opened; WPS measurement: a hanging indent beside leftChars or hangingChars hangs from the character left indent, the first line at leftChars (0 without it) and the others a hanging further in, whatever w:left says; Word writes w:left as that sum)
 diff --git a/crates/doc/src/resolve.rs b/crates/doc/src/resolve.rs
-index 5aaff432..62876218 100644
+index bb07bdab..a840f657 100644
 --- a/crates/doc/src/resolve.rs
 +++ b/crates/doc/src/resolve.rs
-@@ -252,6 +252,13 @@ impl ResolvedPara {
+@@ -270,6 +270,13 @@ impl ResolvedPara {
                  *pts = (chars * size).clamp(-MAX_INDENT, MAX_INDENT);
              }
          }
@@ -18,12 +18,12 @@ index 5aaff432..62876218 100644
  }
  
 diff --git a/crates/docx/tests/it/char_units.rs b/crates/docx/tests/it/char_units.rs
-index 03d99c5a..122abff2 100644
+index f4a65210..50029560 100644
 --- a/crates/docx/tests/it/char_units.rs
 +++ b/crates/docx/tests/it/char_units.rs
-@@ -80,3 +80,24 @@ fn automatic_spacing_reads_and_round_trips() {
-     let again = wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap();
-     assert_eq!(props(&again)[..3], p[..3]);
+@@ -109,3 +109,24 @@ fn adjust_right_indent_is_preserved() {
+         assert_eq!(props(&d).iter().map(|p| p.adjust_right_indent).collect::<Vec<_>>(), [Some(false), Some(true), None]);
+     }
  }
 +
 +/// A hanging indent beside `leftChars` or `hangingChars` hangs from the character left indent:

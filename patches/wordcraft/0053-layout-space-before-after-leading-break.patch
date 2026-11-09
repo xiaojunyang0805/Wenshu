@@ -1,9 +1,9 @@
 Upstream: (not opened; WPS measurement, diverges from Word in mode 15: the space before of a paragraph starting with page or column breaks applies at the top of the new page or column in compatibility modes up to 14, and not in mode 15)
 diff --git a/crates/layout/src/flow.rs b/crates/layout/src/flow.rs
-index 0f8fa507..3fadddf1 100644
+index 7422c335..dda8af41 100644
 --- a/crates/layout/src/flow.rs
 +++ b/crates/layout/src/flow.rs
-@@ -562,10 +562,14 @@ impl<'a> Flow<'a> {
+@@ -612,10 +612,14 @@ impl<'a> Flow<'a> {
      /// Start the next page or column if the lines just placed end one, or are not the last.
      fn after_lines(&mut self, ctx: &mut Ctx, pb: &mut PageBuilder, forced: Option<LineEnd>, mark_with_break: bool) {
          let (block, body_top) = (self.block, self.body_top);
@@ -22,7 +22,7 @@ index 0f8fa507..3fadddf1 100644
          match forced {
              Some(LineEnd::PageBreak) if mark_with_break => {
                  pb.new_page(block, body_top);
-@@ -579,6 +583,9 @@ impl<'a> Flow<'a> {
+@@ -630,6 +634,9 @@ impl<'a> Flow<'a> {
              Some(LineEnd::ColumnBreak) => {
                  pb.col_break_page = Some(pb.pages.len().saturating_sub(1));
                  pb.advance(block, body_top);
@@ -33,10 +33,10 @@ index 0f8fa507..3fadddf1 100644
              }
              _ if self.l0 < self.n() => pb.advance(block, body_top),
 diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
-index c8c7d418..cd5f2286 100644
+index 513bfce5..1290ddf3 100644
 --- a/crates/layout/src/tests.rs
 +++ b/crates/layout/src/tests.rs
-@@ -9080,13 +9080,17 @@ fn space_before_at_the_top_of_a_page_like_word() {
+@@ -11172,13 +11172,17 @@ fn space_before_at_the_top_of_a_page_like_word() {
          }
          assert_eq!(table_top(vec![after(&text)]), (1, alone), "{text:?}: a table after the break");
      }
@@ -61,7 +61,7 @@ index c8c7d418..cd5f2286 100644
      // Page break before: kept up to mode 14, dropped in 15.
      let (_, kept) = probe_top(vec![para("first", 0.0, false), para("PROBE", 24.0, true)], 14);
      let (_, dropped) = probe_top(vec![para("first", 0.0, false), para("PROBE", 24.0, true)], 15);
-@@ -12343,3 +12347,30 @@ fn text_after_a_leading_page_break_keeps_the_first_line_indent() {
+@@ -15545,3 +15549,30 @@ fn text_after_a_leading_page_break_keeps_the_first_line_indent() {
      let mid = lefts(format!("Lead{COLUMN_BREAK}"));
      assert!((mid[2] - mid[1]).abs() < 0.01, "after text and a column break {mid:?}");
  }

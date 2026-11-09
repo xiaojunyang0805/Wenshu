@@ -143,10 +143,10 @@ index 60dc972a..17e93f48 100644
 +
  pub(super) const FALLBACK_CACHE_MAX: usize = 20_000;
 diff --git a/crates/fonts/src/fontdb/tests/sysfonts.rs b/crates/fonts/src/fontdb/tests/sysfonts.rs
-index 628abf66..55bf85be 100644
+index ec23264f..7182821d 100644
 --- a/crates/fonts/src/fontdb/tests/sysfonts.rs
 +++ b/crates/fonts/src/fontdb/tests/sysfonts.rs
-@@ -734,10 +734,15 @@ fn chinese_characters_fall_back_to_simsun_before_other_loaded_faces() {
+@@ -768,10 +768,15 @@ fn chinese_characters_fall_back_to_simsun_before_other_loaded_faces() {
      db.set_system_fallback(false);
      db.add_document_fonts(vec![(named_face("SourceSerif4-Regular.ttf", "Other Face"), "Other Face".to_string())], 0);
      db.add_document_fonts(vec![(named_face("SourceSerif4-Regular.ttf", "SimSun"), "SimSun".to_string())], 0);

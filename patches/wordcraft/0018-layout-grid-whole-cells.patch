@@ -1,5 +1,6 @@
 Upstream: (not opened; WPS only: on a character grid a single column is narrowed to whole pitches, and a closing mark ending a line may reach into the rest; F14)
 diff --git a/crates/layout/src/cache.rs b/crates/layout/src/cache.rs
+index ff684669..ec08e497 100644
 --- a/crates/layout/src/cache.rs
 +++ b/crates/layout/src/cache.rs
 @@ -18,7 +18,7 @@ pub(crate) struct Key {
@@ -12,9 +13,10 @@ diff --git a/crates/layout/src/cache.rs b/crates/layout/src/cache.rs
      /// Heights of the paragraph's inline boxes that resize to fit their text.
      pub(crate) fitted: u64,
 diff --git a/crates/layout/src/page.rs b/crates/layout/src/page.rs
+index 14c611f2..db3519b2 100644
 --- a/crates/layout/src/page.rs
 +++ b/crates/layout/src/page.rs
-@@ -12,6 +12,9 @@ pub(crate) struct PageBuilder<'a> {
+@@ -14,6 +14,9 @@ pub(crate) struct PageBuilder<'a> {
      pub(crate) sect_idx: usize,
      pub(crate) col: usize,
      pub(crate) cols: Vec<(f32, f32)>,
@@ -24,7 +26,7 @@ diff --git a/crates/layout/src/page.rs b/crates/layout/src/page.rs
      pub(crate) y: f32,
      pub(crate) top: f32,
      /// The body's top on this page: `top` moves down below the text when a continuous section
-@@ -320,7 +323,7 @@ impl PageBuilder<'_> {
+@@ -335,7 +338,7 @@ impl PageBuilder<'_> {
          self.pages.push(Page { w, h, section: self.sect_idx, number: self.number, body, first_block, items: decor, ..Default::default() });
          self.behind.push(0);
          self.col = 0;
@@ -33,9 +35,9 @@ diff --git a/crates/layout/src/page.rs b/crates/layout/src/page.rs
          self.top = body_top;
          self.page_top = body_top;
          self.bottom = if self.web { f32::MAX / 8.0 } else { bottom };
-@@ -506,3 +509,18 @@ impl PageFrame<'_> {
+@@ -591,3 +594,18 @@ impl PageFrame<'_> {
  pub(crate) fn page_frame<'a>(pb: &PageBuilder<'a>, mirror: bool) -> PageFrame<'a> {
-     PageFrame { sect: pb.sect, origin: (0.0, 0.0), number: pb.number, mirror }
+     PageFrame { sect: pb.sect, margin_top: None, origin: (0.0, 0.0), number: pb.number, mirror }
  }
 +
 +/// On a character grid WPS Office lays text out in whole cells: a section's single column is as
@@ -53,6 +55,7 @@ diff --git a/crates/layout/src/page.rs b/crates/layout/src/page.rs
 +    cols
 +}
 diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
+index 16d53757..628bbea8 100644
 --- a/crates/layout/src/para/grid.rs
 +++ b/crates/layout/src/para/grid.rs
 @@ -13,6 +13,10 @@ pub struct Grid {
@@ -87,9 +90,10 @@ diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
      /// The advance of an East Asian character of `size` points on the character grid: its size
      /// plus the grid's adjustment, the pitch less the default size (`w:charSpace` is space added
 diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
+index 031d6a0e..90875e13 100644
 --- a/crates/layout/src/para/lines.rs
 +++ b/crates/layout/src/para/lines.rs
-@@ -500,7 +508,9 @@ impl<'e> Breaker<'e> {
+@@ -556,7 +556,9 @@ impl<'e> Breaker<'e> {
          let last_tab = (c0..c1).rev().find(|k| pl.clusters.get(*k).is_some_and(|c| c.kind == ClKind::Tab));
          let display = pl.displays.iter().find(|(ci, _)| *ci >= c0 && *ci < c1).map(|d| d.1);
          if display.is_none() && last_tab.is_none() {
@@ -100,7 +104,7 @@ diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
          }
          let content_end = content_end(pl, sc, c1);
          let slack = sc.right_edge - content_end;
-@@ -654,9 +664,9 @@ struct Measure {
+@@ -727,9 +729,9 @@ struct Measure {
  /// (the same share at one size), never more than the line's room, so it ends at the margin as
  /// WPS lays it out. An opening mark moves left itself; after a closing mark the rest of the line
  /// does.
@@ -112,7 +116,7 @@ diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
      let room = pl.squeeze_room(c0, c1);
      let marks = pl.squeeze_marks(c0, c1);
      let halves: f32 = marks.iter().map(|s| s.room).sum();
-@@ -854,8 +864,10 @@ impl Scan {
+@@ -941,8 +943,10 @@ impl Scan {
          };
          // Punctuation compression: the marks so far may give up room for this cluster.
          let squeeze = pl.squeeze_room(c0, j + 1);
@@ -125,9 +129,10 @@ diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
              || c.kind == ClKind::Marker;
          if !fits && pl.is_edit_boundary(c.start) && (c0..j).any(|k| pl.clusters.get(k).is_some_and(takes_room)) {
 diff --git a/crates/layout/src/pass.rs b/crates/layout/src/pass.rs
+index fa09783f..6abe32c4 100644
 --- a/crates/layout/src/pass.rs
 +++ b/crates/layout/src/pass.rs
-@@ -164,6 +164,7 @@ fn new_page_builder<'p>(sect: &'p SectionProps, early: &'p EarlyFloats, web: boo
+@@ -191,6 +191,7 @@ fn new_page_builder<'p>(
          sect_idx: 0,
          col: 0,
          cols: Vec::new(),
@@ -135,7 +140,7 @@ diff --git a/crates/layout/src/pass.rs b/crates/layout/src/pass.rs
          y: 0.0,
          top: 0.0,
          page_top: 0.0,
-@@ -252,6 +253,7 @@ fn begin_section_state<'p>(ctx: &mut Ctx, pb: &mut PageBuilder<'p>, sec: &Sec<'p
+@@ -284,6 +285,7 @@ fn begin_section_state<'p>(ctx: &mut Ctx, pb: &mut PageBuilder<'p>, sec: &Sec<'p
      ctx.fields.section = u32::try_from(si).unwrap_or(u32::MAX).saturating_add(1);
      ctx.fields.section_pages = totals.section(si);
      ctx.grid = para::Grid::of(doc, sect);
@@ -143,19 +148,20 @@ diff --git a/crates/layout/src/pass.rs b/crates/layout/src/pass.rs
      if sect.line_numbers.as_ref().is_some_and(|l| l.restart == wordcraft_doc::section::LineNumberRestart::Section) {
          pb.line_no = 0;
      }
-@@ -290,7 +292,7 @@ fn start_section_page<'p>(ctx: &mut Ctx, pb: &mut PageBuilder<'p>, hf: &HfLinks<
- 
+@@ -327,7 +329,7 @@ fn start_section_page<'p>(ctx: &mut Ctx, pb: &mut PageBuilder<'p>, hf: &HfLinks<
  /// Continuous: new column layout below the current text (its tallest column).
- fn continue_page(pb: &mut PageBuilder, sect: &SectionProps) {
+ fn continue_page(pb: &mut PageBuilder, sect: &SectionProps, block: usize) {
+     pb.close_column_lines();
 -    pb.cols = sect.column_boxes();
 +    pb.cols = crate::page::grid_columns(sect.column_boxes(), pb.char_pitch);
      pb.col = 0;
      pb.top = pb.text_bottom();
      pb.y = pb.top;
 diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
+index aeea89f7..09550a06 100644
 --- a/crates/layout/src/tests/grid.rs
 +++ b/crates/layout/src/tests/grid.rs
-@@ -153,7 +153,7 @@ fn character_indents_ignore_the_paragraph_mark_size_on_a_grid() {
+@@ -154,7 +154,7 @@ fn character_indents_ignore_the_paragraph_mark_size_on_a_grid() {
  
  #[test]
  fn grid_advance_is_the_size_plus_the_adjustment() {
@@ -164,7 +170,7 @@ diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
      let near = |a: Option<f32>, b: f32| a.is_some_and(|a| (a - b).abs() < 1e-4);
      assert!(near(grid(15.8).advance(16.0), 15.8));
      assert!(near(grid(15.8).advance(22.0), 21.8));
-@@ -162,7 +162,7 @@ fn grid_advance_is_the_size_plus_the_adjustment() {
+@@ -163,7 +163,7 @@ fn grid_advance_is_the_size_plus_the_adjustment() {
      assert!(near(grid(18.0).advance(16.0), 18.0), "a wider pitch adds space");
      assert!(near(grid(15.8).advance(f32::NAN), 15.8), "an unreadable size takes the pitch");
      assert!(near(grid(2.0).advance(4.0), 0.0), "never negative");
@@ -173,7 +179,7 @@ diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
  }
  
  #[test]
-@@ -319,3 +319,32 @@ fn character_indents_on_a_character_grid_count_the_texts_advance() {
+@@ -321,3 +321,32 @@ fn character_indents_on_a_character_grid_count_the_texts_advance() {
      let want = 2.0 * (text * 1.5 + pitch - size);
      assert!((left.lines[1].left - base.lines[1].left - want).abs() < 0.01, "left {}, want {want}", left.lines[1].left - base.lines[1].left);
  }

@@ -1,31 +1,36 @@
 Upstream: https://github.com/storytold/wordcraft/pull/5006 (on #5004)
 diff --git a/crates/doc/src/lib.rs b/crates/doc/src/lib.rs
-index 9d0100e..d47d332 100644
+index d6ee0a1a..f77df6c1 100644
 --- a/crates/doc/src/lib.rs
 +++ b/crates/doc/src/lib.rs
-@@ -83,8 +83,8 @@ pub use error::{DocError, Result};
+@@ -87,8 +87,8 @@ pub use error::{DocError, Result};
  pub use parts::{MAX_LINKED_BOXES, MAX_TEXT_BOX_INSET, NoteSeparators, Part, PartKind, PermRange, TEXT_BOX_INSET, TextBody, free_id};
  pub use position::{Path, Pos, StoryRef};
  pub use settings::{
--    COMPAT_MODE_CURRENT, CoreProps, CustomProp, DEFAULT_GRID, DEFAULT_HYPHENATION_ZONE, LEGACY_COMPAT_MODE, PagePicture, Settings, Source,
+-    COMPAT_MODE_CURRENT, CoreProps, CustomProp, DEFAULT_GRID, DEFAULT_HYPHENATION_ZONE, LEGACY_COMPAT_MODE, OdfLayout, PagePicture, Settings, Source,
 -    THEME_COLORS, Watermark, Zoom, ZoomFit,
-+    COMPAT_MODE_CURRENT, CharSpacing, CoreProps, CustomProp, DEFAULT_GRID, DEFAULT_HYPHENATION_ZONE, LEGACY_COMPAT_MODE, PagePicture, Settings,
-+    Source, THEME_COLORS, Watermark, Zoom, ZoomFit,
++    COMPAT_MODE_CURRENT, CharSpacing, CoreProps, CustomProp, DEFAULT_GRID, DEFAULT_HYPHENATION_ZONE, LEGACY_COMPAT_MODE, OdfLayout, PagePicture,
++    Settings, Source, THEME_COLORS, Watermark, Zoom, ZoomFit,
  };
- pub use text_walk::count_words;
  pub(crate) use text_walk::{PARA_WALK_DEPTH, walk_between};
+ pub use text_walk::{count_chars, count_chars_no_spaces, count_words};
 diff --git a/crates/doc/src/settings.rs b/crates/doc/src/settings.rs
-index 3d8c341..d1321ca 100644
+index 3dd38116..1dd661c8 100644
 --- a/crates/doc/src/settings.rs
 +++ b/crates/doc/src/settings.rs
-@@ -162,6 +162,48 @@ pub struct Settings {
+@@ -166,6 +166,8 @@ pub struct Settings {
      /// comments and tracked changes are saved without `w:date`.
      #[serde(skip_serializing_if = "std::ops::Not::not")]
      pub remove_date_time: bool,
 +    /// East Asian punctuation compression (`w:characterSpacingControl`, ECMA-376 §17.15.1.18).
 +    pub char_spacing: CharSpacing,
-+}
-+
+     /// The document was opened from ODF: the standard's rules that differ from Word's apply as
+     /// it is laid out.
+     #[serde(skip_serializing_if = "Option::is_none")]
+@@ -185,6 +187,46 @@ pub struct OdfLayout {
+     pub tabs_from_indent: bool,
+ }
+ 
 +/// Which East Asian characters give up the blank half of their em (`w:characterSpacingControl`).
 +#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 +#[serde(rename_all = "camelCase")]
@@ -64,19 +69,21 @@ index 3d8c341..d1321ca 100644
 +    pub fn compresses_punctuation(self) -> bool {
 +        self != CharSpacing::DoNotCompress
 +    }
- }
- 
++}
++
  /// A saved zoom: a percentage, or a fit mode (the percentage it last came to).
-@@ -307,6 +349,7 @@ impl Default for Settings {
+ #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ #[serde(rename_all = "camelCase")]
+@@ -328,6 +370,7 @@ impl Default for Settings {
              zoom: None,
              remove_personal_info: false,
              remove_date_time: false,
 +            char_spacing: CharSpacing::DoNotCompress,
+             odf: None,
          }
      }
- }
 diff --git a/crates/docx/src/read/meta.rs b/crates/docx/src/read/meta.rs
-index 9739f66..d89e811 100644
+index 7f6e93fc..bd6000e2 100644
 --- a/crates/docx/src/read/meta.rs
 +++ b/crates/docx/src/read/meta.rs
 @@ -58,6 +58,11 @@ impl Reader<'_> {
@@ -92,7 +99,7 @@ index 9739f66..d89e811 100644
                      if let Some(v) = tw(k, "w:val").filter(|v| v.is_finite() && *v >= 0.0) {
                          s.hyphenation_zone = v.min(1584.0);
 diff --git a/crates/docx/src/write/settings.rs b/crates/docx/src/write/settings.rs
-index 1c7d20e..23d9c63 100644
+index 1c7d20e5..23d9c63a 100644
 --- a/crates/docx/src/write/settings.rs
 +++ b/crates/docx/src/write/settings.rs
 @@ -101,7 +101,7 @@ pub(super) fn settings_xml(doc: &Document, footnotes: bool, endnotes: bool, temp
@@ -105,10 +112,10 @@ index 1c7d20e..23d9c63 100644
      write_compatibility_settings(&mut w, doc);
      if let Some(m) = &s.math {
 diff --git a/crates/docx/tests/it/fixtures.rs b/crates/docx/tests/it/fixtures.rs
-index 34b3bd0..0495ca2 100644
+index 9d2e9025..45339ef2 100644
 --- a/crates/docx/tests/it/fixtures.rs
 +++ b/crates/docx/tests/it/fixtures.rs
-@@ -1053,6 +1053,23 @@ fn with_settings(settings: Option<&str>) -> Document {
+@@ -1164,6 +1164,23 @@ fn with_settings(settings: Option<&str>) -> Document {
      }
  }
  
@@ -133,10 +140,10 @@ index 34b3bd0..0495ca2 100644
  fn table_contextual_spacing_compatibility_flag_is_read() {
      assert!(!with_settings(None).settings.allow_space_of_same_style_in_table);
 diff --git a/crates/docx/tests/it/roundtrip.rs b/crates/docx/tests/it/roundtrip.rs
-index 03e04de..0034fa9 100644
+index 0354d7d8..6c41e14e 100644
 --- a/crates/docx/tests/it/roundtrip.rs
 +++ b/crates/docx/tests/it/roundtrip.rs
-@@ -1477,6 +1477,7 @@ fn settings_core_theme_round_trip() {
+@@ -1505,6 +1505,7 @@ fn settings_core_theme_round_trip() {
      d.settings.hyphenation_zone = 27.0;
      d.settings.hyphenate_caps = false;
      d.settings.consecutive_hyphen_limit = 2;
@@ -145,7 +152,7 @@ index 03e04de..0034fa9 100644
      d.settings.major_font = "Cambria".into();
      d.settings.minor_font = "Calibri".into();
 diff --git a/crates/layout/src/cache.rs b/crates/layout/src/cache.rs
-index 25234f1..ff68466 100644
+index 25234f1f..ff684669 100644
 --- a/crates/layout/src/cache.rs
 +++ b/crates/layout/src/cache.rs
 @@ -104,6 +104,7 @@ pub(crate) fn env_hash(doc: &Document, opts: &LayoutOptions) -> u64 {
@@ -157,10 +164,10 @@ index 25234f1..ff68466 100644
      opts.filename.hash(&mut h);
      opts.filepath.hash(&mut h);
 diff --git a/crates/layout/src/kinsoku.rs b/crates/layout/src/kinsoku.rs
-index bcb7150..c8e5984 100644
+index 015a6e8c..8b7ef169 100644
 --- a/crates/layout/src/kinsoku.rs
 +++ b/crates/layout/src/kinsoku.rs
-@@ -8,6 +8,9 @@
+@@ -12,6 +12,9 @@
  //! - Word wrap off: Latin words may break at any character.
  //! - Automatic spacing (`autoSpaceDE`, `autoSpaceDN`): which neighbouring characters get room
  //!   between Asian text and Latin text or digits ([`auto_space`]).
@@ -170,7 +177,7 @@ index bcb7150..c8e5984 100644
  //!
  //! Only East Asian characters are in the lists, and the extra breaks need letters on both sides,
  //! so text with no East Asian characters breaks exactly as before unless word wrap is off.
-@@ -24,6 +27,43 @@ const NO_START: &str = "、。，．・：；？！゛゜ヽヾゝゞ々〻〉
+@@ -35,6 +38,43 @@ const NO_START: &str = "ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッ
  /// too, as for [`NO_START`]), currency signs.
  const NO_END: &str = "〈《「『【〔〖〘〚〝（［｛｟｢＄￡￥“‘﹙﹛";
  
@@ -214,7 +221,7 @@ index bcb7150..c8e5984 100644
  /// Whether `c` is East Asian text: CJK ideographs, kana, bopomofo, CJK punctuation, and
  /// fullwidth/halfwidth forms (not spaces, not combining sound marks).
  pub fn is_east_asian(c: char) -> bool {
-@@ -115,7 +155,22 @@ fn is_hangul(c: char) -> bool {
+@@ -126,7 +166,22 @@ fn is_hangul(c: char) -> bool {
  
  #[cfg(test)]
  mod tests {
@@ -239,10 +246,10 @@ index bcb7150..c8e5984 100644
      #[test]
      fn auto_space_pairs() {
 diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
-index 25dd940..d82a9b3 100644
+index 44bc2f6f..ba4732e6 100644
 --- a/crates/layout/src/para.rs
 +++ b/crates/layout/src/para.rs
-@@ -91,9 +91,25 @@ pub struct ParaLayout {
+@@ -98,9 +98,25 @@ pub struct ParaLayout {
      pub shown: Vec<(usize, String, Vec<std::ops::Range<usize>>)>,
      /// Shapes drawn around overstruck field text (enclosed characters, `EQ \o`), by cluster index.
      pub enclosures: Vec<(usize, Enclosed)>,
@@ -269,7 +276,7 @@ index 25dd940..d82a9b3 100644
  }
  
  impl ParaLayout {
-@@ -121,6 +137,11 @@ impl ParaLayout {
+@@ -141,6 +157,11 @@ impl ParaLayout {
      }
  
      /// The automatic space in cluster `k`'s advance ([`auto_space`]), 0 without one.
@@ -282,7 +289,7 @@ index 25dd940..d82a9b3 100644
          self.auto_space.binary_search_by_key(&k, |a| a.0).ok().and_then(|i| self.auto_space.get(i)).map_or(0.0, |a| a.1)
      }
 diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
-index df370aa..e68f4f6 100644
+index 5a2625f2..845816ef 100644
 --- a/crates/layout/src/para/grid.rs
 +++ b/crates/layout/src/para/grid.rs
 @@ -1,6 +1,6 @@
@@ -293,7 +300,7 @@ index df370aa..e68f4f6 100644
  
  /// The section's document grid as layout applies it (`w:docGrid`, ECMA-376 §17.6.5).
  #[derive(Clone, Copy, Debug, Default, PartialEq)]
-@@ -121,6 +121,35 @@ pub(super) fn auto_space(b: &mut Builder, text: &str, de: bool, dn: bool) -> Vec
+@@ -131,6 +131,35 @@ pub(super) fn auto_space(b: &mut Builder, text: &str, de: bool, dn: bool) -> Vec
      out
  }
  
@@ -330,10 +337,10 @@ index df370aa..e68f4f6 100644
  #[derive(Clone, Debug, PartialEq)]
  pub struct Exclusion {
 diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
-index fac5c94..62c36e5 100644
+index 821132f6..f1c1439b 100644
 --- a/crates/layout/src/para/lines.rs
 +++ b/crates/layout/src/para/lines.rs
-@@ -497,11 +497,14 @@ impl<'e> Breaker<'e> {
+@@ -545,11 +545,14 @@ impl<'e> Breaker<'e> {
      fn align(&mut self, pl: &mut ParaLayout, sc: &mut Scan, c1: usize) {
          let rp = &self.rp;
          let c0 = sc.c0;
@@ -350,7 +357,7 @@ index fac5c94..62c36e5 100644
          let shift = match (display, rp.align) {
              (Some(MathJc::Left), _) => 0.0,
              (Some(MathJc::Right), _) => slack,
-@@ -644,6 +647,38 @@ struct Measure {
+@@ -709,6 +712,38 @@ struct Measure {
      text_desc: f32,
  }
  
@@ -389,7 +396,7 @@ index fac5c94..62c36e5 100644
  /// Where the line's content ends: trailing spaces and markers hang.
  fn content_end(pl: &ParaLayout, sc: &Scan, c1: usize) -> f32 {
      let mut content_end = sc.xs.last().copied().unwrap_or(sc.line_start_x);
-@@ -814,8 +849,10 @@ impl Scan {
+@@ -893,8 +928,10 @@ impl Scan {
          } else {
              0.0
          };
@@ -401,7 +408,7 @@ index fac5c94..62c36e5 100644
              || c.kind == ClKind::Space
              || c.kind == ClKind::Marker;
          if !fits && pl.is_edit_boundary(c.start) && (c0..j).any(|k| pl.clusters.get(k).is_some_and(takes_room)) {
-@@ -833,7 +870,7 @@ impl Scan {
+@@ -912,7 +949,7 @@ impl Scan {
              return true;
          }
          if c.break_after {
@@ -411,7 +418,7 @@ index fac5c94..62c36e5 100644
          self.j += 1;
          false
 diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
-index f5fdb3c..c92049a 100644
+index fb0d0a27..31b1331a 100644
 --- a/crates/layout/src/para/paragraph.rs
 +++ b/crates/layout/src/para/paragraph.rs
 @@ -1,7 +1,7 @@
@@ -423,7 +430,7 @@ index f5fdb3c..c92049a 100644
  use super::justify::hyphenation_points;
  use super::lines::break_lines;
  use super::model::{ClKind, Cluster, Enclosed, Glyph, Label, LabelRun, ParaEnv, RubyLayout, undrawable_bullet};
-@@ -568,9 +568,21 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+@@ -678,9 +678,21 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
      if rp.snap_to_grid {
          snap_chars(&mut sh.b, &p.text, &env.grid);
      }
@@ -447,7 +454,7 @@ index f5fdb3c..c92049a 100644
      let mut skip = sh.left.clone();
      skip.extend(sh.bare.iter().cloned());
      let bt = BreakText::new(&p.text, skip);
-@@ -603,6 +615,7 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+@@ -715,6 +727,7 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
          left_out: Vec::new(),
          enclosures,
          auto_space,
@@ -456,20 +463,20 @@ index f5fdb3c..c92049a 100644
      let auto = env.doc.settings.auto_hyphenation && !pl.rp.suppress_hyphens;
      pl.hyph_after = hyphenation_points(&bt.text, |i| bt.to_para(i), &pl, auto, env.doc.settings.hyphenate_caps, &runs);
 diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
-index bfce562..a5d9374 100644
+index 6db3eaa8..d2b503fd 100644
 --- a/crates/layout/src/tests.rs
 +++ b/crates/layout/src/tests.rs
-@@ -8,6 +8,7 @@ mod autospace;
- mod bidi;
+@@ -9,6 +9,7 @@ mod bidi;
  mod budget;
+ mod cell_floats;
  mod complex;
 +mod compress;
+ mod float_top;
  mod grid;
  mod ligature;
- pub(crate) mod linear;
 diff --git a/crates/layout/src/tests/compress.rs b/crates/layout/src/tests/compress.rs
 new file mode 100644
-index 0000000..442c50d
+index 00000000..442c50db
 --- /dev/null
 +++ b/crates/layout/src/tests/compress.rs
 @@ -0,0 +1,150 @@

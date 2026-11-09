@@ -1,9 +1,9 @@
 Upstream: (not opened; with 0010: *Chars side indents on a line grid count the Normal size even when the paragraph doesn't snap to the grid; F8)
 diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
-index c36524a6..b5549ae6 100644
+index b21518d1..fbaf5d99 100644
 --- a/crates/layout/src/para/paragraph.rs
 +++ b/crates/layout/src/para/paragraph.rs
-@@ -112,7 +112,9 @@ fn paragraph_props(p: &Paragraph, env: &ParaEnv) -> ResolvedPara {
+@@ -121,7 +121,9 @@ fn paragraph_props(p: &Paragraph, env: &ParaEnv) -> ResolvedPara {
                  let cell = |size: f32| env.grid.advance(size).filter(|a| *a > 0.0).unwrap_or(pitch);
                  rp.set_char_units(cell(text.max(size)), cell(text));
              }
@@ -15,10 +15,10 @@ index c36524a6..b5549ae6 100644
          }
      }
 diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
-index aa7bff30..00d83b30 100644
+index 09550a06..8a6b82e7 100644
 --- a/crates/layout/src/tests/grid.rs
 +++ b/crates/layout/src/tests/grid.rs
-@@ -270,6 +270,13 @@ fn character_indents_on_a_line_grid_count_the_default_size_at_the_sides() {
+@@ -272,6 +272,13 @@ fn character_indents_on_a_line_grid_count_the_default_size_at_the_sides() {
      let first = with(&|p| p.props.indent_first_chars = Some(2.0));
      let indent = first.lines[0].xs[0] - first.lines[1].xs[0];
      assert!((indent - 2.0 * mark).abs() < 0.01, "first-line indent {indent} for a {mark} pt mark");

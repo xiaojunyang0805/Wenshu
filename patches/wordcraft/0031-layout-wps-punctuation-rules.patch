@@ -1,9 +1,9 @@
 Upstream: (not opened; WPS measurements, F20: a closing mark ending a line of Chinese/Japanese/Korean text hangs whole under w:overflowPunct, beside what the marks before it squeeze, unless w:useAltKinsokuLineBreakRules; kerned text closes up adjacent full-width marks by half an em unless w:noPunctuationKerning; the middle dot of 艾布·达伍德 binds its neighbours)
 diff --git a/crates/doc/src/resolve.rs b/crates/doc/src/resolve.rs
-index aaa94017..012d32fc 100644
+index c96a52e8..0afedf2e 100644
 --- a/crates/doc/src/resolve.rs
 +++ b/crates/doc/src/resolve.rs
-@@ -68,6 +68,9 @@ pub struct ResolvedChar {
+@@ -71,6 +71,9 @@ pub struct ResolvedChar {
      /// East Asian font (Chinese, Japanese and Korean text), when one is set.
      #[serde(skip_serializing_if = "Option::is_none")]
      pub font_ea: Option<String>,
@@ -13,7 +13,7 @@ index aaa94017..012d32fc 100644
      /// Characters of ambiguous script (curly quotes, dashes, ellipses…) use `font_ea`
      /// (`w:hint="eastAsia"`).
      #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-@@ -117,6 +120,7 @@ impl ResolvedChar {
+@@ -121,6 +124,7 @@ impl ResolvedChar {
              cs: c.cs.unwrap_or(false),
              font_cs: c.font_cs.clone().or_else(|| c.font.clone()).unwrap_or_else(|| crate::styles::BODY_FONT.to_string()),
              font_ea: c.font_ea.clone(),
@@ -22,10 +22,10 @@ index aaa94017..012d32fc 100644
              size_cs: c.size_cs.or(c.size).unwrap_or(crate::props::DEFAULT_FONT_SIZE).clamp(1.0, 1638.0),
              bold_cs: c.bold_cs.or(c.bold).unwrap_or(false),
 diff --git a/crates/doc/src/settings.rs b/crates/doc/src/settings.rs
-index 3e4199ec..edc08131 100644
+index 63c23ab8..5aa7a752 100644
 --- a/crates/doc/src/settings.rs
 +++ b/crates/doc/src/settings.rs
-@@ -139,6 +139,15 @@ pub struct Settings {
+@@ -143,6 +143,15 @@ pub struct Settings {
      /// body's do; without it they keep their own heights (WPS Office, modes 14 and 15).
      #[serde(default, skip_serializing_if = "std::ops::Not::not")]
      pub adjust_line_height_in_table: bool,
@@ -41,7 +41,7 @@ index 3e4199ec..edc08131 100644
      /// Keep contextual paragraph spacing inside legacy table cells (`allowSpaceOfSameStyleInTable`).
      /// Word ignores the layout override in compatibility mode 15, but the flag still round-trips.
      pub allow_space_of_same_style_in_table: bool,
-@@ -350,6 +359,8 @@ impl Default for Settings {
+@@ -371,6 +380,8 @@ impl Default for Settings {
              do_not_expand_shift_return: false,
              balance_sbcs_dbcs: false,
              adjust_line_height_in_table: false,
@@ -51,7 +51,7 @@ index 3e4199ec..edc08131 100644
              grid_h: DEFAULT_GRID,
              grid_v: DEFAULT_GRID,
 diff --git a/crates/docx/src/read/meta.rs b/crates/docx/src/read/meta.rs
-index c6d8d449..2a264324 100644
+index 2b5ad09c..a51d7e85 100644
 --- a/crates/docx/src/read/meta.rs
 +++ b/crates/docx/src/read/meta.rs
 @@ -41,9 +41,11 @@ impl Reader<'_> {
@@ -67,18 +67,18 @@ index c6d8d449..2a264324 100644
                      if let Some(v) = tw(k, "w:val").filter(|v| *v > 0.0) {
                          s.default_tab = v.clamp(1.0, 1584.0);
 diff --git a/crates/layout/src/kinsoku.rs b/crates/layout/src/kinsoku.rs
-index c8e59847..2fbfcce3 100644
+index 8b7ef169..1f21a77a 100644
 --- a/crates/layout/src/kinsoku.rs
 +++ b/crates/layout/src/kinsoku.rs
-@@ -20,12 +20,13 @@ use unicode_segmentation::UnicodeSegmentation;
- /// East Asian characters a line may not start with: closing brackets and quotes (the curly ” ’
- /// too: Unicode 15.1's LB19a lets a line break before them beside East Asian text), the
- /// ideographic comma and full stop, fullwidth and halfwidth punctuation, the middle dot,
--/// iteration and sound marks, and the per-mille and Celsius signs (GB/T 15834, W3C clreq).
--const NO_START: &str = "、。，．・：；？！゛゜ヽヾゝゞ々〻〉》」』】〕〗〙〛〞〟）］｝｠｡｣､･ﾞﾟ％￠”’〃〆‰℃﹚﹜";
-+/// iteration and sound marks, the per-mille and Celsius signs (GB/T 15834, W3C clreq), and the
-+/// middle dot of transliterated names (`艾布·达伍德`: WPS keeps `布·达` together).
-+const NO_START: &str = "、。，．・：；？！゛゜ヽヾゝゞ々〻〉》」』】〕〗〙〛〞〟）］｝｠｡｣､･ﾞﾟ％￠”’〃〆‰℃﹚﹜·";
+@@ -31,12 +31,13 @@ use unicode_segmentation::UnicodeSegmentation;
+ ///   the fullwidth and halfwidth punctuation, the middle dot, `％` and `￠`;
+ /// - for Chinese (GB/T 15834, W3C clreq): the closing curly quotes `” ’` (Unicode 15.1's LB19a lets a
+ ///   line break before them beside East Asian text), the ditto and closing marks `〃〆`, the
+-///   per-mille and Celsius signs `‰ ℃` and the small closing brackets `﹚﹜`.
+-const NO_START: &str = "ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶㇰㇱㇲㇳㇴㇵㇶㇷㇸㇹㇺㇻㇼㇽㇾㇿｧｨｩｪｫｬｭｮｯーｰ゛゜ヽヾゝゞ々〻ﾞﾟ、。，．・：；？！〉》」』】〕〗〙〛〞〟）］｝｠｡｣､･％￠”’〃〆‰℃﹚﹜";
++///   per-mille and Celsius signs `‰ ℃` and the small closing brackets `﹚﹜`;
++/// - the middle dot of transliterated names (`艾布·达伍德`: WPS keeps `布·达` together).
++const NO_START: &str = "ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶㇰㇱㇲㇳㇴㇵㇶㇷㇸㇹㇺㇻㇼㇽㇾㇿｧｨｩｪｫｬｭｮｯーｰ゛゜ヽヾゝゞ々〻ﾞﾟ、。，．・：；？！〉》」』】〕〗〙〛〞〟）］｝｠｡｣､･％￠”’〃〆‰℃﹚﹜·";
  
  /// East Asian characters a line may not end with: opening brackets and quotes (the curly “ ‘
 -/// too, as for [`NO_START`]), currency signs.
@@ -88,7 +88,7 @@ index c8e59847..2fbfcce3 100644
  
  /// Full-width marks whose blank right half may shrink under punctuation compression: closing
  /// brackets and quotes, and the comma, full stop, colon, semicolon and exclamation mark. Measured
-@@ -39,6 +40,45 @@ const SQUEEZE_LEFT: &str = "（〔［｛〈《「『【〘〖〚〝｟“‘";
+@@ -50,6 +51,45 @@ const SQUEEZE_LEFT: &str = "（〔［｛〈《「『【〘〖〚〝｟“‘";
  /// [`SQUEEZE_RIGHT`] but the curly quotes and the middle dot (measured in WPS).
  const END_BLANK: &str = "。，、：；！．）〕］｝〉》」』】〙〗〛〞〟｠";
  
@@ -134,9 +134,9 @@ index c8e59847..2fbfcce3 100644
  /// The side of a full-width mark whose blank may shrink.
  #[derive(Clone, Copy, Debug, PartialEq, Eq)]
  pub enum Side {
-@@ -234,4 +274,18 @@ mod tests {
-         let any = breaks("Hello café", true, false);
-         assert_eq!(any, ["e", "l", "l", "o", "c", "a", "f", "é"]);
+@@ -279,4 +319,18 @@ mod tests {
+             assert!(super::NO_START.contains(c), "NO_START (行頭禁則) must hold U+{:04X} {c}", c as u32);
+         }
      }
 +
 +    #[test]
@@ -154,10 +154,10 @@ index c8e59847..2fbfcce3 100644
 +    }
  }
 diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
-index f67393fd..1131a657 100644
+index d68e160a..b7ff573f 100644
 --- a/crates/layout/src/para.rs
 +++ b/crates/layout/src/para.rs
-@@ -103,6 +103,10 @@ pub struct ParaLayout {
+@@ -110,6 +110,10 @@ pub struct ParaLayout {
      /// Closing marks whose blank half is free at a line's end ([`compress_punct`]), by cluster
      /// index, sorted: a line ending in one may squeeze more.
      pub end_marks: Vec<usize>,
@@ -168,7 +168,7 @@ index f67393fd..1131a657 100644
  }
  
  /// How much one line may take from its compressible marks in all, measured in WPS Office on
-@@ -167,6 +171,15 @@ impl ParaLayout {
+@@ -187,6 +191,15 @@ impl ParaLayout {
  
      /// The automatic space in cluster `k`'s advance ([`auto_space`]), 0 without one.
      /// Whether a line of the clusters `c0..c1` ends in a closing mark whose blank half is free.
@@ -243,10 +243,10 @@ index c3256198..1a0816b0 100644
          }
      }
 diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
-index ad9b371e..cf03c5d5 100644
+index 61cdee4c..24562c4d 100644
 --- a/crates/layout/src/para/lines.rs
 +++ b/crates/layout/src/para/lines.rs
-@@ -510,13 +510,20 @@ impl<'e> Breaker<'e> {
+@@ -558,13 +558,20 @@ impl<'e> Breaker<'e> {
          let c0 = sc.c0;
          let last_tab = (c0..c1).rev().find(|k| pl.clusters.get(*k).is_some_and(|c| c.kind == ClKind::Tab));
          let display = pl.displays.iter().find(|(ci, _)| *ci >= c0 && *ci < c1).map(|d| d.1);
@@ -270,7 +270,7 @@ index ad9b371e..cf03c5d5 100644
          let align_from = last_tab.map(|k| k + 1).unwrap_or(c0);
          let shift = match (display, rp.align) {
              (Some(MathJc::Left), _) => 0.0,
-@@ -869,8 +876,12 @@ impl Scan {
+@@ -948,8 +955,12 @@ impl Scan {
          let squeeze = pl.squeeze_room(c0, j + 1);
          // On a character grid a closing mark ending the line may reach past the last pitch.
          let hang = if pl.end_marks.binary_search(&j).is_ok() { bk.grid_hang } else { 0.0 };
@@ -285,10 +285,10 @@ index ad9b371e..cf03c5d5 100644
              || c.kind == ClKind::Marker;
          if !fits && pl.is_edit_boundary(c.start) && (c0..j).any(|k| pl.clusters.get(k).is_some_and(takes_room)) {
 diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
-index b5549ae6..f8aa9822 100644
+index fbaf5d99..f14b5206 100644
 --- a/crates/layout/src/para/paragraph.rs
 +++ b/crates/layout/src/para/paragraph.rs
-@@ -587,6 +587,12 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+@@ -692,6 +692,12 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
      if rp.snap_to_grid {
          snap_chars(&mut sh.b, &p.text, &env.grid);
      }
@@ -301,7 +301,7 @@ index b5549ae6..f8aa9822 100644
      // Text on a character grid keeps to its cells; compression applies there too (WPS).
      let mut auto_space =
          if rp.snap_to_grid && env.grid.chars.is_some() { Vec::new() } else { auto_space(&mut sh.b, &p.text, rp.auto_space_de, rp.auto_space_dn) };
-@@ -598,7 +604,7 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+@@ -703,7 +709,7 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
      let compresses = doc.settings.char_spacing.compresses_punctuation() && (justified || squeeze_rule == super::SqueezeRule::HalfEm);
      let mut end_marks = Vec::new();
      let squeeze = if compresses {
@@ -310,7 +310,7 @@ index b5549ae6..f8aa9822 100644
          // Mode 14 and older squeeze an automatic space by up to half on an overflowing line, in
          // the same pool as the marks (WPS, F13).
          if squeeze_rule == super::SqueezeRule::HalfEm {
-@@ -620,6 +626,29 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+@@ -725,6 +731,29 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
      } else {
          Vec::new()
      };
@@ -340,7 +340,7 @@ index b5549ae6..f8aa9822 100644
      let mut skip = sh.left.clone();
      skip.extend(sh.bare.iter().cloned());
      let bt = BreakText::new(&p.text, skip);
-@@ -655,6 +684,7 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+@@ -762,6 +791,7 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
          squeeze,
          squeeze_rule,
          end_marks,
