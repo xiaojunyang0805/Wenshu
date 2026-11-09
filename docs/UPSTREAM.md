@@ -5,6 +5,7 @@
 | Engine | Repo | Revision | Licence |
 |---|---|---|---|
 | WordCraft | storytold/wordcraft | `3b7f7ed` (2026-10-30, v0.12.0) | MIT OR Apache-2.0 |
+| winit | storytold/winit | `a517b38` (2026-10-24, pinned 2026-11-05; WordCraft's fork) | Apache-2.0 |
 
 ## Workflow
 

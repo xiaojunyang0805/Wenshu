@@ -7,8 +7,10 @@ typography, GB/T 9704 official documents (公文), OFD and a Chinese fidelity co
 Wenshu is an independent project, not affiliated with Kingsoft or Microsoft. It opens and saves files
 made in WPS Office and Microsoft Word.
 
-**Status: M0 (foundations) done; M1 (Chinese layout) in review; M2 (desktop alpha) packaged.** The layout
-patches are in draft PRs upstream, reworked to WPS measurements across a 200-document corpus
+**Status: MVP jobs met (v0.1.4, 2026-11-09).** M0 foundations, M1 Chinese layout (page counts
+match WPS on 186 / 200 corpus documents on Windows, 173 on Linux), M2 desktop alpha and M3's OFD
+export are done; [releases](https://github.com/xiaojunyang0805/Wenshu/releases) are published as
+pre-releases. The layout patches are in draft PRs upstream, reworked to WPS measurements across a 200-document corpus
 ([corpus/README.md](corpus/README.md), [docs/WPS-FINDINGS.md](docs/WPS-FINDINGS.md)). The desktop
 app 文枢 has a Chinese or English interface, 公文 templates and a 公文 format check, and builds
 into a Windows zip and MSI, Linux tar.gz, .deb and AppImage packages (x86_64), and LoongArch
