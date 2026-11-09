@@ -2,6 +2,31 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-09: Word measurements on #5006; F44; J5 re-measured for v0.1.4
+
+- **#5006 (punctuation compression):** kennyfs posted two rounds of Word for Windows
+  measurements (PMingLiU, DFKai-SB). Modes 11, 12 and 14 match F10/F12 (½ em per line, on
+  left-aligned lines too, plus an em per mark in the last unit). Mode 15 squeezes justified lines
+  only, and its pools for k = 1, 3, 6 on 30-unit lines fall within F41's k / (k + n/32) em
+  (6, 9.2, 10.4 pt). Patches 0020 and 0058 pushed to the PR (`52a51fd9`, `466ca6f5`), the
+  description rewritten (it still described the 0.1 em model), reply posted with sweeps that
+  would separate F41 from his ¾ em guess. 0059 stays local: it needs 0031's hanging.
+- **#5006 full local CI** (`466ca6f5`, Windows): fmt, clippy (all but the `mcp` test that is dead
+  code on Windows, as on upstream `main`), assets, layers and wasm pass; workspace tests 4,682
+  passed, 3 failed: the two known Windows failures (`proof` hunspell, `ui-egui` backstage) and
+  `engine` `finish_recovery_covers_every_open_document`, a timing flake under load (passes 3 / 3
+  alone). Logs in `out/ci5006`.
+- **F44:** WPS squeezes `，。、」` on the right and `「` on the left even in Microsoft JhengHei,
+  whose marks are centred (`out/side1`, 30 renders); Word squeezes centred marks on both sides.
+- **J5 re-measured** (today's CLI, all 200 corpus documents re-saved, WPS renders of the saves):
+  WPS opens 200 / 200; text identical 199 / 200, tables 200 / 200, East Asian font names
+  199 / 200; WPS page count unchanged **198 / 200** (was 197: `aa1a5e719d` now keeps 4 pages);
+  mean page score 0.9932 → **0.9939**, 161 pixel-identical. Left: `29a7772dfb`, `ef14cd2f88`
+  (a page off in Wenshu's own layout) and `aae80ea709` (text and two Latin font names, as
+  before). `out/rt/summary.txt`.
+
+**Next:** v0.1.4 step (6): version bump, changelogs, push, tag; the user publishes.
+
 ## 2026-11-05 (6): v0.1.4 preparation; where to start tomorrow
 
 - **Pushed** `main` through 80d902c (OFD export, outline and links, the regression gate, the IME
