@@ -12,8 +12,8 @@ Copy the whole folder into a directory your web server serves (for example `/var
 
 - 服务器需以 `application/wasm` 类型发送 `.wasm` 文件（nginx、Apache、IIS 和 Caddy 的新版本默认如此）。
   The server must send `.wasm` files as `application/wasm` (current nginx, Apache, IIS and Caddy do by default).
-- 请为 `.wasm` 和 `.js` 开启 gzip 或 brotli 压缩：程序文件约 60 MB，压缩后约 16–22 MB。
-  Turn on gzip or brotli compression for `.wasm` and `.js`: the app is about 60 MB, 16–22 MB compressed.
+- 请为 `.wasm` 和 `.js` 开启 gzip 或 brotli 压缩：程序文件约 34 MB，压缩后约 11–14 MB。
+  Turn on gzip or brotli compression for `.wasm` and `.js`: the app is about 34 MB, 11–14 MB compressed.
 - 字体在 `fonts/` 中，打开后在后台按需加载（WOFF2，约 30 MB）。请允许浏览器缓存它们（例如 `Cache-Control: max-age=2592000`），以后打开会更快。
   Fonts are in `fonts/` and load in the background after the app opens (WOFF2, about 30 MB). Let browsers cache them (for example `Cache-Control: max-age=2592000`) so later visits start faster.
 - 不能直接双击 `index.html` 打开（浏览器禁止从本地文件加载 WebAssembly 和字体）。本机试用可以运行 `python -m http.server 8000`，再打开 <http://localhost:8000>。

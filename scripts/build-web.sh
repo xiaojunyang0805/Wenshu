@@ -6,6 +6,9 @@
 #   scripts/sync-upstream.sh    # first: the patched WordCraft (patch 0072 makes the web app a library)
 #   scripts/build-web.sh
 #
+# The `web` profile links with fat LTO, which needs a lot of memory: on a small machine run it as
+# `CARGO_BUILD_JOBS=2 scripts/build-web.sh`.
+#
 # Needs trunk (`cargo install trunk --locked`), the wasm32-unknown-unknown target, and what
 # packaging/fonts.sh needs. With Python's fontTools and brotli the fonts are served as WOFF2
 # (about half the size); without them as the original TTF/OTF.
@@ -15,6 +18,11 @@ OUT="${OUT:-$ROOT/dist/web}"
 TARGET="${CARGO_TARGET_DIR:-$ROOT/eval/target/wordcraft}"
 STAGE="$TARGET/wenshu-web-fonts"
 
+# Only the interfaces Wenshu offers (Chinese; English is built in) and English proofing data: the
+# other 49 interface languages and the de/pl/pt/it/ru hyphenation would add megabytes to every
+# first visit (patch 0073, CRAFT_I18N_LOCALES; craft-proof's CRAFT_PROOF_EMBED).
+export CRAFT_I18N_LOCALES="${CRAFT_I18N_LOCALES:-zh-hans,zh-hant}"
+export CRAFT_PROOF_EMBED="${CRAFT_PROOF_EMBED:-en}"
 (cd "$ROOT/apps/wenshu-web" && trunk build --release --dist "$OUT")
 rm -f "$OUT/.trunk-lock"
 

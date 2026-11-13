@@ -88,3 +88,14 @@ opt-level = 3
 lto = "thin"
 codegen-units = 16
 debug = 0
+
+# The browser build (scripts/build-web.sh, apps/wenshu-web/index.html): size over speed, as the
+# app is downloaded on every first visit. Measured 2026-11-13: 59.7 → 40.1 MB (11.8 MB brotli)
+# with layout as fast as `release` in Chrome; opt-level "z" saved 4 MB more but laid out ~40%
+# slower.
+[profile.web]
+inherits = "release"
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+strip = true

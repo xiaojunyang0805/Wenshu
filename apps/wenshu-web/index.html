@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
   <title>文枢 Wenshu</title>
   <link data-trunk rel="icon" href="../wenshu-desktop/assets/wenshu.ico" />
-  <link data-trunk rel="rust" data-bin="wenshu-web" data-wasm-opt="z" data-weak-refs />
+  <link data-trunk rel="rust" data-bin="wenshu-web" data-cargo-profile="web"
+    data-wasm-opt-params="--enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext --enable-mutable-globals --enable-reference-types --enable-multivalue" data-wasm-opt="z" data-weak-refs />
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #e6e6e6; }
     #wordcraft_canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }

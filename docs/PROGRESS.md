@@ -2,6 +2,30 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-13 (6): the web app 59.7 → 34.3 MB (profile `web`, 0073)
+
+- **Where the 60 MB went:** code 40 MB (the desktop's speed-first `release`: opt-level 3, thin
+  LTO, 16 units), data 19.5 MB (7.7 MB fonts WordCraft embeds, 5.8 MB interface catalogs for 51
+  languages, 3.6 MB proofing data).
+- **Profile `web`** (opt-level "s", fat LTO, one unit, stripped; wasm-opt needs the target's
+  features enabled, in `index.html`). Timed in Chrome, opening the 86-page `de24610147` twice
+  (87 pages with the open fonts, as on Linux):
+
+  | Build | wasm | brotli | 1st / 2nd open |
+  |---|---|---|---|
+  | `release` | 59.7 MB | 15.6 MB | 2.4–2.6 s / 1.8–2.0 s |
+  | opt-level "s" | 40.1 MB | 11.8 MB | 2.8 s / 1.8 s |
+  | opt-level "z" | 35.7 MB | 10.9 MB | 3.1 s / 2.7–2.8 s (not taken) |
+
+- **Patch 0073:** `CRAFT_I18N_LOCALES` limits the embedded interface catalogs; the web build
+  embeds zh-hans and zh-hant only, and English-only proofing data (`CRAFT_PROOF_EMBED=en`).
+- **Result:** wasm **34.3 MB** (14.1 MB gzip, **10.5 MB** brotli), site 89 → 65 MB. Checked in
+  Chrome: `ce628d9760` 6 pages, the Chinese interface (zh-Hans) works.
+- **Build memory:** fat LTO needs much more memory; one build was stopped when the PC ran low,
+  `CARGO_BUILD_JOBS=2 scripts/build-web.sh` finished.
+- **Not tried:** dropping fonts WordCraft embeds that Wenshu's served fonts duplicate (part of
+  the 7.7 MB; it changes fallbacks, so it needs care).
+
 ## 2026-11-13 (5): the self-hostable web build (M4)
 
 - **Decided with the user:** the web version is a self-hostable static build (an organisation

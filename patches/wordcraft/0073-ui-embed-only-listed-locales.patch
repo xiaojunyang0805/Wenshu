@@ -1,0 +1,42 @@
+Upstream: (not opened yet; a candidate: CRAFT_I18N_LOCALES limits the embedded interface catalogs to the listed locales, for a browser build that must stay small; unset embeds every locale as before)
+diff --git a/crates/ui-egui/build.rs b/crates/ui-egui/build.rs
+--- a/crates/ui-egui/build.rs
++++ b/crates/ui-egui/build.rs
+@@ -13,6 +13,9 @@
+ //!   catalog) entry per locale that has a `wordcraft.tsv`. Unset, or not a checkout (a warning),
+ //!   it is empty and the interface is English only; with `CRAFT_I18N_REQUIRED=1` (releases) that
+ //!   is an error instead. Recipe: craft-i18n's `docs/integration.md`.
++//! - `CRAFT_I18N_LOCALES`, optional: a comma-separated list of locale codes (`zh-hans,zh-hant`) to
++//!   embed instead of every locale, for a build that must stay small (a browser build is
++//!   downloaded on every first visit). English, the source language, is always there.
+ 
+ use std::fmt::Write as _;
+ 
+@@ -85,12 +88,14 @@ fn locales(dir: &std::path::Path) -> Result<Vec<Locale>, String> {
+     }
+     let list = std::fs::read_dir(dir).map_err(|e| format!("{} is not a craft-i18n checkout ({e})", dir.display()))?;
+     println!("cargo::rerun-if-changed={}", dir.display());
++    println!("cargo::rerun-if-env-changed=CRAFT_I18N_LOCALES");
++    let only = std::env::var("CRAFT_I18N_LOCALES").ok().map(|v| locale_list(&v)).filter(|l| !l.is_empty());
+     let mut out = Vec::new();
+     for entry in list.flatten() {
+         let path = entry.path();
+         let Some(code) = path.file_name().and_then(std::ffi::OsStr::to_str).map(str::to_string) else { continue };
+         let app = path.join(APP_CATALOG);
+-        if !app.is_file() {
++        if !app.is_file() || only.as_ref().is_some_and(|l| !l.contains(&code.to_ascii_lowercase())) {
+             continue;
+         }
+         println!("cargo::rerun-if-changed={}", app.display());
+@@ -107,6 +112,11 @@ fn locales(dir: &std::path::Path) -> Result<Vec<Locale>, String> {
+     Ok(out)
+ }
+ 
++/// The lower-case locale codes in `CRAFT_I18N_LOCALES` (`zh-Hans, zh-hant` → both).
++fn locale_list(v: &str) -> Vec<String> {
++    v.split(',').map(|l| l.trim().to_ascii_lowercase()).filter(|l| !l.is_empty()).collect()
++}
++
+ fn read<T>(path: &std::path::Path, fallback: &str, parse: impl Fn(&str) -> Result<T, String>) -> Option<T> {
+     println!("cargo::rerun-if-changed={}", path.display());
+     let r = std::fs::read_to_string(path).map_err(|e| e.to_string()).and_then(|t| parse(&t));
