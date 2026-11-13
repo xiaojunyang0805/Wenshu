@@ -1,0 +1,11 @@
+# Built by scripts/build-web.sh (which also stages fonts/ and the licences); `trunk serve` from
+# this directory runs the app alone, without Wenshu's fonts.
+[build]
+target = "index.html"
+dist = "../../dist/web"
+public_url = "./"
+filehash = true
+
+[serve]
+addresses = ["127.0.0.1"]
+port = 8772

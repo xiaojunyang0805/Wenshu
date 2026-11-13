@@ -28,6 +28,42 @@ pub fn check_docx(path: &std::path::Path) -> Result<Vec<Finding>, String> {
     check_bytes(&bytes)
 }
 
+/// The findings for a DOCX held in memory as a report, one rule a block, in Chinese and English
+/// (the desktop and web apps show it from 检查公文格式). An error when it isn't a DOCX.
+pub fn report(docx: &[u8]) -> Result<String, String> {
+    let findings = check_bytes(docx)?;
+    let failed = findings.iter().filter(|f| !f.ok).count();
+    let mut out = if failed == 0 {
+        format!(
+            "符合 GB/T 9704—2012 的 {} 项检查。
+Passes all {} GB/T 9704-2012 checks.
+
+",
+            findings.len(),
+            findings.len()
+        )
+    } else {
+        format!(
+            "{failed} 项不符合 GB/T 9704—2012。
+{failed} of {} GB/T 9704-2012 checks fail.
+
+",
+            findings.len()
+        )
+    };
+    for f in &findings {
+        let mark = if f.ok { "✔" } else { "✘" };
+        out.push_str(&format!(
+            "{mark} {}
+    应为 expected: {}
+    实际 actual: {}
+",
+            f.rule, f.expected, f.actual
+        ));
+    }
+    Ok(out)
+}
+
 /// Check a DOCX package held in memory.
 pub fn check_bytes(bytes: &[u8]) -> Result<Vec<Finding>, String> {
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| e.to_string())?;

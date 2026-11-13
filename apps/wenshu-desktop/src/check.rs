@@ -14,30 +14,9 @@ pub fn tools() -> Vec<AppTool> {
     }]
 }
 
-/// The checker's findings for a DOCX, one line a rule.
+/// The checker's report for a DOCX ([`wenshu_gongwen::check::report`]).
 pub fn report(docx: &[u8]) -> Result<String, String> {
-    let findings = wenshu_gongwen::check::check_bytes(docx)?;
-    let failed = findings.iter().filter(|f| !f.ok).count();
-    let mut out = if failed == 0 {
-        format!(
-            "符合 GB/T 9704—2012 的 {} 项检查。\nPasses all {} GB/T 9704-2012 checks.\n\n",
-            findings.len(),
-            findings.len()
-        )
-    } else {
-        format!(
-            "{failed} 项不符合 GB/T 9704—2012。\n{failed} of {} GB/T 9704-2012 checks fail.\n\n",
-            findings.len()
-        )
-    };
-    for f in &findings {
-        let mark = if f.ok { "✔" } else { "✘" };
-        out.push_str(&format!(
-            "{mark} {}\n    应为 expected: {}\n    实际 actual: {}\n",
-            f.rule, f.expected, f.actual
-        ));
-    }
-    Ok(out)
+    wenshu_gongwen::check::report(docx)
 }
 
 #[cfg(test)]

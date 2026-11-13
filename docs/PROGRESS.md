@@ -2,6 +2,34 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-13 (5): the self-hostable web build (M4)
+
+- **Decided with the user:** the web version is a self-hostable static build (an organisation
+  hosts it, on an intranet too; documents never leave the browser); a domain later.
+- **Patch 0072:** WordCraft's browser app as a library (`wordcraft_web::start(WebConfig)`: brand,
+  start-up code, ribbon tools, a ready hook with the egui context), as 0006 did for the desktop;
+  `FontDb::add_app_fonts` for fonts an app ships (WOFF2 decoded, layouts redraw, not user fonts).
+- **`apps/wenshu-web`:** 文枢 brand, `wenshu_core::init` (substitutes, Chinese blank documents, OFD
+  export), 检查公文格式 on Review (the report moved to `wenshu_gongwen::check::report`, shared
+  with the desktop app), and Wenshu's fonts fetched from the hosting server: `fonts/fonts.json`
+  lists them in the order wanted (Latin defaults, 朱雀仿宋, Noto Serif SC, …, 霞鹜文楷 last); a file
+  name that isn't plain is refused. Tests (config, manifest).
+- **`scripts/build-web.sh`:** trunk build + fonts staged from the pinned list (moved to
+  `packaging/fonts.sh`, which `packaging/linux/package.sh` now sources too) + WOFF2 + licences +
+  `HOSTING.md` (bilingual hosting guide, nginx example) → `dist/web`, 89 MB: app 60 MB
+  (16 MB brotli, 22 MB gzip), fonts 32 MB as WOFF2 (64 MB as TTF/OTF).
+- **Checked in Chrome** (local `http.server`, WebGPU and WebGL2): all 24 fonts loaded within ~4 s;
+  `ce628d9760` opened through the page API lays out in **6 pages** (= WPS) with its red 公文
+  header in the right faces; `01_gongwen.docx` 1 page (= WPS); 检查公文格式 shows the report, the
+  same as `wenshu gongwen check` (2 of 8 failing for `01_gongwen`). Chrome's own screenshots time
+  out on the canvas, so pages were seen through the app's `window.wordcraft.screenshot()`.
+  Not yet tried: downloads (Save As, PDF/OFD export), Firefox/Safari, a 国产 browser.
+- **Found on the way:** `gongwen check` reads `ce628d9760`'s landscape section (16838×11906) as
+  the page size; it should check the body's section.
+- **Next:** publish decision (CI job for the web zip, a release); downloads in the browser; the
+  wasm size (60 MB); 公文 templates in File › New on the web (the desktop seeds files the web
+  app has no folder for).
+
 ## 2026-11-13 (4): Linux 174 → 182 / 200: embedded subsets, Chinese fallback boxes (0070, 0071)
 
 - **Method:** the 14 documents that match on Windows but not on Linux, converted on both

@@ -1,0 +1,205 @@
+Upstream: (not opened yet; a candidate: wordcraft-web as a library, start(WebConfig) with brand, on_start, app_tools and on_ready, as patch 0006 does for the desktop app; FontDb::add_app_fonts for fonts an embedding app ships)
+diff --git a/apps/wordcraft-web/Cargo.toml b/apps/wordcraft-web/Cargo.toml
+--- a/apps/wordcraft-web/Cargo.toml
++++ b/apps/wordcraft-web/Cargo.toml
+@@ -9,6 +9,12 @@ publish = false
+ [lints]
+ workspace = true
+ 
++# The browser app as a library ([`start`] with a [`WebConfig`]): `main.rs` runs WordCraft's, and an
++# app built on WordCraft runs it with its own name and start-up code.
++[lib]
++name = "wordcraft_web"
++path = "src/lib.rs"
++
+ [[bin]]
+ name = "wordcraft-web"
+ path = "src/main.rs"
+diff --git a/apps/wordcraft-web/src/main.rs b/apps/wordcraft-web/src/main.rs
+--- a/apps/wordcraft-web/src/main.rs
++++ b/apps/wordcraft-web/src/main.rs
+@@ -15,21 +15,9 @@
+ //! either host mode.
+ #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+ 
+-#[cfg(any(target_arch = "wasm32", test))]
+-mod prefs;
+-#[cfg(any(target_arch = "wasm32", test))]
+-mod save_fallback;
+-
+-#[cfg(target_arch = "wasm32")]
+-mod api;
+-#[cfg(target_arch = "wasm32")]
+-mod host;
+-#[cfg(target_arch = "wasm32")]
+-mod web;
+-
+ #[cfg(target_arch = "wasm32")]
+ fn main() {
+-    web::start();
++    wordcraft_web::start(wordcraft_web::WebConfig::default());
+ }
+ 
+ #[cfg(not(target_arch = "wasm32"))]
+diff --git a/apps/wordcraft-web/src/web.rs b/apps/wordcraft-web/src/web.rs
+--- a/apps/wordcraft-web/src/web.rs
++++ b/apps/wordcraft-web/src/web.rs
+@@ -17,9 +17,13 @@ mod font_store;
+ const CANVAS_ID: &str = "wordcraft_canvas";
+ const LOADING_ID: &str = "wordcraft_loading";
+ 
+-pub fn start() {
++pub fn start(config: crate::WebConfig) {
+     eframe::WebLogger::init(log::LevelFilter::Info).ok();
+-    wasm_bindgen_futures::spawn_local(async {
++    wordcraft_ui_egui::brand::set(config.brand);
++    if let Some(on_start) = config.on_start {
++        on_start();
++    }
++    wasm_bindgen_futures::spawn_local(async move {
+         let Some(document) = web_sys::window().and_then(|w| w.document()) else {
+             log::error!("no document");
+             return;
+@@ -73,6 +77,7 @@ pub fn start() {
+                     session.system_region = region;
+                     let messages = Rc::new(RefCell::new(Vec::new()));
+                     let mut services = services(inbox.clone(), cc.egui_ctx.clone(), dirty, saves.clone(), messages.clone());
++                    services.app_tools = config.app_tools.map(|tools| tools()).unwrap_or_default();
+                     if let Some(bridge) = &app_bridge {
+                         bridge.connect(&mut services, inbox.clone(), cc.egui_ctx.clone());
+                     }
+@@ -104,6 +109,9 @@ pub fn start() {
+                         crate::host::Bridge::set_author(&mut app, &author);
+                         prefs.keep_own_author(&app.session.author, &own);
+                     }
++                    if let Some(on_ready) = config.on_ready {
++                        on_ready(cc.egui_ctx.clone());
++                    }
+                     Ok(Box::new(WebShell { app, inbox, messages, prefs }))
+                 }),
+             )
+@@ -118,7 +126,7 @@ pub fn start() {
+         if let Some(el) = document.get_element_by_id(LOADING_ID) {
+             match result {
+                 Ok(()) => el.remove(),
+-                Err(e) => el.set_inner_html(&format!("<p>WordCraft failed to start: {e:?}</p><p>A browser with WebGPU or WebGL2 is required.</p>")),
++                Err(e) => el.set_inner_html(&format!("<p>{} failed to start: {e:?}</p><p>A browser with WebGPU or WebGL2 is required.</p>", config.brand.name)),
+             }
+         }
+     });
+diff --git a/crates/fonts/src/fontdb/user.rs b/crates/fonts/src/fontdb/user.rs
+--- a/crates/fonts/src/fontdb/user.rs
++++ b/crates/fonts/src/fontdb/user.rs
+@@ -460,6 +460,19 @@ impl FontDb {
+         Ok(Installed { font, warning })
+     }
+ 
++    /// Add font files an embedding app ships (TTF, OTF, TTC, WOFF or WOFF2; a browser build fetches
++    /// them from its server): faces every document sees, like installed fonts, not recorded as
++    /// user fonts. A file that doesn't decode is skipped; faces already present are kept. Returns
++    /// how many faces were added; layouts redraw ([`FontDb::generation`]) when any was.
++    pub fn add_app_fonts(&self, files: Vec<Vec<u8>>) -> usize {
++        let files: Vec<(Vec<u8>, Option<String>)> = files.iter().filter_map(|f| decode_font_file(f).ok()).map(|sfnt| (sfnt, None)).collect();
++        let added = self.add_fonts(files);
++        if added > 0 {
++            self.fonts_changed();
++        }
++        added
++    }
++
+     /// Add the fonts a document embeds (#1171) for this run: not recorded as user fonts, never
+     /// stored. Faces already available are kept. Lookups made while the family was missing are
+     /// forgotten ([`FontDb::generation`]), so text set in it now resolves to it. Each file comes
+diff --git a/crates/fonts/src/fontdb/tests/sysfonts.rs b/crates/fonts/src/fontdb/tests/sysfonts.rs
+--- a/crates/fonts/src/fontdb/tests/sysfonts.rs
++++ b/crates/fonts/src/fontdb/tests/sysfonts.rs
+@@ -798,6 +798,23 @@ fn a_documents_copy_of_an_installed_font_does_not_stop_it_loading() {
+     let _ = std::fs::remove_dir_all(dir);
+ }
+ 
++/// Fonts an app ships (a browser build's, fetched from its server) are found by name in every
++/// document, redraw layouts, and aren't the user's: a file that doesn't decode is skipped.
++#[test]
++fn app_fonts_are_shared_and_redraw_layouts() {
++    let db = FontDb::with_font_dirs(Vec::new());
++    db.set_system_fallback(false);
++    let generation = db.generation();
++    let file = with_family_names("SourceSans3-Regular.ttf", &[(0x0409, "Shipped Test")]);
++    assert_eq!(db.add_app_fonts(vec![b"not a font".to_vec(), file.clone()]), 1);
++    assert!(db.has_family("Shipped Test"));
++    assert_ne!(db.generation(), generation, "layouts redraw");
++    assert!(db.user_fonts().is_empty(), "not a user font");
++    let generation = db.generation();
++    assert_eq!(db.add_app_fonts(vec![file]), 0, "already there");
++    assert_eq!(db.generation(), generation);
++}
++
+ /// A file a document embeds under a table name it doesn't go by (WPS embeds a SimSun subset as
+ /// 黑体) goes by that name only: not by its own full, PostScript or localized names, or 宋体
+ /// resolved to a few glyphs of SimSun where SimSun isn't installed.
+diff --git a/apps/wordcraft-web/src/lib.rs b/apps/wordcraft-web/src/lib.rs
+new file mode 100644
+--- /dev/null
++++ b/apps/wordcraft-web/src/lib.rs
+@@ -0,0 +1,61 @@
++//! WordCraft in the browser, as a library: `main.rs` runs it with WordCraft's [`WebConfig`], and an
++//! app built on WordCraft runs it with its own name and start-up code ([`start`]).
++//!
++//! Runs the same [`wordcraft_ui_egui::WordApp`] as the desktop app through eframe's web runner
++//! (wgpu: WebGPU where available, WebGL2 otherwise). Build with `trunk build --release` from this
++//! directory (output in `dist/web`).
++//!
++//! Differences from the desktop app: no TCP control channel; Open and Insert › Pictures use the
++//! browser file picker (bytes arrive through `Services::inbox`); Save and Export download.
++//! Preferences (theme, interface size, editing options…) are kept in `localStorage` (`prefs`).
++//! URL flags: `?webgl` forces WebGL2; `?sample` opens the sample document.
++//! `?host=parent` (inside an `<iframe>`) talks to a same-origin parent page instead: it sends the
++//! document to open and stores what WordCraft saves (`host`). A page can also host WordCraft in
++//! its own document (no iframe) with `data-host="page"` on the canvas, talking over DOM
++//! `CustomEvent`s on the canvas. `&author=` names the user for comments and tracked changes in
++//! either host mode.
++#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
++
++#[cfg(any(target_arch = "wasm32", test))]
++mod prefs;
++#[cfg(any(target_arch = "wasm32", test))]
++mod save_fallback;
++
++#[cfg(target_arch = "wasm32")]
++mod api;
++#[cfg(target_arch = "wasm32")]
++mod host;
++#[cfg(target_arch = "wasm32")]
++mod web;
++
++pub use wordcraft_ui_egui::AppTool;
++pub use wordcraft_ui_egui::brand::Brand;
++
++/// What an app built on WordCraft's browser front end sets: its name, version and About text
++/// ([`Brand`]), code to run before the app starts (an app installs its font substitutes there,
++/// say), tools it adds to the ribbon, and code to run once the app is up with its egui context
++/// (an app fetches fonts there and repaints when they arrive). [`Default`] is WordCraft's.
++#[derive(Clone, Copy, Debug)]
++pub struct WebConfig {
++    /// The product: the About box, the start-up error.
++    pub brand: Brand,
++    /// Runs before the app is made.
++    pub on_start: Option<fn()>,
++    /// Tools the app adds to the ribbon (Review, in a group named after the brand).
++    pub app_tools: Option<fn() -> Vec<AppTool>>,
++    /// Runs once the app is made, with its context (repaint it after changing fonts: the app lays
++    /// out again when they change).
++    pub on_ready: Option<fn(egui::Context)>,
++}
++
++impl Default for WebConfig {
++    fn default() -> WebConfig {
++        WebConfig { brand: Brand::default(), on_start: None, app_tools: None, on_ready: None }
++    }
++}
++
++/// Start the app in the page's canvas (`<canvas id="wordcraft_canvas">`), as `config` says.
++#[cfg(target_arch = "wasm32")]
++pub fn start(config: WebConfig) {
++    web::start(config);
++}

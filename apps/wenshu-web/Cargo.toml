@@ -1,0 +1,31 @@
+[package]
+name = "wenshu-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Wenshu in the browser: the WordCraft web front end as 文枢, with Chinese defaults, the 公文 check and fonts fetched from its own server"
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "wenshu-web"
+path = "src/main.rs"
+
+[dependencies]
+wenshu-core = { workspace = true }
+wenshu-gongwen = { workspace = true }
+wordcraft-web = { workspace = true }
+wordcraft-fonts = { workspace = true }
+egui = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["Window", "Response"] }

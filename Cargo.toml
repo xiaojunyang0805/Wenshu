@@ -31,6 +31,9 @@ kurbo = "0.13"
 # `apps/wenshu-desktop` uses these: it is the one place the UI shell is embedded.
 wordcraft = { path = "upstream/wordcraft/apps/wordcraft" }
 wordcraft-control-key = { path = "upstream/wordcraft/crates/control-key" }
+# The browser front end, as a library (patch 0072). Only `apps/wenshu-web` uses it.
+wordcraft-web = { path = "upstream/wordcraft/apps/wordcraft-web" }
+egui = "0.37"
 log = "0.4"
 
 serde = { version = "1", features = ["derive"] }

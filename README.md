@@ -52,6 +52,11 @@ falls by more than 0.02 or the mean by more than 0.002. On Linux, set
 `corpus/tools/gate_wsl.sh` does the Linux half in WSL.
 `corpus/tools/pdf_check.py` and `corpus/tools/ofd_check.py` check the PDF and OFD exports.
 
+`scripts/build-web.sh` builds the self-hostable browser app (文枢网页版) into `dist/web`: copy
+that folder to any static web server, an intranet one too, and documents are opened, edited and
+exported in the browser without being uploaded ([apps/wenshu-web/HOSTING.md](apps/wenshu-web/HOSTING.md)).
+It needs trunk (`cargo install trunk --locked`) and the `wasm32-unknown-unknown` target.
+
 `python vscode/package.py` packages the VS Code preview extension as
 `dist/wenshu-preview-<version>.vsix` (install it with `code --install-extension <file>`); it draws
 the pages with the `wenshu` CLI ([vscode/README.md](vscode/README.md)).
