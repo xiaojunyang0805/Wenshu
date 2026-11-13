@@ -2,6 +2,19 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-13 (8): 公文 templates in the web app's File › New (0074)
+
+- **Patch 0074:** `set_app_templates` in the engine (like `set_app_formats`): an app's templates
+  open with `file.new {template: id}`; File › New shows them under their category after
+  WordCraft's, and its search finds them.
+- The five 公文 templates (通知, 请示, 报告, 函, 纪要) moved from `wenshu-desktop` to
+  `wenshu_gongwen::templates` (with `docx(name)`); the web app registers them under 公文. The
+  desktop app still seeds them as `.dotx` files in Personal (registering them there too would
+  list them twice).
+- **Tests:** engine (`app_templates.rs`), UI search, gongwen (every template passes the check),
+  web (`file.new` opens 请示). Engine 1315 pass; UI 1198 pass, 3 fail on this Windows machine
+  with or without the patch (fonts: `interface_symbols_have_glyphs`, two egui font panics).
+
 ## 2026-11-13 (7): 公文 check reads the first section
 
 - `gongwen check` took the page, margins and grid from the last `w:sectPr` read, so a 公文

@@ -6053,6 +6053,8 @@ dependencies = [
  "web-sys",
  "wenshu-core",
  "wenshu-gongwen",
+ "wordcraft-doc",
+ "wordcraft-engine",
  "wordcraft-fonts",
  "wordcraft-web",
 ]

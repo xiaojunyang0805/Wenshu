@@ -1,0 +1,206 @@
+Upstream: (not opened yet; a candidate: wordcraft_engine::io::set_app_templates, templates an embedding app adds to File › New (file.new by id, a gallery row per category), as set_app_formats does for Save As)
+diff --git a/crates/engine/src/io.rs b/crates/engine/src/io.rs
+--- a/crates/engine/src/io.rs
++++ b/crates/engine/src/io.rs
+@@ -60,6 +60,36 @@ pub fn app_formats() -> &'static [AppFormat] {
+     APP_FORMATS.get().map_or(&[], Vec::as_slice)
+ }
+ 
++/// A template the embedding app adds to File › New (a Chinese app's official-document kinds,
++/// say): `file.new` with its `id` opens a new, untitled document from the Word document `docx`
++/// returns, read as `file.open` reads one.
++pub struct AppTemplate {
++    /// The `file.new` template id; one of WordCraft's own (`blank`, `sample`…) is ignored.
++    pub id: &'static str,
++    /// The gallery's caption (shown as given, not translated).
++    pub label: &'static str,
++    /// The heading New shows the app's templates under, a gallery row per category.
++    pub category: &'static str,
++    /// The template as a Word document (`.docx` bytes), given its `id`.
++    pub docx: fn(&str) -> Result<Vec<u8>, String>,
++}
++
++static APP_TEMPLATES: std::sync::OnceLock<Vec<AppTemplate>> = std::sync::OnceLock::new();
++
++/// WordCraft's own `file.new` templates, which an app template can't replace.
++pub const BUILT_IN_TEMPLATES: &[&str] = &["blank", "sample", "letter", "resume", "report"];
++
++/// Install the embedding app's templates, once per process (later calls are ignored and return
++/// false).
++pub fn set_app_templates(templates: Vec<AppTemplate>) -> bool {
++    APP_TEMPLATES.set(templates.into_iter().filter(|t| !t.id.is_empty() && !BUILT_IN_TEMPLATES.contains(&t.id)).collect()).is_ok()
++}
++
++/// The embedding app's templates ([`set_app_templates`]).
++pub fn app_templates() -> &'static [AppTemplate] {
++    APP_TEMPLATES.get().map_or(&[], Vec::as_slice)
++}
++
+ /// Every extension Save As offers: WordCraft's own ([`SAVE_EXTS`]) then the app's.
+ pub fn save_exts() -> Vec<&'static str> {
+     SAVE_EXTS.iter().copied().chain(app_formats().iter().map(|f| f.ext)).collect()
+diff --git a/crates/engine/src/cmd/file.rs b/crates/engine/src/cmd/file.rs
+--- a/crates/engine/src/cmd/file.rs
++++ b/crates/engine/src/cmd/file.rs
+@@ -87,7 +87,7 @@ fn rename(s: &mut Session, v: &Value) -> CmdResult {
+ pub fn specs() -> Vec<CommandSpec> {
+     vec![
+         CommandSpec::new("file.rename", "Rename Document", "File › Info", rename).params(r#"{"name": string (document name; its extension is kept, so the name may be given with or without it)}"#).pure(),
+-        CommandSpec::new("file.new", "New", "File", new).key("Mod+N").params(r#"{"template"?: "blank|sample|letter|resume|report"}"#).pure(),
++        CommandSpec::new("file.new", "New", "File", new).key("Mod+N").params(r#"{"template"?: "blank|sample|letter|resume|report", or an app template's id}"#).pure(),
+         CommandSpec::new("file.open", "Open", "File", open)
+             .key("Mod+O / Mod+F12 / Mod+Alt+F2")
+             .params(r#"{"path": string, "data"?: base64 (the file's bytes; `path` then only names it), "password"?: string (for a password-protected Word document)}"#)
+@@ -220,12 +220,23 @@ fn new(s: &mut Session, v: &Value) -> CmdResult {
+         "letter" => crate::sample::letter(),
+         "resume" => crate::sample::resume(),
+         "report" => crate::sample::report(),
+-        _ => normal_document(s),
++        id => match crate::io::app_templates().iter().find(|t| t.id == id) {
++            Some(t) => app_template_document(s, t)?,
++            None => normal_document(s),
++        },
+     };
+     s.add_document(doc);
+     sel_result(s)
+ }
+ 
++/// An app template's document ([`crate::io::AppTemplate`]): its Word document, read in the
++/// session's region; untitled, so saving it asks where to write.
++fn app_template_document(s: &Session, t: &crate::io::AppTemplate) -> Result<Document, CmdError> {
++    let bytes = (t.docx)(t.id).map_err(|e| CmdError::Failed(format!("template {}: {e}", t.label)))?;
++    let (doc, _) = crate::io::open_bytes_in("template.docx", &bytes, None, &s.region()).map_err(CmdError::Failed)?;
++    Ok(doc)
++}
++
+ /// A blank document on the Normal template: the region's paper (#838), written in the editing
+ /// language (the templates' text is English).
+ pub(crate) fn normal_document(s: &Session) -> Document {
+diff --git a/crates/engine/tests/it/main.rs b/crates/engine/tests/it/main.rs
+--- a/crates/engine/tests/it/main.rs
++++ b/crates/engine/tests/it/main.rs
+@@ -1,3 +1,4 @@
++mod app_templates;
+ mod blank_document_hook;
+ mod comment_ids;
+ mod date_fields;
+diff --git a/crates/ui-egui/src/backstage.rs b/crates/ui-egui/src/backstage.rs
+--- a/crates/ui-egui/src/backstage.rs
++++ b/crates/ui-egui/src/backstage.rs
+@@ -379,6 +379,17 @@ fn matching_templates(query: &str) -> Vec<(&'static str, &'static str)> {
+         .collect()
+ }
+ 
++/// The embedding app's templates whose caption, category or id contains `query`
++/// (case-insensitive); all of them for an empty query.
++fn matching_app_templates(query: &str) -> Vec<&'static wordcraft_engine::io::AppTemplate> {
++    matching_app_templates_in(wordcraft_engine::io::app_templates(), query)
++}
++
++fn matching_app_templates_in<'a>(templates: &'a [wordcraft_engine::io::AppTemplate], query: &str) -> Vec<&'a wordcraft_engine::io::AppTemplate> {
++    let q = query.trim().to_lowercase();
++    templates.iter().filter(|t| q.is_empty() || [t.label, t.category, t.id].iter().any(|s| s.to_lowercase().contains(&q))).collect()
++}
++
+ /// Home: a greeting, Blank plus a short row of templates with a link to New, then Recent.
+ fn home_page(app: &mut WordApp, ui: &mut Ui) {
+     let t = Tokens::get(ui.ctx());
+@@ -423,7 +434,8 @@ fn new_page(app: &mut WordApp, ui: &mut Ui) {
+     let found = matching_templates(&query);
+     let (folder, personal) = personal_templates(app, ui);
+     let personal_found = matching_personal(&query, &personal);
+-    if found.is_empty() && personal_found.is_empty() {
++    let app_found = matching_app_templates(&query);
++    if found.is_empty() && personal_found.is_empty() && app_found.is_empty() {
+         ui.label(egui::RichText::new(tl!("No templates match your search.")).color(t.text_dim));
+         return;
+     }
+@@ -435,6 +447,25 @@ fn new_page(app: &mut WordApp, ui: &mut Ui) {
+             }
+         });
+     }
++    // The embedding app's templates (`wordcraft_engine::io::set_app_templates`), a row per
++    // category, after WordCraft's.
++    let mut categories: Vec<&str> = Vec::new();
++    for t in &app_found {
++        if !categories.contains(&t.category) {
++            categories.push(t.category);
++        }
++    }
++    for category in categories {
++        ui.add_space(24.0);
++        ui.label(egui::RichText::new(category).font(semibold(16.0)));
++        ui.add_space(8.0);
++        ui.horizontal_wrapped(|ui| {
++            ui.spacing_mut().item_spacing = vec2(18.0, 18.0);
++            for t in app_found.iter().filter(|t| t.category == category) {
++                template_tile(ui, app, t.label, t.id);
++            }
++        });
++    }
+     // Personal: the user templates folder's templates; a folder per category, as in Word.
+     let Some(folder) = folder else { return };
+     if !query.trim().is_empty() && personal_found.is_empty() {
+diff --git a/crates/ui-egui/src/backstage/tests.rs b/crates/ui-egui/src/backstage/tests.rs
+--- a/crates/ui-egui/src/backstage/tests.rs
++++ b/crates/ui-egui/src/backstage/tests.rs
+@@ -1156,3 +1156,20 @@ fn the_file_page_scrolls_with_the_wheel_at_the_window_edge() {
+     assert!(after < before - 1.0, "expected doc0.docx to scroll up at the edge: before={before}, after={after}");
+     assert!((bar.right() - 1432.0).abs() < 1.0, "expected the scrollbar at the window edge: {bar:?}");
+ }
++
++/// The New page's search finds an app's templates by caption, category or id.
++#[test]
++fn app_templates_match_by_caption_category_or_id() {
++    use wordcraft_engine::io::AppTemplate;
++    let docx = |_: &str| -> Result<Vec<u8>, String> { Err("unused".into()) };
++    let list = [
++        AppTemplate { id: "gongwen-notice", label: "通知", category: "公文", docx },
++        AppTemplate { id: "gongwen-reply", label: "批复", category: "公文", docx },
++    ];
++    let ids = |q: &str| super::matching_app_templates_in(&list, q).iter().map(|t| t.id).collect::<Vec<_>>();
++    assert_eq!(ids(""), ["gongwen-notice", "gongwen-reply"]);
++    assert_eq!(ids("通知"), ["gongwen-notice"]);
++    assert_eq!(ids("公文"), ["gongwen-notice", "gongwen-reply"]);
++    assert_eq!(ids("REPLY"), ["gongwen-reply"]);
++    assert!(ids("letter").is_empty());
++}
+diff --git a/crates/engine/tests/it/app_templates.rs b/crates/engine/tests/it/app_templates.rs
+new file mode 100644
+--- /dev/null
++++ b/crates/engine/tests/it/app_templates.rs
+@@ -0,0 +1,34 @@
++//! An app built on WordCraft adds templates to File › New: `file.new` opens them by id. The list
++//! is process-wide, so no other test here adds templates.
++
++use serde_json::json;
++use wordcraft_engine::Session;
++use wordcraft_engine::io::{AppTemplate, app_templates, set_app_templates};
++
++fn notice(_id: &str) -> Result<Vec<u8>, String> {
++    let mut doc = wordcraft_doc::Document::from_text("App template notice");
++    doc.core.title = String::new();
++    wordcraft_engine::io::save_bytes("notice.docx", &doc)
++}
++
++fn broken(_id: &str) -> Result<Vec<u8>, String> {
++    Err("no such template file".into())
++}
++
++#[test]
++fn file_new_opens_an_app_template_by_id() {
++    let t = |id, docx| AppTemplate { id, label: "Notice", category: "Official", docx };
++    assert!(set_app_templates(vec![t("notice", notice), t("broken", broken), t("sample", notice)]));
++    assert!(!set_app_templates(Vec::new()), "only the first list counts");
++    // WordCraft's own ids stay WordCraft's.
++    assert_eq!(app_templates().iter().map(|t| t.id).collect::<Vec<_>>(), ["notice", "broken"]);
++    let mut s = Session::new(wordcraft_doc::Document::new());
++    s.run("file.new", &json!({"template": "notice"})).unwrap();
++    assert!(s.doc.body.iter().filter_map(|b| b.as_para()).any(|p| p.plain_text() == "App template notice"));
++    assert!(s.path.is_none(), "untitled: saving asks where");
++    let err = s.run("file.new", &json!({"template": "broken"})).unwrap_err().to_string();
++    assert!(err.contains("no such template file"), "{err}");
++    // An unknown id is a blank document, as before.
++    s.run("file.new", &json!({"template": "unknown"})).unwrap();
++    assert!(s.doc.body.iter().filter_map(|b| b.as_para()).all(|p| p.plain_text().is_empty()));
++}

@@ -19,10 +19,14 @@ wenshu-core = { workspace = true }
 wenshu-gongwen = { workspace = true }
 wordcraft-web = { workspace = true }
 wordcraft-fonts = { workspace = true }
+wordcraft-engine = { workspace = true }
 egui = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+[dev-dependencies]
+wordcraft-doc = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"

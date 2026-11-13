@@ -7,6 +7,7 @@
 pub mod check;
 pub mod generate;
 pub mod spec;
+pub mod templates;
 
 pub use check::{Finding, check_docx};
 pub use generate::{Gongwen, write_docx};
