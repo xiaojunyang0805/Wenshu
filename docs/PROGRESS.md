@@ -23,6 +23,10 @@ Newest first. One entry per working session: what landed, what was verified, wha
   Chrome: `ce628d9760` 6 pages, the Chinese interface (zh-Hans) works.
 - **Build memory:** fat LTO needs much more memory; one build was stopped when the PC ran low,
   `CARGO_BUILD_JOBS=2 scripts/build-web.sh` finished.
+- **Hand test by the user** (local server, Chrome): the app works; one PDF export from File ›
+  Export left a 0-byte file (Chrome's save picker created it, the write never landed), the
+  retry worked. The app's bytes were checked separately (the same export captured before the
+  picker: a valid 8,488-byte PDF, 1 page, 朱雀仿宋 embedded). Cause not found; watch for it.
 - **Not tried:** dropping fonts WordCraft embeds that Wenshu's served fonts duplicate (part of
   the 7.7 MB; it changes fallbacks, so it needs care).
 
