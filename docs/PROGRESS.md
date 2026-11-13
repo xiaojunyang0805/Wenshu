@@ -2,6 +2,37 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-13 (11): Linux 182 → 187 / 200, the same page count as Windows on all 200 (0075)
+
+- **Duplicate fonts in the web build: not there.** Each of WordCraft's 13 bundled fonts is in the
+  wasm once (the linker merged `face.rs`'s and `theme.rs`'s references); the other ~1 MB is egui's
+  default fonts, which WordCraft keeps on purpose as the emoji and interface-symbol fallback.
+  Dropped.
+- **0-byte PDF save on the web: no code bug found.** The picker path awaits write and close and
+  reports a failure in the status bar. Chrome creates the chosen file empty and renames its side
+  file over it only on close, after a Safe Browsing check; a file opened in that window reads
+  0 B, and a viewer holding it open can make the rename fail. Closed unless it recurs.
+- **Measured:** SimSun, SimHei, FangSong and KaiTi have exactly two advances, 0.5 and 1.0 em, and
+  Unicode's East Asian Width predicts them (Wide/Fullwidth/Ambiguous whole, ASCII/Narrow/Halfwidth
+  half); the only split is pinyin vowels (half in SimSun/SimHei, whole in FangSong/KaiTi). The
+  open substitutes are proportional (朱雀仿宋: `m` 0.83 em, `i` 0.28, `“` 0.33).
+- **0075:** text in a missing Windows Chinese system face (宋体, 黑体, 仿宋, 楷体, their _GB2312
+  forms, 標楷體, or a font drawn as one) takes that face's widths in its substitute, the glyph
+  centred in its cell (opening quotes at the cell's end, closing at its start); a fallback face
+  drawing what the substitute lacks (①, ㎡, Ⅰ beside 朱雀仿宋) takes them too. Fonts unit test,
+  layout test (fails without: `m` 9.9 pt, not 6). Clippy: `shape_around` stays at its earlier 31
+  (the new logic is in helpers).
+- **Gate:** **Linux 187 / 200** (was 182), mean 0.9249 → **0.9331**: 3275566be0, 8c26a30bd3,
+  de24610147, 70caf3a6de, 447f1d5cb4, b7e49d691e now match; `228229e95c` 24 → 25, which is what
+  Windows with the real fonts gives (it matched on Linux by chance). Linux and Windows now give the
+  same page count on **200 / 200** (was 192). **Windows 187 / 200, 0.9447**, unchanged. Linux
+  baseline updated.
+- **Note:** `gate_wsl.sh` builds the committed tree (`BRANCH=` for a local branch), not the
+  working copy; and the working `crates/layout/src/tests.rs` had drifted from the queue's module
+  order, so a patch must be checked against a clean replay of the queue.
+- **Next:** F46, `29a7772dfb`, `2d6a9da333` (the 13 left are now the same documents on both
+  platforms); domain when the user chooses.
+
 ## 2026-11-13 (10): v0.1.5 tagged, draft built and install-tested
 
 - **Tag** `v0.1.5` on 1680637; CI run 43506024791 green (all 7 jobs), draft with 10 assets,

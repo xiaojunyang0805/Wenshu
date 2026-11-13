@@ -1,0 +1,241 @@
+Upstream: (not opened; WPS-measured: text in a missing Windows Chinese system face (宋体, 黑体, 仿宋, 楷体, 標楷體) takes that face's half-em / one-em advances in its substitute, so lines break as on Windows)
+diff --git a/crates/fonts/src/word.rs b/crates/fonts/src/word.rs
+--- a/crates/fonts/src/word.rs
++++ b/crates/fonts/src/word.rs
+@@ -268,6 +268,64 @@ fn chinese_fallback_line_in(db: &FontDb) -> Option<(f64, f64)> {
+     windows_line(220.0, 36.0, 256.0)
+ }
+ 
++/// Does text asking for `family` (not installed, drawn in a substitute) take the widths of a
++/// Windows Chinese system face? 宋体, 黑体, 仿宋, 楷体 (and their _GB2312 and 新宋体 forms) and
++/// 標楷體 give every character half an em or a whole one (measured: SimSun, SimHei, FangSong and
++/// KaiTi have no other advance), where open substitutes are proportional (朱雀仿宋's `m` is
++/// 0.83 em, its “ 0.33 em), so lines broke elsewhere than in WPS on Windows. `Some` gives the
++/// face's pinyin vowels' advance (ā, é…): half an em in SimSun and SimHei, a whole one in
++/// FangSong and KaiTi (measured), for [`fixed_pitch_advance`].
++pub fn fixed_pitch_standin(family: &str, resolved: &Resolved) -> Option<f32> {
++    if !resolved.substituted {
++        return None;
++    }
++    match family.trim().to_lowercase().as_str() {
++        "宋体" | "simsun" | "新宋体" | "nsimsun" | "黑体" | "simhei" | "標楷體" | "标楷体" | "dfkai-sb" | "dfkai" => Some(0.5),
++        "仿宋" | "fangsong" | "仿宋_gb2312" | "fangsong_gb2312" | "楷体" | "kaiti" | "楷体_gb2312" | "kaiti_gb2312" => Some(1.0),
++        // A missing font the application draws as one of those faces.
++        _ => match provided(family).and_then(|l| l.first()).copied() {
++            Some("SimSun" | "SimHei") => Some(0.5),
++            Some("KaiTi" | "FangSong") => Some(1.0),
++            _ => None,
++        },
++    }
++}
++
++/// The advance in ems a Windows Chinese system face gives `c` ([`fixed_pitch_standin`]): half an
++/// em for ASCII and halfwidth forms, a whole one for CJK, fullwidth forms and the symbols GBK
++/// encodes as double-byte (Unicode's East Asian Ambiguous ones: curly quotes, dashes, ellipsis,
++/// °, ±, ×, pinyin vowels, Greek, Cyrillic). `None` for what such a face lacks: Windows draws
++/// that in another font, at that font's width. `pinyin` is the pinyin vowels' advance, from
++/// [`fixed_pitch_standin`].
++pub fn fixed_pitch_advance(c: char, pinyin: f32) -> Option<f32> {
++    /// Pinyin vowels (à á è é ê ì í ò ó ù ú ü ā ē ě ī ń ň ō ū ǎ ǐ ǒ ǔ ǖ ǘ ǚ ǜ).
++    const PINYIN: &[u32] = &[
++        0xE0, 0xE1, 0xE8, 0xE9, 0xEA, 0xEC, 0xED, 0xF2, 0xF3, 0xF9, 0xFA, 0xFC, 0x101, 0x113, 0x11B, 0x12B, 0x144, 0x148, 0x14D, 0x16B, 0x1CE, 0x1D0,
++        0x1D2, 0x1D4, 0x1D6, 0x1D8, 0x1DA, 0x1DC,
++    ];
++    /// Single double-byte symbols below the CJK blocks: ¤ § ¨ ° ± · × ÷ Ё ё – — ― ‖ ‘ ’ “ ” ‥ … ‰ ′ ″ ※.
++    const WIDE: &[u32] = &[
++        0xA4, 0xA7, 0xA8, 0xB0, 0xB1, 0xB7, 0xD7, 0xF7, 0x401, 0x451, 0x2013, 0x2014, 0x2015, 0x2016, 0x2018, 0x2019, 0x201C, 0x201D, 0x2025, 0x2026,
++        0x2030, 0x2032, 0x2033, 0x203B,
++    ];
++    let u = c as u32;
++    if PINYIN.binary_search(&u).is_ok() {
++        return Some(pinyin);
++    }
++    let wide = WIDE.binary_search(&u).is_ok()
++        // Greek, Cyrillic, symbols (℃, ①, arrows, box drawing), CJK, Hangul, compatibility
++        // ideographs, vertical and fullwidth forms, the supplementary ideographs.
++        || matches!(u, 0x391..=0x3A9 | 0x3B1..=0x3C9 | 0x410..=0x44F | 0x2100..=0x2BFF | 0x2E80..=0x9FFF | 0xAC00..=0xD7A3)
++        || matches!(u, 0xF900..=0xFAFF | 0xFE30..=0xFE4F | 0xFF01..=0xFF60 | 0xFFE0..=0xFFE6 | 0x20000..=0x3FFFF);
++    if wide {
++        Some(1.0)
++    } else if matches!(u, 0x20..=0x7E | 0xFF61..=0xFFDC | 0xFFE8..=0xFFEE) {
++        Some(0.5)
++    } else {
++        None
++    }
++}
++
+ /// A Windows Chinese face's East Asian line in ems, from its win ascent and descent.
+ fn windows_line(win_ascent: f64, win_descent: f64, upem: f64) -> Option<(f64, f64)> {
+     east_asian_line(0x0004_0000, win_ascent, win_descent, upem).map(|(a, d)| (a / upem, d / upem))
+@@ -1062,6 +1120,25 @@ mod tests {
+         assert_eq!(chinese_fallback_line_in(&db), None);
+     }
+ 
++    #[test]
++    fn missing_windows_chinese_faces_are_fixed_pitch() {
++        let mut r = resolve("Arial", false, false);
++        r.substituted = true;
++        assert_eq!(fixed_pitch_standin("宋体", &r), Some(0.5));
++        assert_eq!(fixed_pitch_standin(" FangSong_GB2312 ", &r), Some(1.0));
++        assert_eq!(fixed_pitch_standin("標楷體", &r), Some(0.5));
++        assert_eq!(fixed_pitch_standin("Arial", &r), None);
++        assert_eq!(fixed_pitch_standin("微软雅黑", &r), None, "proportional Latin");
++        r.substituted = false;
++        assert_eq!(fixed_pitch_standin("宋体", &r), None, "installed: its own widths");
++        assert_eq!(fixed_pitch_advance('m', 1.0), Some(0.5));
++        assert_eq!(fixed_pitch_advance('中', 1.0), Some(1.0));
++        assert_eq!(fixed_pitch_advance('\u{201C}', 1.0), Some(1.0));
++        assert_eq!(fixed_pitch_advance('é', 0.5), Some(0.5));
++        assert_eq!(fixed_pitch_advance('é', 1.0), Some(1.0));
++        assert_eq!(fixed_pitch_advance('\u{0627}', 1.0), None, "Arabic: drawn in another face on Windows");
++    }
++
+     #[test]
+     fn a_missing_dfkai_keeps_its_own_line_box() {
+         let mut r = resolve("Arial", false, false);
+diff --git a/crates/layout/src/para/builder.rs b/crates/layout/src/para/builder.rs
+--- a/crates/layout/src/para/builder.rs
++++ b/crates/layout/src/para/builder.rs
+@@ -27,6 +27,33 @@ pub(super) struct Builder<'a> {
+     pub(super) line_faces: Vec<Option<u32>>,
+ }
+ 
++/// The pinyin width ([`wordcraft_fonts::word::fixed_pitch_standin`]) when a segment's text stands
++/// in for a Windows Chinese system face (宋体, 仿宋… not installed): that face's widths, half an
++/// em or a whole one a character. The run's own font when the segment is drawn in it, its East
++/// Asian font when in that; a fallback face drawing what the substitute lacks (①, ㎡ beside
++/// 朱雀仿宋) takes them too, as the Windows face has those characters, and Chinese a fallback face
++/// draws where SimSun (its face on Windows) is missing takes SimSun's.
++fn fixed_pitch_of(
++    key: &SegKey,
++    primary_ea: Option<FaceRef>,
++    (family, resolved): (&str, &wordcraft_fonts::word::Resolved),
++    wanted_ea: Option<&(&str, wordcraft_fonts::word::Resolved)>,
++    fallback_chinese: bool,
++) -> Option<f32> {
++    let ea = || wanted_ea.and_then(|(f, r)| wordcraft_fonts::word::fixed_pitch_standin(f, r));
++    let own = || wordcraft_fonts::word::fixed_pitch_standin(family, resolved);
++    if key.complex {
++        None
++    } else if key.face.is_none() {
++        own()
++    } else if key.face.zip(primary_ea).is_some_and(|(f, e)| f.id() == e.id()) {
++        ea()
++    } else {
++        let simsun = (fallback_chinese && wordcraft_fonts::word::chinese_fallback_line().is_some()).then_some(0.5);
++        ea().or_else(own).or(simsun)
++    }
++}
++
+ /// Is `sub`, drawn in `face`, Chinese text in the run's East Asian fallback face (`ea_face`: the
+ /// run's fonts lack it), not in a font it names? Hangul isn't: SimSun, which Chinese falls back
+ /// to on Windows, lacks it.
+@@ -390,11 +417,13 @@ impl<'a> Builder<'a> {
+                 && key.face.map(|f| f.id()) != primary_ea.map(|f| f.id())
+                 && !sub.is_empty()
+                 && sub.chars().all(|c| matches!(u32::from(c), 0xF900..=0xFAFF | 0x2F800..=0x2FA1F));
++            let fallback_chinese = chinese_fallback(key.face, ea_face, primary_ea, sub);
+             let si = if linked {
+                 self.style_with_line(rc, key.face, small, Some(primary_ea.unwrap_or(primary)), false)
+             } else {
+-                self.style_with_line(rc, key.face, small, None, chinese_fallback(key.face, ea_face, primary_ea, sub))
++                self.style_with_line(rc, key.face, small, None, fallback_chinese)
+             };
++            let fixed_pitch = fixed_pitch_of(&key, primary_ea, (family, &resolved), wanted_ea.as_ref(), fallback_chinese);
+             let Some(st) = self.styles.get(si as usize).cloned() else { continue };
+             let upper = rc.caps || small;
+             // All Caps and Small Caps draw a letter's full capital, which can be several
+@@ -498,6 +527,9 @@ impl<'a> Builder<'a> {
+                 } else {
+                     ClKind::Text
+                 });
++                // A stand-in for a fixed-pitch Windows face: that face's half or whole em.
++                let single = kind != ClKind::Marker && s.chars().count() == 1;
++                let adv = fixed_pitch.filter(|_| single).map_or(adv, |p| self.fixed_pitch_cell(ch, p, adv, st.size * hscale, (g0, g1)));
+                 // `balanceSingleByteDoubleByteWidth`: a space is half an em, whatever its font.
+                 let adv = if s == " " && self.env.doc.settings.balance_sbcs_dbcs { st.size * 0.5 * hscale } else { adv };
+                 // It also counts character spacing (`w:spacing`) twice for an East Asian
+@@ -527,6 +559,26 @@ impl<'a> Builder<'a> {
+         }
+     }
+ 
++    /// The advance of `ch` (drawn `natural` wide at `em` points an em) standing in for a fixed-pitch
++    /// Windows face ([`wordcraft_fonts::word::fixed_pitch_standin`], `pinyin` its pinyin vowels'
++    /// width): that face's half or whole em, the glyphs `g0..g1` centred in it (an opening quote at
++    /// its end, a closing one at its start, as those faces draw them). Characters the face lacks
++    /// keep their own advance.
++    fn fixed_pitch_cell(&mut self, ch: char, pinyin: f32, natural: f32, em: f32, (g0, g1): (u32, u32)) -> f32 {
++        let Some(cell) = wordcraft_fonts::word::fixed_pitch_advance(ch, pinyin).map(|w| w * em).filter(|_| natural > 0.0) else {
++            return natural;
++        };
++        let shift = match ch {
++            '\u{2018}' | '\u{201C}' => cell - natural,
++            '\u{2019}' | '\u{201D}' => 0.0,
++            _ => (cell - natural) / 2.0,
++        };
++        for g in self.glyphs.get_mut(g0 as usize..g1 as usize).unwrap_or(&mut []) {
++            g.dx += shift;
++        }
++        cell
++    }
++
+     /// A ligature glyph (fi, ffi, lam-alef) sits on the first cluster of the letters it draws and
+     /// the clusters after it have no glyph and no width, so the caret, clicks and selection edges
+     /// inside it all land after the whole glyph. Give each letter an even share of the glyph's
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -12,6 +12,7 @@ mod complex;
+ mod compress;
+ mod float_top;
+ mod field_fonts;
++mod fixed_pitch;
+ mod grid;
+ mod ligature;
+ pub(crate) mod linear;
+diff --git a/crates/layout/src/tests/fixed_pitch.rs b/crates/layout/src/tests/fixed_pitch.rs
+new file mode 100644
+--- /dev/null
++++ b/crates/layout/src/tests/fixed_pitch.rs
+@@ -0,0 +1,41 @@
++//! Text in a Windows Chinese system face that isn't installed (宋体, 仿宋…) takes that face's
++//! widths in its substitute: half an em for ASCII, a whole one for CJK and curly quotes, as WPS on
++//! Windows lays it out (the open substitutes are proportional).
++
++use crate::{Document, LayoutCache, LayoutOptions, Placed, layout};
++
++/// The widths of the first line's characters of `text` set in `font` at 12 pt.
++fn advances(text: &str, font: &str) -> Vec<f32> {
++    crate::test_fonts();
++    let chr = wordcraft_doc::CharProps { font: Some(font.into()), size: Some(12.0), ..Default::default() };
++    let mut d = Document::new();
++    d.body = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text(text, chr))];
++    let mut c = LayoutCache::new();
++    let l = layout(&d, &mut c, &LayoutOptions::default());
++    for p in &l.pages {
++        for it in &p.items {
++            if let Placed::Lines { para, .. } = it {
++                return para.lines[0].xs.windows(2).map(|w| w[1] - w[0]).collect();
++            }
++        }
++    }
++    panic!("paragraph not laid out");
++}
++
++#[test]
++fn a_missing_fixed_pitch_chinese_face_keeps_its_widths() {
++    crate::test_fonts();
++    for font in ["宋体", "仿宋_GB2312"] {
++        assert!(wordcraft_fonts::word::resolve(font, false, false).substituted, "{font} isn't among the test fonts");
++        let w = advances("mi.1“中”", font);
++        for (i, (got, want)) in w.iter().zip([6.0, 6.0, 6.0, 6.0, 12.0, 12.0, 12.0]).enumerate() {
++            assert!((got - want).abs() < 0.01, "{font}: character {i} is {got} pt, not {want}: {w:?}");
++        }
++    }
++    // Pinyin vowels: half an em in SimSun, a whole one in FangSong.
++    assert!((advances("é", "宋体")[0] - 6.0).abs() < 0.01);
++    assert!((advances("é", "仿宋")[0] - 12.0).abs() < 0.01);
++    // A proportional font keeps its own widths.
++    let w = advances("mi", "Inter");
++    assert!(w[0] > w[1] + 2.0, "Inter's m is wider than its i: {w:?}");
++}
