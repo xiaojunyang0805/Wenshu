@@ -25,7 +25,7 @@ Newest first. One entry per working session: what landed, what was verified, wha
 - **Tests:** layout test (fails with either half disabled) and reader test; doc, docx, layout,
   engine tests pass. Clippy: only `shape_around`'s complexity (earlier patch).
 - **Gate (Windows):** **187 / 200** (was 186), mean **0.9445** (was 0.9435), PASS, baseline
-  updated. LINUX_RESULT
+  updated. **Linux** (WSL, queue re-applied from scratch): **174 / 200** (was 173), mean 0.9232 → **0.9238**, PASS, baseline updated.
 - **Next:** F46 (header text over its floats in WPS files); `29a7772dfb`, `2d6a9da333`; Linux long
   documents and 小标宋; web build.
 
