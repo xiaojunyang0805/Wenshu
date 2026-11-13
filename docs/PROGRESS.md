@@ -2,6 +2,21 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-13 (9): v0.1.5 prepared (web zip in the release)
+
+- **Release workflow:** a `web` job builds `scripts/build-web.sh` (trunk 0.22.1, fontTools
+  4.61.0 + brotli 1.2.0 for WOFF2, two jobs for the fat-LTO link), checks the site (page, wasm, 24
+  fonts, README) and uploads `wenshu-<version>-web.zip`; the draft release waits for it and lists it.
+- **Version 0.1.5** (Cargo.toml, VS Code extension, README status).
+- **Checks on commit 5eae682 (patches 0001–0074):** Windows gate 187 / 200, 0.9447, PASS; Linux
+  gate (WSL, queue re-applied) 182 / 200, 0.9249, PASS. **J5** (all 200 re-saved, WPS renders):
+  text, tables, East Asian font names and WPS page count unchanged **200 / 200**, saved vs original
+  0.9970, 179 pixel-identical. **J4:** 200 PDFs, fonts embedded and subset 200 / 200, recall
+  0.9992, all characters 174 / 200, PDF vs screen > 0.99 in 198 / 200, PDF page count = layout
+  200 / 200 (a stale page-32 render left from before 0069 in `out/gate-windows` made it read
+  199; the gate doesn't clear old renders).
+- **Next:** tag v0.1.5 (the user's go-ahead), CI draft, install tests, the user publishes.
+
 ## 2026-11-13 (8): 公文 templates in the web app's File › New (0074)
 
 - **Patch 0074:** `set_app_templates` in the engine (like `set_app_formats`): an app's templates

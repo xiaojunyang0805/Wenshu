@@ -138,6 +138,42 @@ jobs:
           path: dist/*.vsix
           if-no-files-found: error
 
+  # The self-hostable browser app (scripts/build-web.sh): a static site in a zip, the app (wasm,
+  # size profile `web`), Wenshu's fonts as WOFF2 and the licences, with HOSTING.md as README.md.
+  web:
+    needs: version
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust, wasm target and trunk
+        run: |
+          rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown && rustup default stable
+          cargo install trunk --locked --version 0.22.1
+      - name: fontTools for WOFF2
+        run: python3 -m pip install --quiet fonttools==4.61.0 brotli==1.2.0
+      - name: Fetch and patch WordCraft
+        run: sh scripts/sync-upstream.sh
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> eval/target/wordcraft"
+          key: web
+      - name: Build
+        run: CARGO_BUILD_JOBS=2 bash scripts/build-web.sh
+      - name: Check and zip
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          cd dist/web
+          test -f index.html && test -f README.md && ls *.wasm
+          n=$(python3 -c "import json; print(len(json.load(open('fonts/fonts.json'))['files']))")
+          test "$n" -eq 24 && echo "ok $n fonts"
+          zip -q -r "../wenshu-$VERSION-web.zip" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: dist/*-web.zip
+          if-no-files-found: error
+
   # Cross-built on x86_64 with cargo-zigbuild against glibc 2.36 (new-world LoongArch ABI), then the
   # CLI runs under qemu-user on a Debian loong64 glibc: it writes, checks and renders a 公文.
   linux-loongarch64:
@@ -188,7 +224,7 @@ jobs:
 
   release:
     if: github.ref_type == 'tag'
-    needs: [version, windows, linux, linux-loongarch64, vscode]
+    needs: [version, windows, linux, linux-loongarch64, vscode, web]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -218,6 +254,7 @@ jobs:
           | \`wenshu-$VERSION-linux-x86_64.tar.gz\` | a plain file tree |
           | \`wenshu-$VERSION-linux-loongarch64.deb\` | LoongArch, new-world (deepin 23+, openKylin 2, Loongnix 25, Debian loong64; glibc ≥ 2.36) |
           | \`wenshu-$VERSION-linux-loongarch64.tar.gz\` | LoongArch, a plain file tree |
+          | \`wenshu-$VERSION-web.zip\` | the browser version: a static site for any web server, an intranet one too; documents stay in the browser (see its README.md) |
           | \`wenshu-preview-$VERSION.vsix\` | VS Code: preview documents as Wenshu lays them out (needs Wenshu installed; \`code --install-extension <file>\`) |
 
           The binaries are not code-signed yet, so Windows SmartScreen asks before the first start

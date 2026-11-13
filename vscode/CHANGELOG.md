@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5 (2026-11-13)
+
+- Released with Wenshu 0.1.5; no changes to the extension.
+
 ## 0.1.4 (2026-11-09)
 
 - Released with Wenshu 0.1.4; no changes to the extension.
