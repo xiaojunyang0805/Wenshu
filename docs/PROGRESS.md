@@ -26,7 +26,7 @@ Newest first. One entry per working session: what landed, what was verified, wha
   identical **200 / 200**, tables 200 / 200, East Asian font names **200 / 200**, WPS page count
   unchanged **200 / 200** (was 198), mean saved vs original 0.9950 → **0.9970**, pixel-identical
   168 → 179.
-- **Gates:** Windows 186 / 200, mean 0.9435 (unchanged, PASS). **J4:** recall 0.9987 → 0.9992,
+- **Gates:** Windows 186 / 200, mean 0.9435; Linux (WSL, commit 5a7c413) 173 / 200, mean 0.9232; both unchanged, PASS. **J4:** recall 0.9987 → 0.9992,
   all characters 174 / 200, fonts embedded and subset 200 / 200, PDF vs screen > 0.99 in
   198 / 200. **OFD:** 200 / 200 converted, pages equal 200 / 200, recall 1.0000, placed 0.9991;
   package and fonts clean in 199 / 200: `896cafeedf` maps some `hint="eastAsia"` CJK characters to
