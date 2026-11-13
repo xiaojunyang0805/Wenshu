@@ -14,8 +14,8 @@ Newest first. One entry per working session: what landed, what was verified, wha
   round-trip tests; doc, docx and layout tests pass. Clippy's one error is `shape_around`'s
   complexity (`para/builder.rs`, an earlier patch), not this change.
 - **OFD:** package and fonts clean **200 / 200** (was 199), recall 1.0000, placed 0.9991.
-- **Gate (Windows):** 186 / 200, mean 0.9435, unchanged, PASS. Linux not re-run yet.
-- **Next:** Linux gate (WSL); F45 probes in both modes; Linux long documents and 小标宋; web build.
+- **Gate (Windows):** 186 / 200, mean 0.9435, unchanged, PASS. **Linux** (WSL, commit 90bf55b, queue re-applied from scratch): 173 / 200, 0.9232, unchanged, PASS.
+- **Next:** F45 probes in both modes; Linux long documents and 小标宋; web build.
 
 ## 2026-11-13: J5 at 200 / 200: picture-filled shapes (0066), WPS's two layout modes (F45, 0067)
 
