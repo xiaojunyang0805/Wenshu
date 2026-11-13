@@ -1,0 +1,258 @@
+Upstream: (not opened yet; general bug: an equation's normal-text run (m:nor) was set in one face, its w:ascii font, so East Asian characters drew as missing glyphs; now they take w:eastAsia (read and written back), and a character neither font has takes a fallback face, as body text does; corpus dc-policies-896cafeedf)
+diff --git a/crates/doc/src/math.rs b/crates/doc/src/math.rs
+--- a/crates/doc/src/math.rs
++++ b/crates/doc/src/math.rs
+@@ -56,7 +56,10 @@ impl Math {
+         while let Some(node) = todo.pop() {
+             n = n.saturating_add(std::mem::size_of::<MNode>());
+             if let MNode::Run(r) = node {
+-                n = n.saturating_add(r.text.len()).saturating_add(r.font.as_ref().map_or(0, String::len));
++                n = n
++                    .saturating_add(r.text.len())
++                    .saturating_add(r.font.as_ref().map_or(0, String::len))
++                    .saturating_add(r.font_ea.as_ref().map_or(0, String::len));
+             }
+             each_arg(node, &mut |a| {
+                 n = n.saturating_add(std::mem::size_of::<Arg>());
+@@ -173,6 +176,9 @@ pub struct MRun {
+     /// Font for normal text.
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub font: Option<String>,
++    /// Font for East Asian characters in normal text (`w:eastAsia`).
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub font_ea: Option<String>,
+     /// A manual line break before this run in a display equation (`m:brk`): `Some(0)` wraps as
+     /// usual, `Some(n)` aligns the new line at the `n`th operator of the first line (`m:alnAt`).
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+@@ -779,6 +785,7 @@ pub fn merge_runs(a: Arg) -> Arg {
+                     && prev.size == r.size
+                     && prev.color == r.color
+                     && prev.font == r.font
++                    && prev.font_ea == r.font_ea
+                     && r.brk.is_none()
+                 {
+                     prev.text.push_str(&r.text);
+diff --git a/crates/doc/src/math_edit.rs b/crates/doc/src/math_edit.rs
+--- a/crates/doc/src/math_edit.rs
++++ b/crates/doc/src/math_edit.rs
+@@ -394,6 +394,7 @@ fn merge_shallow(a: Arg) -> Arg {
+             && prev.size == r.size
+             && prev.color == r.color
+             && prev.font == r.font
++            && prev.font_ea == r.font_ea
+         {
+             prev.text.push_str(&r.text);
+             continue;
+@@ -837,7 +838,7 @@ fn builds(s: &str) -> bool {
+ /// A run is plain math text that build-up may rewrite.
+ fn plain(n: &MNode) -> bool {
+     match n {
+-        MNode::Run(r) => !r.nor && !r.lit && r.scr == MScr::Roman && r.color.is_none() && r.size.is_none() && r.font.is_none(),
++        MNode::Run(r) => !r.nor && !r.lit && r.scr == MScr::Roman && r.color.is_none() && r.size.is_none() && r.font.is_none() && r.font_ea.is_none(),
+         // Arrays and matrices are finished pieces; typing after them builds up on its own.
+         MNode::EqArr { .. } | MNode::Matrix { .. } => false,
+         _ => true,
+diff --git a/crates/docx/src/read/math.rs b/crates/docx/src/read/math.rs
+--- a/crates/docx/src/read/math.rs
++++ b/crates/docx/src/read/math.rs
+@@ -335,6 +335,9 @@ fn wrpr(pr: Option<&El>, out: &mut MRun) {
+         {
+             out.font = Some(f.to_string());
+         }
++        if let Some(f) = pr.child("w:rFonts").and_then(|f| f.attr("w:eastAsia")).filter(|f| !f.trim().is_empty()) {
++            out.font_ea = Some(f.to_string());
++        }
+         let bold = pr.child("w:b").is_some_and(crate::units::on_off);
+         let italic = pr.child("w:i").is_some_and(crate::units::on_off);
+         if bold || italic {
+@@ -476,6 +479,18 @@ mod tests {
+         assert_eq!(font, Some(None), "mapped symbol text takes the text font");
+     }
+ 
++    /// Normal text keeps its East Asian font (`w:eastAsia`) beside the Latin one.
++    #[test]
++    fn normal_text_keeps_its_east_asian_font() {
++        let e = omath(
++            r#"<m:r><m:rPr><m:nor/></m:rPr><w:rPr><w:rFonts w:ascii="Times New Roman" w:eastAsia="KaiTi" w:hAnsi="Times New Roman"/></w:rPr><m:t>年度</m:t></m:r>"#,
++        );
++        let mut m = read_omath(&e, MathJc::CenterGroup);
++        let mut fonts = None;
++        wordcraft_doc::math_edit::each_run_mut(&mut m.nodes, &mut |r| fonts = Some((r.font.clone(), r.font_ea.clone())));
++        assert_eq!(fonts, Some((Some("Times New Roman".into()), Some("KaiTi".into()))));
++    }
++
+     /// Hostile nesting through the wrappers is bounded (no stack overflow, no panic).
+     #[test]
+     fn deeply_nested_wrappers_are_bounded() {
+diff --git a/crates/docx/src/write/math.rs b/crates/docx/src/write/math.rs
+--- a/crates/docx/src/write/math.rs
++++ b/crates/docx/src/write/math.rs
+@@ -471,7 +471,10 @@ fn run(w: &mut W, r: &MRun) {
+     }
+     w.open("w:rPr", &[]);
+     let font = r.font.as_deref().filter(|_| r.nor).unwrap_or("Cambria Math");
+-    w.empty("w:rFonts", &[("w:ascii", font), ("w:hAnsi", font)]);
++    match r.font_ea.as_deref().filter(|_| r.nor) {
++        Some(ea) => w.empty("w:rFonts", &[("w:ascii", font), ("w:eastAsia", ea), ("w:hAnsi", font)]),
++        None => w.empty("w:rFonts", &[("w:ascii", font), ("w:hAnsi", font)]),
++    }
+     if let Some(c) = r.color {
+         w.val("w:color", &c.hex());
+     }
+diff --git a/crates/docx/tests/it/roundtrip.rs b/crates/docx/tests/it/roundtrip.rs
+--- a/crates/docx/tests/it/roundtrip.rs
++++ b/crates/docx/tests/it/roundtrip.rs
+@@ -2125,6 +2125,30 @@ fn equation_manual_breaks_round_trip() {
+     assert_eq!(r.settings.math, None);
+ }
+ 
++/// Normal text in an equation keeps its East Asian font (`w:eastAsia`) through a save.
++#[test]
++fn equation_normal_text_east_asian_font_round_trips() {
++    use wordcraft_doc::math::{MNode, MRun, MSty, Math};
++    let nodes = vec![MNode::Run(MRun {
++        nor: true,
++        sty: Some(MSty::Plain),
++        font: Some("Times New Roman".into()),
++        font_ea: Some("KaiTi".into()),
++        ..MRun::new("年度")
++    })];
++    let mut d = Document::new();
++    let math = Math { nodes: nodes.clone(), ..Default::default() };
++    let mut p = Paragraph::with_text("", CharProps::default());
++    p.insert_object(0, InlineObject::Equation { linear: "\"年度\"".into(), display: true, math }, &CharProps::default()).unwrap();
++    d.body = vec![para_block(p)];
++    let r = rt(&d);
++    let got = paras(&r).iter().flat_map(|p| p.objects.iter()).find_map(|o| match o {
++        InlineObject::Equation { math, .. } => Some(math.nodes.clone()),
++        _ => None,
++    });
++    assert_eq!(got, Some(nodes));
++}
++
+ /// #332: rotation (`a:xfrm/@rot`, 60000ths of a degree) and flips of pictures, shapes, text boxes
+ /// and groups survive save and load; the effect extent written covers the rotated bounds, and
+ /// reading takes that overhang back out of the effects room.
+diff --git a/crates/layout/src/math/nodes.rs b/crates/layout/src/math/nodes.rs
+--- a/crates/layout/src/math/nodes.rs
++++ b/crates/layout/src/math/nodes.rs
+@@ -115,33 +115,61 @@ impl Ctx {
+         out
+     }
+ 
++    /// Normal text (`m:nor`): the text font, upright unless asked.
++    fn normal_text_atoms(&self, r: &MRun, size: f32, color: Rgb, u0: usize, path: &[(usize, usize)]) -> Vec<RunPart> {
++        let mut out = Vec::new();
++        let fam = r.font.clone().filter(|f| !f.eq_ignore_ascii_case("Cambria Math")).unwrap_or_else(|| self.text_font.clone());
++        let (bold, italic) = match r.sty {
++            Some(MSty::Bold) => (true, false),
++            Some(MSty::Italic) => (false, true),
++            Some(MSty::BoldItalic) => (true, true),
++            _ => (false, false),
++        };
++        let rs = wordcraft_fonts::word::resolve(&fam, bold, italic);
++        let ea = r.font_ea.as_deref().map(|f| wordcraft_fonts::word::resolve(f, bold, italic));
++        // As body text: East Asian characters in the East Asian font (`w:eastAsia`), the rest
++        // in the run's font, and a character neither has in the first fallback face that does.
++        let face_of = |c: char| -> (FaceRef, (bool, bool)) {
++            if let Some(e) = &ea
++                && crate::kinsoku::is_east_asian(c)
++                && e.face.covers(c)
++            {
++                return (e.face, (e.synth_bold, e.synth_italic));
++            }
++            if rs.face.covers(c) || c.is_whitespace() || c.is_control() {
++                return (rs.face, (rs.synth_bold, rs.synth_italic));
++            }
++            match FontDb::global().fallback_for_run(&[c], rs.face.id(), bold, italic) {
++                Some(f) => (FaceRef::of(&f), (bold && f.weight < 600.0, italic && !f.italic)),
++                None => (rs.face, (rs.synth_bold, rs.synth_italic)),
++            }
++        };
++        let mut segs: Vec<(usize, usize, usize, FaceRef, (bool, bool))> = Vec::new();
++        for (k, (i, c)) in r.text.char_indices().enumerate() {
++            let (face, synth) = face_of(c);
++            match segs.last_mut() {
++                Some(s) if s.3.id() == face.id() && s.4 == synth => s.1 = i + c.len_utf8(),
++                _ => segs.push((i, i + c.len_utf8(), k, face, synth)),
++            }
++        }
++        if segs.is_empty() {
++            segs.push((0, 0, 0, rs.face, (rs.synth_bold, rs.synth_italic)));
++        }
++        for (start, end, k, face, synth) in segs {
++            let mut b =
++                self.text_atom(TextAtom { face, text: r.text.get(start..end).unwrap_or_default(), size, level: 0, color, synth, path, k0: u0 + k });
++            b.glyph = None;
++            out.push(RunPart::Atom(b.cls(Cls::Ord)));
++        }
++        out
++    }
++
+     pub(super) fn run_atoms(&self, r: &MRun, st: St, u0: usize, path: &[(usize, usize)]) -> Vec<RunPart> {
+         let mut out = Vec::new();
+         let size = r.size.filter(|s| s.is_finite()).unwrap_or(self.base).clamp(1.0, 1638.0) * self.scale(st.level);
+         let color = r.color.unwrap_or(self.color);
+         if r.nor {
+-            // Normal text: the text font, upright unless asked.
+-            let fam = r.font.clone().filter(|f| !f.eq_ignore_ascii_case("Cambria Math")).unwrap_or_else(|| self.text_font.clone());
+-            let (bold, italic) = match r.sty {
+-                Some(MSty::Bold) => (true, false),
+-                Some(MSty::Italic) => (false, true),
+-                Some(MSty::BoldItalic) => (true, true),
+-                _ => (false, false),
+-            };
+-            let rs = wordcraft_fonts::word::resolve(&fam, bold, italic);
+-            let mut b = self.text_atom(TextAtom {
+-                face: rs.face,
+-                text: &r.text,
+-                size,
+-                level: 0,
+-                color,
+-                synth: (rs.synth_bold, rs.synth_italic),
+-                path,
+-                k0: u0,
+-            });
+-            b.glyph = None;
+-            out.push(RunPart::Atom(b.cls(Cls::Ord)));
+-            return out;
++            return self.normal_text_atoms(r, size, color, u0, path);
+         }
+         // Map characters (math alphabets, operators) and split into atoms by class.
+         let mut cur = String::new();
+diff --git a/crates/layout/src/math/tests.rs b/crates/layout/src/math/tests.rs
+--- a/crates/layout/src/math/tests.rs
++++ b/crates/layout/src/math/tests.rs
+@@ -252,6 +252,32 @@ fn characters_the_math_font_lacks_fall_back() {
+     }
+ }
+ 
++/// Normal text (`m:nor`) in a font without East Asian characters: they are drawn in the run's
++/// East Asian font, or a fallback face, not as missing-glyph boxes (one face for the whole run
++/// drew 年度 in Times New Roman as boxes).
++#[test]
++fn normal_text_characters_the_font_lacks_fall_back() {
++    crate::test_fonts();
++    let face = wordcraft_fonts::word::resolve("Times New Roman", false, false).face;
++    let Some(c) = ['中', '※', '⌘', '⇧'].into_iter().find(|c| !face.covers(*c) && FontDb::global().fallback_for(*c, face.id()).is_some())
++    else {
++        return; // Every candidate is in the font, or no fallback font is installed.
++    };
++    let want = format!("x{c}{c}y");
++    for font_ea in [None, Some("SimSun".to_string())] {
++        let run = MRun { nor: true, font: Some("Times New Roman".into()), font_ea: font_ea.clone(), ..MRun::new(want.clone()) };
++        let m = layout_equation(&Math { nodes: vec![MNode::Run(run)], ..Default::default() }, "", &rc(), true, 400.0, &MathProps::default(), &mut 0);
++        let mut text = String::new();
++        for it in &m.items {
++            if let MItem::Glyphs { glyphs, text: t, .. } = it {
++                assert!(glyphs.iter().all(|g| g.0 != 0), "{font_ea:?}: a missing glyph in {t:?}");
++                text.push_str(t);
++            }
++        }
++        assert_eq!(text, want, "{font_ea:?}");
++    }
++}
++
+ #[test]
+ fn caret_slots_cover_every_position() {
+     crate::test_fonts();

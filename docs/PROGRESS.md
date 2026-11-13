@@ -2,6 +2,21 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-13 (2): OFD 200 / 200 clean: Chinese in equation text (0068)
+
+- **The OFD cmap misses in `896cafeedf` were a layout bug** (the PDF had them too): its equations
+  hold normal-text runs (`m:nor`) with `w:ascii="Times New Roman" w:eastAsia="標楷體"`, and the
+  math layout that came with the pin bump set the whole run in the `w:ascii` font, so 年度辦理活動
+  參與人次 drew as Times New Roman / Calibri missing glyphs. **Patch 0068:** `MRun::font_ea` read and
+  written (`w:eastAsia`); East Asian characters in normal-text math take it, a character neither
+  font has takes a fallback face, as body text. The only corpus document with Chinese in an
+  equation (7 others have equations without). Layout test (fails without the fix), reader and
+  round-trip tests; doc, docx and layout tests pass. Clippy's one error is `shape_around`'s
+  complexity (`para/builder.rs`, an earlier patch), not this change.
+- **OFD:** package and fonts clean **200 / 200** (was 199), recall 1.0000, placed 0.9991.
+- **Gate (Windows):** 186 / 200, mean 0.9435, unchanged, PASS. Linux not re-run yet.
+- **Next:** Linux gate (WSL); F45 probes in both modes; Linux long documents and 小标宋; web build.
+
 ## 2026-11-13: J5 at 200 / 200: picture-filled shapes (0066), WPS's two layout modes (F45, 0067)
 
 - **Picture fills (0066):** the last text loss (`aae80ea709`: a text box in a `horizontalScroll`
@@ -34,7 +49,7 @@ Newest first. One entry per working session: what landed, what was verified, wha
   OFD check hadn't run since the pin bump, so it is from the bump: open.
 - **Tests:** docx, doc, layout, render, pdf, formats (all pass); `wenshu-core`, `wenshu-ofd`,
   `wenshu-cli` pass; clippy clean on `wenshu-core`. The queue 0001–0067 reproduces the tested tree.
-- **Next:** the OFD cmap regression (`896cafeedf`); F45 probes in both modes; Linux long documents
+- **Next:** ~~the OFD cmap regression (`896cafeedf`)~~ (0068, above); F45 probes in both modes; Linux long documents
   and 小标宋; web build.
 
 ## 2026-11-09 (3): WordCraft pin bumped to `05f781cf` (3,146 commits)
