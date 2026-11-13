@@ -183,8 +183,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Rust, Zig and cargo-zigbuild
         run: |
-          rustup toolchain install stable --profile minimal --target loongarch64-unknown-linux-gnu
-          rustup default stable
+          # Pinned: Rust 1.100 passes --no-rosegment to the linker for LoongArch, which Zig 0.14's
+          # linker refuses (2026-11-13); 1.99.1 built v0.1.4.
+          rustup toolchain install 1.99.1 --profile minimal --target loongarch64-unknown-linux-gnu
+          rustup default 1.99.1
           pip3 install --user "ziglang==0.14.1"
           cargo install --locked cargo-zigbuild --version 0.20.1
       - name: Fetch and patch WordCraft
