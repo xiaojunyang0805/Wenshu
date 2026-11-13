@@ -15,7 +15,12 @@ Newest first. One entry per working session: what landed, what was verified, wha
 - **Web zip** served locally in Chrome: starts, 24 fonts, `ce628d9760` 6 pages, File › New 通知
   opens with the red header, Review › 文枢 › 检查公文格式 passes 8 / 8. The UI follows the
   browser language (English here).
-- **Next:** the user publishes the draft.
+- **Published** by the user on 2026-11-13 as Latest (not a pre-release, unlike 0.1.2–0.1.4);
+  one release for the tag, 10 assets. The old v0.1.1 draft is still listed (never public).
+- **Next session:** the 7 Linux documents still off (朱雀仿宋 Latin wider, narrower glyphs,
+  標楷體); drop the fonts WordCraft embeds that the web build already fetches; the unexplained
+  0-byte PDF save on the web; F46; `29a7772dfb` and `2d6a9da333`; domain purchase when the user
+  chooses (wenshuoffice.com or wenshu.dev).
 
 ## 2026-11-13 (9): v0.1.5 prepared (web zip in the release)
 
