@@ -2,6 +2,21 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-13 (10): v0.1.5 tagged, draft built and install-tested
+
+- **Tag** `v0.1.5` on 1680637; CI run 43506024791 green (all 7 jobs), draft with 10 assets,
+  SHA256SUMS verified.
+- **Install tests** (the 13 desktop checks, `out/drive_m2.py` / `drive_m2_linux.py`): Windows
+  portable zip 13 / 13; per-user MSI 13 / 13 (silent install, silent uninstall leaves no
+  folder); WSL Ubuntu 22.04: .deb upgrades 0.1.4 in place (24 fonts) 13 / 13, tar.gz 13 / 13,
+  AppImage 13 / 13. The zip's CLI writes PDF and OFD. LoongArch CLI from the tar.gz under qemu:
+  page counts equal x86_64's (2, 3, 6), writes PDF and OFD; the LoongArch .deb is loong64
+  0.1.5-1 with 24 fonts. The .vsix is 0.1.5.
+- **Web zip** served locally in Chrome: starts, 24 fonts, `ce628d9760` 6 pages, File › New 通知
+  opens with the red header, Review › 文枢 › 检查公文格式 passes 8 / 8. The UI follows the
+  browser language (English here).
+- **Next:** the user publishes the draft.
+
 ## 2026-11-13 (9): v0.1.5 prepared (web zip in the release)
 
 - **Release workflow:** a `web` job builds `scripts/build-web.sh` (trunk 0.22.1, fontTools
