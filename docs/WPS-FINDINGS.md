@@ -752,15 +752,48 @@ don't. 74 of the 200 corpus documents are WPS's.
 - **Saving (patch 0067):** a save keeps the file's `Application` when it names WPS Office (as the
   writer already keeps `Company` and `Template`); anything else is still written as WordCraft.
   J5 after it: WPS page count unchanged 200 / 200 (was 198).
-- **Layout (open):** which rules differ between the modes is not measured. Most probes so far
-  were built from python-docx's template, which doesn't name WPS Office, so F1–F44 were measured
-  in the other-application mode, while the WPS-authored references were laid out in WPS's own
-  mode. With the mode flipped, 4 of the 14 documents still a page off on Windows get Wenshu's page
-  count: `29a7772dfb` (WPS's, matches in the other mode) and `f7d3afdfdb`, `2d6a9da333`,
-  `9c189a35a9` (not WPS's, match in WPS's own mode). So Wenshu's rules mix the two modes; repeating
-  the probes with `Application` set both ways would separate them.
+- **Layout:** WPS's own mode lays a file out as compatibility mode 14 whatever its
+  `compatibilityMode` says (F47), and lets a header's floating objects leave the header's text
+  alone (F46). Of the four documents a page off that matched with the mode flipped,
+  `f7d3afdfdb` was a coincidence (F46's header picture moved its first line up 15.6 pt, which
+  absorbed a line WPS wraps earlier in the other mode); in `9c189a35a9` (Word's file) WPS's own
+  mode moves a floating table out by its cell margin (F47), which changes the breaks, while
+  Wenshu already places it as the other mode does, so its page difference is elsewhere.
+  `29a7772dfb` (WPS's) and `2d6a9da333` are not explained yet.
 - New documents Wenshu creates are written as WordCraft (so WPS uses the other-application mode);
   whether to name WPS Office there is a product decision, not taken.
+
+## F46. WPS's own mode: a header's floating objects don't wrap the header's text
+
+Measured 2026-11-13 (probes, both modes, settings part included). A picture floating in a header
+with square or top-and-bottom wrapping (DrawingML or VML) pushes the header's text below it in the
+other-application mode (as Word does): an empty header paragraph lands under a 96 pt picture and
+the body starts below that line. In WPS's own mode the header's text stays where it is, overlapping
+the picture (every header paragraph, also beside a half-width picture), and the body starts at the
+picture's bottom: 13.8 pt (empty paragraph) or 15.6 pt (a line of 12 pt text) higher. The body
+keeps clear of the picture in both modes. A picture that doesn't reach the body changes nothing.
+Wenshu follows the other mode. No WPS-authored corpus document has a wrapped float in a header,
+so nothing in the corpus moves; not implemented yet.
+
+Also seen: a half-width header picture overlapping the body's first line moves that line beside
+it in WPS (both modes); Wenshu leaves it at the margin.
+
+## F47. WPS's own mode lays a file out as compatibility mode 14
+
+Measured 2026-11-13 (probes in modes 14 and 15, both layout modes; corpus renders with the mode
+flipped). In WPS's own mode a mode-15 file's tables sit where mode 14 puts them: a start-aligned
+table (in the text or floating) moves out by its first cell's left margin so its text lines up
+with the indent, and an end-aligned one moves right by its last cell's right margin (5.4 pt with
+the default 108-twip margins, 15 pt with 300); centred tables don't move. In the other mode
+mode 15 keeps the border on the indent, as Word 2013 does. Mode 14 shifts end-aligned tables in
+both layout modes, which WordCraft didn't do.
+
+Taking the whole layout as mode 14 for a WPS file (every rule keyed on the mode: tables, squeeze
+and hanging rules, space before after a break, shrinking spaces on justified lines…) was tried on
+the corpus: 13 WPS-authored documents declare mode 15; `85cb8e4b30` now matches WPS's page count
+(32 → 31) and 10 of the 13 score higher (`ce628d9760` 0.926 → 0.952, `ccbaad306d` 0.941 → 0.958),
+none lower; Windows gate 186 → 187, mean 0.9435 → 0.9445. Patch 0069 (`Settings::wps_layout` from
+`app.xml`, `Settings::layout_compat_mode`).
 
 ## Still to measure
 

@@ -2,6 +2,33 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-13 (3): F45 measured: WPS's own mode lays out as compatibility mode 14 (0069), header floats (F46)
+
+- **Method:** the four documents a page off that matched with `Application` flipped, re-rendered
+  in WPS in the other mode (`out/f45/flip.py`), compared line by line with the originals; then
+  probes in both modes (`out/f45/probe_*.py`, settings part included, `Application` set per probe).
+- **No line-height difference:** single and 1.18× lines, empty paragraphs, first-line position
+  are identical in both modes for Arial Unicode MS, 宋体, Times New Roman, Calibri, 微软雅黑,
+  仿宋_GB2312 and 等线.
+- **F46:** in WPS's own mode a header's floating picture (square / top-and-bottom, DrawingML or
+  VML) leaves the header's text where it is, and the body starts at the picture's bottom; in the
+  other mode the header text goes below the picture and the body below that. Explains
+  `f7d3afdfdb`'s 15.6 pt (a coincidence for its page count). No WPS corpus document has one, so
+  not implemented yet.
+- **F47, patch 0069:** WPS's own mode positions tables as mode 14 in a mode-15 file (start-aligned
+  out by the first cell's left margin, end-aligned right by the last cell's right margin, centred
+  unmoved); measured in probes and confirmed on `ccbaad306d` / `e98a952d34` (their 5.7 pt shifts
+  vanish in WPS's other mode). Taking the whole layout as mode 14 for WPS files
+  (`Settings::wps_layout`, `layout_compat_mode`): `85cb8e4b30` matches (32 → 31), 10 of the 13
+  WPS mode-15 documents higher, none lower. Mode 14's end-aligned shift added (WordCraft lacked
+  it; no corpus document has one). Probe positions match WPS within 0.05 pt in both modes.
+- **Tests:** layout test (fails with either half disabled) and reader test; doc, docx, layout,
+  engine tests pass. Clippy: only `shape_around`'s complexity (earlier patch).
+- **Gate (Windows):** **187 / 200** (was 186), mean **0.9445** (was 0.9435), PASS, baseline
+  updated. LINUX_RESULT
+- **Next:** F46 (header text over its floats in WPS files); `29a7772dfb`, `2d6a9da333`; Linux long
+  documents and 小标宋; web build.
+
 ## 2026-11-13 (2): OFD 200 / 200 clean: Chinese in equation text (0068)
 
 - **The OFD cmap misses in `896cafeedf` were a layout bug** (the PDF had them too): its equations

@@ -1,0 +1,369 @@
+Upstream: (not opened; WPS-specific: a file whose docProps/app.xml Application names WPS Office is laid out as compatibility mode 14 whatever compatibilityMode says (Settings::wps_layout, Settings::layout_compat_mode), measured in WPS 12.1, WPS-FINDINGS F47; also, in mode 14 an end-aligned table moves right by its last cell's right margin, measured in WPS in both of its layout modes, a candidate upstream once checked in Word)
+diff --git a/crates/doc/src/settings.rs b/crates/doc/src/settings.rs
+--- a/crates/doc/src/settings.rs
++++ b/crates/doc/src/settings.rs
+@@ -122,6 +122,11 @@ pub struct Settings {
+     /// 2013 and later, which places a table's border at the margin rather than its text and lets
+     /// justified lines shrink their spaces to fit more text.
+     pub compat_mode: u32,
++    /// The file was written by WPS Office (`docProps/app.xml`'s `Application` names it). WPS lays
++    /// such a file out as compatibility mode 14 whatever `compatibilityMode` says (measured in WPS
++    /// 12.1): see [`Settings::layout_compat_mode`]. Read from the file, never written to settings.
++    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
++    pub wps_layout: bool,
+     /// Fonts the document's font table classes as roman (serif, `w:family w:val="roman"`): Word
+     /// draws one that isn't installed in a serif face.
+     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+@@ -348,6 +353,14 @@ pub const THEME_COLORS: [Rgb; 12] = [
+     Rgb(0x96, 0x60, 0x7D),
+ ];
+ 
++impl Settings {
++    /// The compatibility mode layout follows: [`Settings::compat_mode`], or at most 14 for a file
++    /// WPS Office wrote ([`Settings::wps_layout`]).
++    pub fn layout_compat_mode(&self) -> u32 {
++        if self.wps_layout { self.compat_mode.min(14) } else { self.compat_mode }
++    }
++}
++
+ impl Default for Settings {
+     fn default() -> Self {
+         Settings {
+@@ -375,6 +388,7 @@ impl Default for Settings {
+             protect_formatting: false,
+             protect_hash: Vec::new(),
+             compat_mode: COMPAT_MODE_CURRENT,
++            wps_layout: false,
+             roman_fonts: Vec::new(),
+             sum_paragraph_spacing: false,
+             do_not_expand_shift_return: false,
+diff --git a/crates/docx/src/read/meta.rs b/crates/docx/src/read/meta.rs
+--- a/crates/docx/src/read/meta.rs
++++ b/crates/docx/src/read/meta.rs
+@@ -184,6 +184,9 @@ impl Reader<'_> {
+             let name = e.local();
+             let value = e.text();
+             let wps = name == crate::package::APP_KEPT_APPLICATION && crate::package::is_wps_application(&value);
++            if wps {
++                self.doc.settings.wps_layout = true;
++            }
+             if (wps || crate::package::APP_KEPT_PROPS.contains(&name)) && value.len() <= 2048 && !value.contains(['\t', '\n']) {
+                 kept.push_str(&format!("{name}\t{value}\n"));
+             }
+diff --git a/crates/docx/tests/it/passthrough.rs b/crates/docx/tests/it/passthrough.rs
+--- a/crates/docx/tests/it/passthrough.rs
++++ b/crates/docx/tests/it/passthrough.rs
+@@ -359,6 +359,23 @@ fn extended_properties_are_kept_without_words_counts_and_personal_ones_follow_th
+     assert!(private.contains("<Template>Normal.dotm</Template>"));
+ }
+ 
++/// A file WPS Office wrote is laid out by WPS's own rules ([`Settings::wps_layout`]); any other
++/// application's name, or none, leaves them off.
++#[test]
++fn wps_office_application_turns_on_wps_layout() {
++    let read_app = |application: Option<&str>| {
++        let app = application.map(|a| format!(r#"<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>{a}</Application></Properties>"#));
++        let rel = [("rIdA", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties", "docProps/app.xml")];
++        let parts = app.as_deref().map(|a| vec![("docProps/app.xml", a)]).unwrap_or_default();
++        let b = package("<w:p><w:r><w:t>x</w:t></w:r></w:p>", &[], if app.is_some() { &rel[..] } else { &[] }, &parts);
++        wordcraft_docx::read(&b).unwrap().settings.wps_layout
++    };
++    assert!(read_app(Some("WPS Office_12.1.0.17857_F1E327BC-269C-435d-A152-05C5408002CA")));
++    for other in [Some("Microsoft Office Word"), Some("wps office"), Some("Kingsoft Office"), None] {
++        assert!(!read_app(other), "{other:?}");
++    }
++}
++
+ #[test]
+ fn wps_office_keeps_its_application_name_so_wps_keeps_its_own_layout() {
+     let save_app = |application: &str| {
+diff --git a/crates/layout/src/boxes.rs b/crates/layout/src/boxes.rs
+--- a/crates/layout/src/boxes.rs
++++ b/crates/layout/src/boxes.rs
+@@ -159,7 +159,7 @@ fn layout_table_block(input: TableBlockContext<'_, '_, '_>) -> bool {
+     let layout = table::layout_table(ctx, story, t, path, width, depth + 1);
+     let (tx, ty) = match t.props.float {
+         Some(float) => {
+-            let legacy = (ctx.doc.settings.compat_mode < 15).then(|| table::first_cell_left_margin(ctx, t));
++            let legacy = table::legacy_margins(ctx, t);
+             let (rect, area) = box_float_table_rect(frame, width, *y, &layout, &float, legacy, float_tables);
+             exclusions.push((area, false, None, WrapText::BothSides, true));
+             float_tables.push(area);
+@@ -204,7 +204,7 @@ pub(crate) fn layout_box(ctx: &mut Ctx, input: BoxInput<'_>) -> BoxLayout {
+     };
+     // Word 16.113.3: the override applies in modes 11/12/14, but not mode 15.
+     let allow_same_style_space =
+-        in_cell && ctx.doc.settings.allow_space_of_same_style_in_table && matches!(ctx.doc.settings.compat_mode, 11 | 12 | 14);
++        in_cell && ctx.doc.settings.allow_space_of_same_style_in_table && matches!(ctx.doc.settings.layout_compat_mode(), 11 | 12 | 14);
+     let mut items = Vec::new();
+     // Pictures behind the text go first; `behind` counts them.
+     let mut behind = 0;
+@@ -469,14 +469,14 @@ pub(crate) struct BoxLayout {
+ /// Where floating table `tl` goes in a box `width` wide whose next paragraph starts at `y`, and
+ /// the area text keeps clear of. Positions relative to the page or its margins need the box's
+ /// `frame`; without one (a table cell) they're relative to the box. `legacy` is the first cell's
+-/// left margin before Word 2013 layout, `None` in it.
++/// left and the last cell's right margin before Word 2013 layout, `None` in it.
+ fn box_float_table_rect(
+     frame: Option<PageFrame>,
+     width: f32,
+     y: f32,
+     tl: &table::TableLayout,
+     f: &TableFloat,
+-    legacy: Option<f32>,
++    legacy: Option<[f32; 2]>,
+     float_tables: &[Rect],
+ ) -> (Rect, Rect) {
+     let h = tl.rows.iter().map(|r| r.height).sum::<f32>().clamp(0.0, 100_000.0);
+@@ -512,7 +512,8 @@ fn box_float_table_rect(
+     };
+     // Nor is there an area to align in: the table starts where the text is.
+     let v_align = if frame.is_none() && matches!(f.v_rel, Anchor::Page | Anchor::Margin) { None } else { f.v_align };
+-    let x = align_in(h_area, f.x, w, PageFrame::h_align(frame.as_ref(), f.h_align)) - if f.h_align.is_none() { legacy.unwrap_or(0.0) } else { 0.0 };
++    let align = PageFrame::h_align(frame.as_ref(), f.h_align);
++    let x = align_in(h_area, f.x, w, align) + crate::table_flow::legacy_shift(align, legacy.unwrap_or_default());
+     let r = clear_of_float_tables(Rect::new(x, align_in(v_area, y_off, h, v_align), w, h), f, legacy.is_none(), h_area.0, float_tables);
+     let [dl, dt, dr, db] = f.dist_from_text();
+     (r, r.inset(-dl, -dt, -dr, -db))
+diff --git a/crates/layout/src/display/lines.rs b/crates/layout/src/display/lines.rs
+--- a/crates/layout/src/display/lines.rs
++++ b/crates/layout/src/display/lines.rs
+@@ -637,7 +637,7 @@ fn inline_objects(ctx: &LineContext<'_, '_, '_>, out: &mut Vec<Draw>) {
+         }
+         let cx = x + line.cl_left(k).unwrap_or(0.0);
+         let obj = para.and_then(|p| p.objects.get(oi));
+-        let modern = doc.settings.compat_mode >= wordcraft_doc::COMPAT_MODE_CURRENT;
++        let modern = doc.settings.layout_compat_mode() >= wordcraft_doc::COMPAT_MODE_CURRENT;
+         let rect = inline_rect(obj, cx, base, c.adv, (c.obj_h, c.obj_d), pl.rule_room(line, k), modern);
+         let spin = obj.and_then(InlineObject::frame).map(|(_, _, f)| f.spin()).unwrap_or_default();
+         match obj {
+diff --git a/crates/layout/src/floats.rs b/crates/layout/src/floats.rs
+--- a/crates/layout/src/floats.rs
++++ b/crates/layout/src/floats.rs
+@@ -761,7 +761,7 @@ pub(crate) fn place_objects(ctx: &mut Ctx, req: &ObjectPlacement) -> (Vec<Placed
+                 }
+             } else {
+                 let cx = x + line.cl_left(k).unwrap_or(0.0);
+-                let modern = ctx.doc.settings.compat_mode >= wordcraft_doc::COMPAT_MODE_CURRENT;
++                let modern = ctx.doc.settings.layout_compat_mode() >= wordcraft_doc::COMPAT_MODE_CURRENT;
+                 display::inline_rect(Some(obj), cx, y + (line.baseline - fl.top), c.adv, (c.obj_h, c.obj_d), pl.rule_room(line, k), modern)
+             };
+             let (mut behind, mut front) = (Vec::new(), Vec::new());
+diff --git a/crates/layout/src/flow.rs b/crates/layout/src/flow.rs
+--- a/crates/layout/src/flow.rs
++++ b/crates/layout/src/flow.rs
+@@ -267,7 +267,7 @@ impl<'a> Flow<'a> {
+         // ended with a page break, nor (from Word 2013's layout, compatibility mode 15) for a page
+         // break before; a section break or, in older modes, a page break before keeps it.
+         let after_break_mark = std::mem::take(&mut pb.after_break_mark);
+-        if pb.at_top() && (after_break_mark || (broke_before && ctx.doc.settings.compat_mode >= 15)) {
++        if pb.at_top() && (after_break_mark || (broke_before && ctx.doc.settings.layout_compat_mode() >= 15)) {
+             before = 0.0;
+         } else if pb.at_top()
+             && !ctx.doc.settings.sum_paragraph_spacing
+@@ -617,7 +617,7 @@ impl<'a> Flow<'a> {
+         // its space before there in compatibility modes before 15; from mode 15 it has none there
+         // (WPS Office, both breaks; Word suppresses it the same way after a page break before).
+         let starts_with_break = self.l0 == 1
+-            && ctx.doc.settings.compat_mode < 15
++            && ctx.doc.settings.layout_compat_mode() < 15
+             && self.pl.lines.first().is_some_and(|l| {
+                 only_breaks(self.p, l.start..l.stop, |c| c == wordcraft_doc::para::PAGE_BREAK || c == wordcraft_doc::para::COLUMN_BREAK)
+             });
+diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
+--- a/crates/layout/src/para/lines.rs
++++ b/crates/layout/src/para/lines.rs
+@@ -195,7 +195,7 @@ impl<'e> Breaker<'e> {
+             default_tab: settings.default_tab,
+             hanging_at: if rp.indent_first < 0.0 { Some(rp.indent_left) } else { None },
+             tab_origin: if settings.odf.is_some_and(|o| o.tabs_from_indent) { rp.indent_left } else { 0.0 },
+-            shrink_spaces: rp.align == Align::Justify && settings.compat_mode >= wordcraft_doc::COMPAT_MODE_CURRENT,
++            shrink_spaces: rp.align == Align::Justify && settings.layout_compat_mode() >= wordcraft_doc::COMPAT_MODE_CURRENT,
+             expand_break: !settings.do_not_expand_shift_return,
+             label_space: if settings.balance_sbcs_dbcs { 0.5 } else { 0.25 },
+             grid_hang: if env.grid.hang.is_finite() { env.grid.hang.clamp(0.0, 1e4) } else { 0.0 },
+diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
+--- a/crates/layout/src/para/paragraph.rs
++++ b/crates/layout/src/para/paragraph.rs
+@@ -438,7 +438,7 @@ impl<'a> Shaped<'a> {
+             // The line makes room for effects (shadows) around the picture too, and
+             // for a rotated one's bounds, as Word does.
+             let [el, et, er, eb] = float.effect_extent();
+-            let (px, py) = float.line_pad(w * s, h * s, env.doc.settings.compat_mode >= wordcraft_doc::COMPAT_MODE_CURRENT);
++            let (px, py) = float.line_pad(w * s, h * s, env.doc.settings.layout_compat_mode() >= wordcraft_doc::COMPAT_MODE_CURRENT);
+             let tall = h * s + et + eb + 2.0 * py;
+             // Lowered further than its height, its top stays on the baseline while the line
+             // reaches as far down as the lowering (Word, measured: a 6 pt picture lowered 30 pt
+@@ -728,8 +728,11 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+     // Compatibility mode 15 squeezes justified lines only, and only they get a closing mark's
+     // blank half free at the line end; older modes do both on every line (WPS).
+     let justified = matches!(rp.align, wordcraft_doc::props::Align::Justify | wordcraft_doc::props::Align::Distribute);
+-    let squeeze_rule =
+-        if doc.settings.compat_mode >= wordcraft_doc::COMPAT_MODE_CURRENT { super::SqueezeRule::Justified } else { super::SqueezeRule::HalfEm };
++    let squeeze_rule = if doc.settings.layout_compat_mode() >= wordcraft_doc::COMPAT_MODE_CURRENT {
++        super::SqueezeRule::Justified
++    } else {
++        super::SqueezeRule::HalfEm
++    };
+     let compresses = doc.settings.char_spacing.compresses_punctuation() && (justified || squeeze_rule == super::SqueezeRule::HalfEm);
+     let mut end_marks = Vec::new();
+     let squeeze = if compresses {
+diff --git a/crates/layout/src/table.rs b/crates/layout/src/table.rs
+--- a/crates/layout/src/table.rs
++++ b/crates/layout/src/table.rs
+@@ -317,15 +317,27 @@ pub fn autofit_widths(cols: &[(f32, f32)], avail: f32) -> Vec<f32> {
+     cols.iter().map(|c| c.0 + (c.1 - c.0) * k).collect()
+ }
+ 
+-/// The first cell's left margin: how far its text sits inside the table's edge.
+-pub(crate) fn first_cell_left_margin(ctx: &Ctx, t: &Table) -> f32 {
+-    first_cell_left_margin_in(t, default_margins(t, table_style(ctx, t).as_ref()))
+-}
+-
+ fn first_cell_left_margin_in(t: &Table, def: [f32; 4]) -> f32 {
+     t.rows.first().and_then(|r| r.cells.first()).map_or(def, |cell| cell.props.resolved_margins(def))[1]
+ }
+ 
++/// The first row's last cell's right margin.
++fn last_cell_right_margin_in(t: &Table, def: [f32; 4]) -> f32 {
++    t.rows.first().and_then(|r| r.cells.last()).map_or(def, |cell| cell.props.resolved_margins(def))[3]
++}
++
++/// Before Word 2013 layout (compatibility mode 15) a table's position places its text, not its
++/// border: a start-aligned table's edge sits its first cell's left margin further out, and an
++/// end-aligned one's its last cell's right margin (measured in WPS 12.1, which lays out a file it
++/// wrote this way in every mode). `None` in mode 15; else the (left, right) shifts.
++pub(crate) fn legacy_margins(ctx: &Ctx, t: &Table) -> Option<[f32; 2]> {
++    if ctx.doc.settings.layout_compat_mode() >= 15 {
++        return None;
++    }
++    let def = default_margins(t, table_style(ctx, t).as_ref());
++    Some([first_cell_left_margin_in(t, def), last_cell_right_margin_in(t, def)])
++}
++
+ /// What a table style gives the cells in one set of parts: shading, vertical alignment and each
+ /// part's cell borders, lowest precedence first.
+ struct RegionLook {
+@@ -471,7 +483,7 @@ fn table_frame(ctx: &mut Ctx, t: &Table, avail: f32, depth: usize, style: Option
+     // (left) margin and border are on its right.
+     let rtl = t.props.bidi_visual;
+     // How far in from the start margin the table's edge sits when it is start-aligned.
+-    let start_offset = if ctx.doc.settings.compat_mode >= 15 {
++    let start_offset = if ctx.doc.settings.layout_compat_mode() >= 15 {
+         // The border is centred on the edge, so half of it sits outside: Word moves the table in
+         // by that half.
+         let border = first_cell.and_then(|c| c.props.borders.and_then(|b| b.left)).or(tborders.left);
+@@ -482,7 +494,9 @@ fn table_frame(ctx: &mut Ctx, t: &Table, avail: f32, depth: usize, style: Option
+     let x = match (t.props.align, rtl) {
+         (Some(Align::Center), _) => (avail - total) / 2.0,
+         // End alignment: the right margin, or the left one in a right-to-left table.
+-        (Some(Align::Right), false) => avail - total,
++        (Some(Align::Right), false) => {
++            avail - total + if ctx.doc.settings.layout_compat_mode() < 15 { last_cell_right_margin_in(t, margins_def) } else { 0.0 }
++        }
+         (Some(Align::Right), true) => 0.0,
+         (_, true) => avail - total - start_offset,
+         (_, false) => start_offset,
+diff --git a/crates/layout/src/table_flow.rs b/crates/layout/src/table_flow.rs
+--- a/crates/layout/src/table_flow.rs
++++ b/crates/layout/src/table_flow.rs
+@@ -177,7 +177,7 @@ pub(crate) fn place_table(ctx: &mut Ctx, pb: &mut PageBuilder, t: &wordcraft_doc
+     if let Some(f) = t.props.float.filter(|_| !pb.web) {
+         // Before Word 2013 layout (compatibility mode 15) an offset places the first cell's text,
+         // so the edge sits a cell margin further out.
+-        let legacy = if ctx.doc.settings.compat_mode < 15 { table::first_cell_left_margin(ctx, t) } else { 0.0 };
++        let legacy = table::legacy_margins(ctx, t).unwrap_or_default();
+         let h: f32 = tl.rows.iter().map(|r| r.height).sum();
+         if h <= pb.uncapped_bottom() - pb.top + 0.01 {
+             place_floating_table(ctx, pb, &tl, &f, legacy, block, body_top);
+@@ -333,7 +333,7 @@ const MAX_TABLE_SPACE: f32 = 1584.0;
+ 
+ /// Place floating table `tl` (`w:tblpPr`): at its own position, which takes no room in the text
+ /// flow; the text after it wraps around it.
+-fn place_floating_table(ctx: &mut Ctx, pb: &mut PageBuilder, tl: &table::TableLayout, f: &TableFloat, legacy: f32, block: usize, body_top: f32) {
++fn place_floating_table(ctx: &mut Ctx, pb: &mut PageBuilder, tl: &table::TableLayout, f: &TableFloat, legacy: [f32; 2], block: usize, body_top: f32) {
+     let h: f32 = tl.rows.iter().map(|r| r.height).sum::<f32>().clamp(0.0, 100_000.0);
+     let w = tl.width.clamp(1.0, 100_000.0);
+     let [dl, dt, dr, db] = f.dist_from_text();
+@@ -352,7 +352,7 @@ fn place_floating_table(ctx: &mut Ctx, pb: &mut PageBuilder, tl: &table::TableLa
+         let r = clear_of_float_tables(
+             Rect::new(x, align_in(v_area, f.y, h, f.v_align), w, h),
+             f,
+-            ctx.doc.settings.compat_mode >= 15,
++            ctx.doc.settings.layout_compat_mode() >= 15,
+             h_area.0,
+             &obstacles,
+         );
+@@ -436,10 +436,20 @@ fn float_table_h_area(pb: &PageBuilder, f: &TableFloat, mirror: bool) -> (f32, f
+ 
+ /// A floating table's left edge on the page (`legacy`: the first cell's left margin before Word
+ /// 2013 layout, when an offset places the cell's text).
+-fn float_table_x(pb: &PageBuilder, w: f32, f: &TableFloat, legacy: f32, mirror: bool) -> f32 {
++fn float_table_x(pb: &PageBuilder, w: f32, f: &TableFloat, legacy: [f32; 2], mirror: bool) -> f32 {
+     let align = PageFrame::h_align(Some(&page_frame(pb, mirror)), f.h_align);
+     let x = align_in(float_table_h_area(pb, f, mirror), f.x, w, align);
+-    if f.h_align.is_none() { x - legacy } else { x }
++    x + legacy_shift(align, legacy)
++}
++
++/// How far a floating table moves before Word 2013 layout ([`table::legacy_margins`]): out by its
++/// first cell's left margin at a position, by its last cell's right margin when aligned right.
++pub(crate) fn legacy_shift(align: Option<wordcraft_doc::para::FloatAlign>, [left, right]: [f32; 2]) -> f32 {
++    match align {
++        None => -left,
++        Some(wordcraft_doc::para::FloatAlign::End) => right,
++        Some(_) => 0.0,
++    }
+ }
+ 
+ /// Move `pb.y` below the floating objects in the way of something spanning `x0..x1` that
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -378,6 +378,46 @@ fn contextual_spacing_drops_the_space_after_a_cells_last_normal_paragraph() {
+     assert!((gap - kept).abs() < 0.01, "legacy {gap}, kept {kept}");
+ }
+ 
++/// The first cell's text x of a two-column table, start- or end-aligned, in compatibility mode
++/// `mode`, in a file WPS Office wrote (`wps`) or not.
++fn table_text_x(mode: u32, wps: bool, align: Option<Align>) -> f32 {
++    let mut d = Document::new();
++    d.settings.compat_mode = mode;
++    d.settings.wps_layout = wps;
++    let mut t = Table::new(1, 2, 200.0);
++    t.props.style = None;
++    t.props.borders = None;
++    t.props.cell_margins = Some([0.0, 5.4, 0.0, 5.4]);
++    t.props.align = align;
++    t.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text("Cell", Default::default()))];
++    d.body = vec![Arc::new(wordcraft_doc::Block::Table(t))];
++    let l = lay(&d);
++    l.pages[0]
++        .items
++        .iter()
++        .find_map(|i| match i {
++            Placed::Lines { x, .. } => Some(*x),
++            _ => None,
++        })
++        .unwrap()
++}
++
++/// Before Word 2013 layout a table's position places its text: a start-aligned table moves out by
++/// its first cell's left margin, an end-aligned one by its last cell's right margin. WPS Office
++/// lays out a file it wrote that way in every mode (measured in WPS 12.1).
++#[test]
++fn tables_place_their_text_before_word_2013_and_in_wps_files() {
++    crate::test_fonts();
++    for align in [None, Some(Align::Right)] {
++        let modern = table_text_x(15, false, align);
++        let shift = if align.is_some() { 5.4 } else { -5.4 };
++        for (mode, wps) in [(14, false), (14, true), (15, true)] {
++            let x = table_text_x(mode, wps, align);
++            assert!((x - modern - shift).abs() < 0.01, "{align:?} mode {mode} wps {wps}: {x}, mode 15 {modern}");
++        }
++    }
++}
++
+ fn contextual_gap(after: f32, before: f32, first: bool, second: bool, different_style: bool, header: bool) -> f32 {
+     use wordcraft_doc::props::LineSpacing;
+     let mut d = Document::new();
