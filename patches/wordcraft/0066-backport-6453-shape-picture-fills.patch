@@ -1,0 +1,1714 @@
+Upstream: backport of https://github.com/storytold/wordcraft/pull/6453 (head d8d618ff, open; carries #2393 by its author: eight preset shapes and picture fills for shapes, a:blipFill read and written). Wenshu needs it for J5: a text box in a picture-filled shape was read as a picture and its text dropped on save. Drop when #6453 is merged and the pin passes it.
+diff --git a/crates/doc/src/connector.rs b/crates/doc/src/connector.rs
+index 68602fff..9ec3595c 100644
+--- a/crates/doc/src/connector.rs
++++ b/crates/doc/src/connector.rs
+@@ -1,5 +1,5 @@
+ //! Connectors and the shape properties beyond fill and outline: a shape's drawing id, its text
+-//! warp, a rounded rectangle's corner, and a connector's ends.
++//! warp, a rounded rectangle's corner, a picture fill, and a connector's ends.
+ //!
+ //! A connector (DrawingML `straightConnector1`, `bentConnector3`, `curvedConnector3`) is a line
+ //! from its frame's top-left to its bottom-right corner (flips swap the corners). Each end may be
+@@ -206,6 +206,11 @@ pub struct ShapeExtra {
+     /// The outline dash pattern; absent in older saved documents means solid.
+     #[serde(skip_serializing_if = "crate::line_dash::LineDash::is_solid")]
+     pub dash: crate::line_dash::LineDash,
++    /// A picture fill (Shape Fill › Picture, DrawingML's `a:blipFill`): the `Document::media`
++    /// key of the picture stretched over the shape's box and clipped to its outline, in place
++    /// of the colour fill.
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub picture: Option<String>,
+     /// The outline ends; older saved documents and absent DrawingML caps are flat.
+     #[serde(skip_serializing_if = "LineCap::is_flat")]
+     pub cap: LineCap,
+@@ -317,10 +322,56 @@ pub fn sites(kind: ShapeKind, w: f32, h: f32) -> Vec<(f32, f32)> {
+         // The corners, the legs' midpoints and the hypotenuse's.
+         ShapeKind::RightTriangle => vec![(0.0, 0.0), (0.0, cy), (0.0, h), (cx, h), (w, h), (cx, cy)],
+         ShapeKind::Line | ShapeKind::StraightConnector | ShapeKind::ElbowConnector | ShapeKind::CurvedConnector => vec![(0.0, 0.0), (w, h)],
++        // The corners, in the order of the presets' connection lists: a hexagon's and an
++        // octagon's from the right side round through the bottom, a pentagon's from its top.
++        ShapeKind::Hexagon | ShapeKind::Octagon | ShapeKind::Pentagon => {
++            let pts = crate::preset::polygon(kind, w, h).unwrap_or_default();
++            let at = |i: usize| pts.get(i).map(|(x, y)| (x * w, y * h));
++            let order: &[usize] = match kind {
++                ShapeKind::Hexagon => &[3, 4, 5, 0, 1, 2],
++                ShapeKind::Octagon => &[3, 4, 5, 6, 7, 0, 1, 2],
++                _ => &[1, 0, 4, 3, 2],
++            };
++            order.iter().filter_map(|i| at(*i)).collect()
++        }
++        // The other polygons: top, left, bottom and right, where the lines through the middle
++        // meet the outline.
++        ShapeKind::Parallelogram | ShapeKind::Trapezoid | ShapeKind::Plus | ShapeKind::Chevron | ShapeKind::Decagon => {
++            let pts: Vec<(f32, f32)> = crate::preset::polygon(kind, w, h).unwrap_or_default().iter().map(|(x, y)| (x * w, y * h)).collect();
++            let (top, bottom) = crossings(&pts, cx, true);
++            let (left, right) = crossings(&pts, cy, false);
++            vec![(cx, top), (left, cy), (cx, bottom), (right, cy)]
++        }
+         _ => vec![(cx, 0.0), (0.0, cy), (cx, h), (w, cy)],
+     }
+ }
+ 
++/// Where the line `x = at` (`vertical`) or `y = at` crosses the closed polygon `pts`: the least
++/// and greatest crossing along the line (0 and 0 when it misses).
++fn crossings(pts: &[(f32, f32)], at: f32, vertical: bool) -> (f32, f32) {
++    let (mut lo, mut hi) = (f32::INFINITY, f32::NEG_INFINITY);
++    for (i, a) in pts.iter().enumerate() {
++        let Some(b) = pts.get((i + 1) % pts.len()) else { continue };
++        // (along the line, across it) for each end.
++        let ((a_on, a_across), (b_on, b_across)) = if vertical { ((a.1, a.0), (b.1, b.0)) } else { ((a.0, a.1), (b.0, b.1)) };
++        let (lo_x, hi_x) = (a_across.min(b_across), a_across.max(b_across));
++        if at < lo_x || at > hi_x {
++            continue;
++        }
++        let v = if (b_across - a_across).abs() < 1e-6 {
++            // The edge lies on the line: both its ends cross it.
++            lo = lo.min(a_on.min(b_on));
++            hi = hi.max(a_on.max(b_on));
++            continue;
++        } else {
++            a_on + (b_on - a_on) * (at - a_across) / (b_across - a_across)
++        };
++        lo = lo.min(v);
++        hi = hi.max(v);
++    }
++    if lo.is_finite() && hi.is_finite() { (lo, hi) } else { (0.0, 0.0) }
++}
++
+ /// Site `site` of a `kind` shape with frame `rect` (x, y, w, h) on the page, turned and flipped by
+ /// `spin` about its centre. `None` for a site the shape doesn't have.
+ pub fn site_point(kind: ShapeKind, rect: [f32; 4], spin: wordcraft_geom::Spin, site: u32) -> Option<(f32, f32)> {
+@@ -745,4 +796,50 @@ mod tests {
+         }
+         assert!(!reroute_group(&mut group));
+     }
++
++    /// #1534 review: the polygonal presets' connection sites lie on their outlines; a hexagon,
++    /// octagon and pentagon have their DrawingML sites (the corners, from the right or top).
++    #[test]
++    fn polygon_presets_have_sites_on_their_outline() {
++        let on_outline = |kind: ShapeKind, (x, y): (f32, f32)| {
++            let pts = crate::preset::polygon(kind, 100.0, 60.0).unwrap();
++            let n = pts.len();
++            (0..n).any(|i| {
++                let ((ax, ay), (bx, by)) = (pts[i], pts[(i + 1) % n]);
++                let (ax, ay, bx, by) = (ax * 100.0, ay * 60.0, bx * 100.0, by * 60.0);
++                let len = (bx - ax).hypot(by - ay);
++                let cross = ((bx - ax) * (y - ay) - (by - ay) * (x - ax)).abs();
++                let within = (x - ax) * (x - bx) <= 0.01 && (y - ay) * (y - by) <= 0.01;
++                within && cross / len.max(1e-6) < 0.01
++            })
++        };
++        for kind in [
++            ShapeKind::Hexagon,
++            ShapeKind::Octagon,
++            ShapeKind::Pentagon,
++            ShapeKind::Parallelogram,
++            ShapeKind::Trapezoid,
++            ShapeKind::Plus,
++            ShapeKind::Chevron,
++            ShapeKind::Decagon,
++        ] {
++            let s = sites(kind, 100.0, 60.0);
++            assert!(s.len() >= 4, "{kind:?}");
++            for p in &s {
++                assert!(on_outline(kind, *p), "{kind:?}: {p:?} is off the outline");
++            }
++        }
++        // A hexagon's six corners, from the right one round through the bottom.
++        let hex = sites(ShapeKind::Hexagon, 100.0, 60.0);
++        assert_eq!(hex.len(), 6);
++        assert_eq!(hex[0], (100.0, 30.0));
++        assert!(site_point(ShapeKind::Hexagon, [0.0, 0.0, 100.0, 60.0], Default::default(), 5).is_some(), "a glued site 5 resolves");
++        assert_eq!(sites(ShapeKind::Octagon, 100.0, 60.0).len(), 8);
++        assert_eq!(sites(ShapeKind::Pentagon, 100.0, 60.0)[0], (50.0, 0.0));
++        // Junk sizes don't panic.
++        for kind in [ShapeKind::Hexagon, ShapeKind::Plus] {
++            let _ = sites(kind, f32::NAN, -5.0);
++            let _ = sites(kind, 0.0, 0.0);
++        }
++    }
+ }
+diff --git a/crates/doc/src/lib.rs b/crates/doc/src/lib.rs
+index e8b84b17..648dfb45 100644
+--- a/crates/doc/src/lib.rs
++++ b/crates/doc/src/lib.rs
+@@ -41,6 +41,7 @@ pub mod math_symbols;
+ pub mod numbering;
+ pub mod para;
+ pub mod picfx;
++pub mod preset;
+ pub mod props;
+ pub mod resolve;
+ pub mod section;
+diff --git a/crates/doc/src/para/inline_kinds.rs b/crates/doc/src/para/inline_kinds.rs
+index 686089f7..b5fe33b1 100644
+--- a/crates/doc/src/para/inline_kinds.rs
++++ b/crates/doc/src/para/inline_kinds.rs
+@@ -24,6 +24,16 @@ pub enum ShapeKind {
+     ArrowDown,
+     Star,
+     Heart,
++    /// Polygonal presets (DrawingML's `hexagon`, `octagon`, regular `pentagon`,
++    /// `parallelogram`, `trapezoid`, `plus`, `chevron`, `decagon`): see [`crate::preset`].
++    Hexagon,
++    Octagon,
++    Pentagon,
++    Parallelogram,
++    Trapezoid,
++    Plus,
++    Chevron,
++    Decagon,
+     /// A text box (rectangle with a text story).
+     TextBox,
+     /// A shape drawn point by point, such as ink (its geometry is the shape's `freeform`).
+diff --git a/crates/doc/src/preset.rs b/crates/doc/src/preset.rs
+new file mode 100644
+index 00000000..ee5fd732
+--- /dev/null
++++ b/crates/doc/src/preset.rs
+@@ -0,0 +1,158 @@
++//! The outlines of the polygonal preset shapes (hexagon, octagon, pentagon, parallelogram,
++//! trapezoid, plus, chevron, decagon), from the DrawingML preset shape definitions (ECMA-376
++//! Part 1 §20.1.10.56, `presetShapeDefinitions.xml`) with their default adjust values. The
++//! raster renderer, the PDF writer and text wrapping all draw these from here.
++
++use crate::para::ShapeKind;
++
++/// The outline of a polygonal preset `kind` in a `w` × `h` box: its corners in drawing order, in
++/// unit coordinates (0..1 across the box). `None` for the other kinds. Corners that the presets
++/// set from the shorter side (a hexagon's, an octagon's…) stay that far in whatever the box's
++/// shape; a zero or junk size gives a flat outline, still inside the unit square.
++pub fn polygon(kind: ShapeKind, w: f32, h: f32) -> Option<Vec<(f32, f32)>> {
++    let pos = |v: f32| if v.is_finite() { v.clamp(0.0, 1.0e6) } else { 0.0 };
++    let (w, h) = (pos(w), pos(h));
++    let ss = w.min(h);
++    // A distance across (`fx`) or down (`fy`) the box as a fraction of it.
++    let fx = |d: f32| if w > 0.0 { (d / w).clamp(0.0, 1.0) } else { 0.0 };
++    let fy = |d: f32| if h > 0.0 { (d / h).clamp(0.0, 1.0) } else { 0.0 };
++    let (sin, cos) = (|deg: f32| deg.to_radians().sin(), |deg: f32| deg.to_radians().cos());
++    let pts = match kind {
++        // `adj` 25000 (a quarter of the shorter side), `vf` 115470: the slanted sides meet the
++        // top and bottom.
++        ShapeKind::Hexagon => {
++            let x = fx(ss * 0.25).min(0.5);
++            let dy = 0.5 * 1.154_70 * sin(60.0);
++            vec![(0.0, 0.5), (x, 0.5 - dy), (1.0 - x, 0.5 - dy), (1.0, 0.5), (1.0 - x, 0.5 + dy), (x, 0.5 + dy)]
++        }
++        // `adj` 29289: the corners cut 29.289% of the shorter side, which makes a square's regular.
++        ShapeKind::Octagon => {
++            let (x, y) = (fx(ss * 0.292_89).min(0.5), fy(ss * 0.292_89).min(0.5));
++            vec![(0.0, y), (x, 0.0), (1.0 - x, 0.0), (1.0, y), (1.0, 1.0 - y), (1.0 - x, 1.0), (x, 1.0), (0.0, 1.0 - y)]
++        }
++        // `hf` 105146, `vf` 110557 stretch a regular pentagon to fill the box.
++        ShapeKind::Pentagon => {
++            let (swd2, shd2) = (0.5 * 1.051_46, 0.5 * 1.105_57);
++            let svc = shd2;
++            let (dx1, dx2) = (swd2 * cos(18.0), swd2 * cos(306.0));
++            let (y1, y2) = (svc - shd2 * sin(18.0), svc - shd2 * sin(306.0));
++            vec![(0.5 - dx1, y1), (0.5, 0.0), (0.5 + dx1, y1), (0.5 + dx2, y2), (0.5 - dx2, y2)]
++        }
++        // `adj` 25000: the top slides a quarter of the shorter side right.
++        ShapeKind::Parallelogram => {
++            let x = fx(ss * 0.25);
++            vec![(0.0, 1.0), (x, 0.0), (1.0, 0.0), (1.0 - x, 1.0)]
++        }
++        // `adj` 25000: the top is a quarter of the shorter side in at each end.
++        ShapeKind::Trapezoid => {
++            let x = fx(ss * 0.25).min(0.5);
++            vec![(0.0, 1.0), (x, 0.0), (1.0 - x, 0.0), (1.0, 1.0)]
++        }
++        // `adj` 25000: the arms are a quarter of the shorter side in from each side.
++        ShapeKind::Plus => {
++            let (x, y) = (fx(ss * 0.25).min(0.5), fy(ss * 0.25).min(0.5));
++            vec![
++                (0.0, y),
++                (x, y),
++                (x, 0.0),
++                (1.0 - x, 0.0),
++                (1.0 - x, y),
++                (1.0, y),
++                (1.0, 1.0 - y),
++                (1.0 - x, 1.0 - y),
++                (1.0 - x, 1.0),
++                (x, 1.0),
++                (x, 1.0 - y),
++                (0.0, 1.0 - y),
++            ]
++        }
++        // `adj` 50000: the point and the notch are half the shorter side deep.
++        ShapeKind::Chevron => {
++            let x = fx(ss * 0.5);
++            vec![(0.0, 0.0), (1.0 - x, 0.0), (1.0, 0.5), (1.0 - x, 1.0), (0.0, 1.0), (x, 0.5)]
++        }
++        // `vf` 105146 stretches a regular decagon to fill the box's height.
++        ShapeKind::Decagon => {
++            let shd2 = 0.5 * 1.051_46;
++            let (dx1, dx2) = (0.5 * cos(36.0), 0.5 * cos(72.0));
++            let (dy1, dy2) = (shd2 * sin(72.0), shd2 * sin(36.0));
++            vec![
++                (0.0, 0.5),
++                (0.5 - dx1, 0.5 - dy2),
++                (0.5 - dx2, 0.5 - dy1),
++                (0.5 + dx2, 0.5 - dy1),
++                (0.5 + dx1, 0.5 - dy2),
++                (1.0, 0.5),
++                (0.5 + dx1, 0.5 + dy2),
++                (0.5 + dx2, 0.5 + dy1),
++                (0.5 - dx2, 0.5 + dy1),
++                (0.5 - dx1, 0.5 + dy2),
++            ]
++        }
++        _ => return None,
++    };
++    // The presets' constants put some corners a hair past the box's edge.
++    Some(pts.into_iter().map(|(x, y)| (x.clamp(0.0, 1.0), y.clamp(0.0, 1.0))).collect())
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    const NEW: [(ShapeKind, usize); 8] = [
++        (ShapeKind::Hexagon, 6),
++        (ShapeKind::Octagon, 8),
++        (ShapeKind::Pentagon, 5),
++        (ShapeKind::Parallelogram, 4),
++        (ShapeKind::Trapezoid, 4),
++        (ShapeKind::Plus, 12),
++        (ShapeKind::Chevron, 6),
++        (ShapeKind::Decagon, 10),
++    ];
++
++    #[test]
++    fn presets_are_closed_outlines_inside_their_box() {
++        for (kind, n) in NEW {
++            for (w, h) in [(100.0, 60.0), (60.0, 100.0), (10.0, 10.0)] {
++                let pts = polygon(kind, w, h).unwrap_or_else(|| panic!("{kind:?} has an outline"));
++                assert_eq!(pts.len(), n, "{kind:?} {w}×{h}");
++                assert!(pts.iter().all(|(x, y)| (0.0..=1.0).contains(x) && (0.0..=1.0).contains(y)), "{kind:?} {w}×{h}: {pts:?}");
++                // It reaches all four sides of its box.
++                let (min_x, max_x) = pts.iter().fold((1.0f32, 0.0f32), |(a, b), (x, _)| (a.min(*x), b.max(*x)));
++                let (min_y, max_y) = pts.iter().fold((1.0f32, 0.0f32), |(a, b), (_, y)| (a.min(*y), b.max(*y)));
++                assert!(min_x < 0.001 && max_x > 0.999 && min_y < 0.001 && max_y > 0.999, "{kind:?} {w}×{h}: {pts:?}");
++            }
++            // Degenerate boxes: still inside the unit square, no panic.
++            for (w, h) in [(0.0, 0.0), (0.0, 50.0), (50.0, 0.0), (f32::NAN, 10.0), (f32::INFINITY, -1.0), (-5.0, 5.0)] {
++                let pts = polygon(kind, w, h).unwrap_or_default();
++                assert!(pts.iter().all(|(x, y)| (0.0..=1.0).contains(x) && (0.0..=1.0).contains(y)), "{kind:?} {w}×{h}: {pts:?}");
++            }
++        }
++        // Other kinds have their own outlines.
++        assert!(polygon(ShapeKind::Rectangle, 10.0, 10.0).is_none());
++        assert!(polygon(ShapeKind::Heart, 10.0, 10.0).is_none());
++    }
++
++    #[test]
++    fn presets_follow_their_default_adjust_values() {
++        // A hexagon 100 × 60: its corners are a quarter of the shorter side (15) in from the ends.
++        let hex = polygon(ShapeKind::Hexagon, 100.0, 60.0).unwrap();
++        assert!((hex[1].0 - 0.15).abs() < 0.001 && hex[1].1.abs() < 0.001, "{hex:?}");
++        // An octagon's cut is 29.289% of the shorter side.
++        let oct = polygon(ShapeKind::Octagon, 100.0, 100.0).unwrap();
++        assert!((oct[1].0 - 0.29289).abs() < 0.001, "{oct:?}");
++        // A plus's arms are a quarter of the shorter side in.
++        let plus = polygon(ShapeKind::Plus, 100.0, 100.0).unwrap();
++        assert!((plus[0].1 - 0.25).abs() < 0.001, "{plus:?}");
++        // A regular pentagon's top point is at the middle, its sides' ends 38.2% down.
++        let pent = polygon(ShapeKind::Pentagon, 100.0, 100.0).unwrap();
++        assert!((pent[1].0 - 0.5).abs() < 0.001 && pent[1].1.abs() < 0.001, "{pent:?}");
++        assert!((pent[0].1 - 0.382).abs() < 0.002, "{pent:?}");
++        // A chevron's point is half the shorter side deep, at the right middle.
++        let chev = polygon(ShapeKind::Chevron, 100.0, 60.0).unwrap();
++        assert!((chev[1].0 - 0.7).abs() < 0.001 && (chev[2].0 - 1.0).abs() < 0.001 && (chev[2].1 - 0.5).abs() < 0.001, "{chev:?}");
++        // A trapezoid is narrow at the top.
++        let trap = polygon(ShapeKind::Trapezoid, 100.0, 60.0).unwrap();
++        assert!((trap[1].0 - 0.15).abs() < 0.001 && trap[1].1.abs() < 0.001, "{trap:?}");
++    }
++}
+diff --git a/crates/doc/src/wrap.rs b/crates/doc/src/wrap.rs
+index 1c235d73..09875e11 100644
+--- a/crates/doc/src/wrap.rs
++++ b/crates/doc/src/wrap.rs
+@@ -89,6 +89,14 @@ pub fn shape_outline(kind: ShapeKind, w: f32, h: f32, corner: Option<u32>) -> Op
+             }
+             pts
+         }
++        ShapeKind::Hexagon
++        | ShapeKind::Octagon
++        | ShapeKind::Pentagon
++        | ShapeKind::Parallelogram
++        | ShapeKind::Trapezoid
++        | ShapeKind::Plus
++        | ShapeKind::Chevron
++        | ShapeKind::Decagon => return crate::preset::polygon(kind, w, h),
+         ShapeKind::Triangle => vec![(0.5, 0.0), (1.0, 1.0), (0.0, 1.0)],
+         ShapeKind::RightTriangle => vec![(0.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+         ShapeKind::Diamond => vec![(0.5, 0.0), (1.0, 0.5), (0.5, 1.0), (0.0, 0.5)],
+@@ -254,6 +262,14 @@ mod tests {
+             ShapeKind::ArrowDown,
+             ShapeKind::Star,
+             ShapeKind::Heart,
++            ShapeKind::Hexagon,
++            ShapeKind::Octagon,
++            ShapeKind::Pentagon,
++            ShapeKind::Parallelogram,
++            ShapeKind::Trapezoid,
++            ShapeKind::Plus,
++            ShapeKind::Chevron,
++            ShapeKind::Decagon,
+         ] {
+             for (w, h) in [(100.0, 50.0), (0.0, 0.0), (f32::NAN, 10.0)] {
+                 for corner in [None, Some(0), Some(3_565), Some(u32::MAX)] {
+diff --git a/crates/docbin/src/drawing.rs b/crates/docbin/src/drawing.rs
+index 33f45de3..5ed87a37 100644
+--- a/crates/docbin/src/drawing.rs
++++ b/crates/docbin/src/drawing.rs
+@@ -195,6 +195,12 @@ fn leaf(sp: &Sp, w: f32, h: f32, float: Float, b: &Build, pics: &mut Pictures) -
+         4 => ShapeKind::Diamond,
+         5 => ShapeKind::Triangle,
+         6 => ShapeKind::RightTriangle,
++        7 => ShapeKind::Parallelogram,
++        9 => ShapeKind::Hexagon,
++        10 => ShapeKind::Octagon,
++        11 => ShapeKind::Plus,
++        55 => ShapeKind::Chevron,
++        56 => ShapeKind::Pentagon,
+         12 | 187 => ShapeKind::Star,
+         13 | 69 => ShapeKind::Arrow,
+         66 => ShapeKind::ArrowLeft,
+diff --git a/crates/docx/src/read/diagram.rs b/crates/docx/src/read/diagram.rs
+index 47ca458e..e339115b 100644
+--- a/crates/docx/src/read/diagram.rs
++++ b/crates/docx/src/read/diagram.rs
+@@ -240,6 +240,9 @@ fn kind_of(prst: &str) -> Option<ShapeKind> {
+         "rightArrow" => ShapeKind::Arrow,
+         "star5" | "star4" | "star6" => ShapeKind::Star,
+         "heart" => ShapeKind::Heart,
++        "octagon" => ShapeKind::Octagon,
++        "plus" => ShapeKind::Plus,
++        "decagon" => ShapeKind::Decagon,
+         "leftArrow" | "upArrow" | "downArrow" | "leftRightArrow" | "upDownArrow" | "chevron" | "homePlate" | "hexagon" | "pentagon" | "trapezoid"
+         | "parallelogram" | "rtTriangle" | "pie" | "blockArc" => return None,
+         _ => ShapeKind::Rectangle,
+diff --git a/crates/docx/src/read/shape_style.rs b/crates/docx/src/read/shape_style.rs
+index e8ccee91..d5c38fd3 100644
+--- a/crates/docx/src/read/shape_style.rs
++++ b/crates/docx/src/read/shape_style.rs
+@@ -47,6 +47,14 @@ pub(crate) fn preset_kind(prst: &str) -> ShapeKind {
+         "downArrow" => ShapeKind::ArrowDown,
+         "star4" | "star5" | "star6" | "star7" | "star8" | "star10" | "star12" | "star16" | "star24" | "star32" => ShapeKind::Star,
+         "heart" => ShapeKind::Heart,
++        "hexagon" => ShapeKind::Hexagon,
++        "octagon" => ShapeKind::Octagon,
++        "pentagon" => ShapeKind::Pentagon,
++        "parallelogram" => ShapeKind::Parallelogram,
++        "trapezoid" => ShapeKind::Trapezoid,
++        "plus" => ShapeKind::Plus,
++        "chevron" => ShapeKind::Chevron,
++        "decagon" => ShapeKind::Decagon,
+         _ => ShapeKind::Rectangle,
+     }
+ }
+@@ -68,11 +76,18 @@ pub(crate) fn vml_preset_kind(spt: u32) -> Option<ShapeKind> {
+         4 => "diamond",
+         5 => "triangle",
+         6 => "rtTriangle",
++        7 => "parallelogram",
++        // Not 8: the legacy trapezoid is drawn the other way up from DrawingML's.
++        9 => "hexagon",
++        10 => "octagon",
++        11 => "plus",
+         12 => "star5",
+         13 => "rightArrow",
+         21 => "plaque",
+         23 => "donut",
+         33 => "bentConnector2",
++        55 => "chevron",
++        56 => "pentagon",
+         34 => "bentConnector3",
+         35 => "bentConnector4",
+         36 => "bentConnector5",
+@@ -493,6 +508,8 @@ mod tests {
+         assert_eq!(vml_preset_kind(62), Some(ShapeKind::RoundedRectangle));
+         assert_eq!(vml_preset_kind(34), Some(ShapeKind::ElbowConnector));
+         assert_eq!(vml_preset_kind(84), Some(ShapeKind::Rectangle));
++        assert_eq!(vml_preset_kind(9), Some(ShapeKind::Hexagon));
++        assert_eq!(vml_preset_kind(55), Some(ShapeKind::Chevron));
+         // No preset geometry: freeform, WordArt text, picture frame, host control, out of range.
+         for spt in [0, 24, 31, 136, 175, 75, 201, 203, u32::MAX] {
+             assert_eq!(vml_preset_kind(spt), None, "{spt}");
+diff --git a/crates/docx/src/read/story/drawing.rs b/crates/docx/src/read/story/drawing.rs
+index 9edf2743..ff5095e8 100644
+--- a/crates/docx/src/read/story/drawing.rs
++++ b/crates/docx/src/read/story/drawing.rs
+@@ -74,15 +74,13 @@ impl Reader<'_> {
+             return Some(InlineObject::Graphic { w, h, alt, float, graphic });
+         }
+         // A textbox may contain a picture; its descendant blip is not the outer payload.
+-        let direct_shape = gd.child("wps:wsp").filter(|shape| {
+-            // Picture fills still use the image fallback; the shape model has no image fill.
+-            shape.child("wps:spPr").and_then(|props| props.child("a:blipFill")).is_none()
+-        });
++        let direct_shape = gd.child("wps:wsp");
+         let mut obj = if let Some(c) = gd.child("wpc:wpc") {
+             self.read_canvas(sc, c, rels, w, h, float)
+         } else if let Some(g) = gd.child("wpg:wgp") {
+             self.read_group(sc, g, rels, w, h, float)?
+         } else if direct_shape.is_none() && gd.find("a:blip").is_some() {
++            // A picture (a shape's picture fill has an `a:blip` too).
+             self.read_pic(gd, rels, w, h, alt.clone(), float)?
+         } else {
+             let wsp = direct_shape.or_else(|| gd.find("wps:wsp"))?;
+@@ -567,6 +565,15 @@ impl Reader<'_> {
+             self.glued.extend(extra.start.iter().chain(extra.end.iter()).map(|e| e.id));
+         }
+         extra.warp = wsp.child("wps:bodyPr").and_then(|b| b.child("a:prstTxWarp")).and_then(text_warp);
++        // A picture fill (ECMA-376 §20.1.8.14), stretched over the box; a tiled one (`a:tile`)
++        // is stretched too. A picture that isn't in the package is no fill.
++        if !kind.is_open() {
++            extra.picture = sppr
++                .and_then(|s| s.child("a:blipFill"))
++                .and_then(|f| f.child("a:blip"))
++                .and_then(|b| b.attr("r:embed"))
++                .and_then(|id| self.media_for(rels, id));
++        }
+         // A freeform: its custom geometry (#743: in a group too).
+         let freeform = sppr.and_then(|s| crate::read::freeform::cust_geom(s, w, h)).map(|mut f| {
+             f.alpha = crate::read::freeform::line_alpha(ln);
+diff --git a/crates/docx/src/write/story/drawing.rs b/crates/docx/src/write/story/drawing.rs
+index 4d158ba3..1bcb8207 100644
+--- a/crates/docx/src/write/story/drawing.rs
++++ b/crates/docx/src/write/story/drawing.rs
+@@ -117,6 +117,14 @@ impl Writer<'_> {
+             ShapeKind::ArrowDown => "downArrow",
+             ShapeKind::Star => "star5",
+             ShapeKind::Heart => "heart",
++            ShapeKind::Hexagon => "hexagon",
++            ShapeKind::Octagon => "octagon",
++            ShapeKind::Pentagon => "pentagon",
++            ShapeKind::Parallelogram => "parallelogram",
++            ShapeKind::Trapezoid => "trapezoid",
++            ShapeKind::Plus => "plus",
++            ShapeKind::Chevron => "chevron",
++            ShapeKind::Decagon => "decagon",
+         };
+         match geom {
+             Some(f) => cust_geom(w, f, *sw, *sh),
+@@ -136,7 +144,21 @@ impl Writer<'_> {
+         }
+         let alpha = geom.map_or(1.0, |f| f.alpha);
+         let ink = geom.is_some_and(|f| f.is_ink());
+-        write_fill(w, fill.as_ref().filter(|_| !ink && !kind.is_open()));
++        // A picture fill (ECMA-376 §20.1.8.14), stretched over the shape, in place of a colour.
++        let picture =
++            extra.picture.as_ref().filter(|_| !ink && !kind.is_open()).and_then(|m| self.media_files.get(m).cloned().map(|file| (m.clone(), file)));
++        if let Some((media, file)) = picture {
++            let rid = rels.add(rt::IMAGE, &format!("media/{file}"), false);
++            self.used_media.insert(media);
++            w.open("a:blipFill", &[("rotWithShape", "1")]);
++            w.empty("a:blip", &[("r:embed", &rid)]);
++            w.open("a:stretch", &[]);
++            w.empty("a:fillRect", &[]);
++            w.close("a:stretch");
++            w.close("a:blipFill");
++        } else {
++            write_fill(w, fill.as_ref().filter(|_| !ink && !kind.is_open()));
++        }
+         match stroke {
+             Some(c) => {
+                 let width = emu(stroke_width.clamp(0.0, 100.0));
+diff --git a/crates/docx/tests/it/drawing_payload.rs b/crates/docx/tests/it/drawing_payload.rs
+index 06c245d0..83e9a428 100644
+--- a/crates/docx/tests/it/drawing_payload.rs
++++ b/crates/docx/tests/it/drawing_payload.rs
+@@ -142,7 +142,7 @@ fn picture_group_canvas_keep_kind() {
+ 
+ #[test]
+ fn own_picture_fill_keeps_image() {
+-    // Keep the existing WPS picture-fill fallback, distinct from a nested picture.
++    // A shape's own picture fill (#1534) stays a shape with that picture as its fill, distinct from a nested picture.
+     let start = INLINE_XML.find("<wps:spPr>").unwrap();
+     let end = INLINE_XML.find("</wps:wsp>").unwrap();
+     let payload = r#"<wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2286000" cy="1016000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:blipFill><a:blip r:embed="rIdIsolationRect"/><a:stretch><a:fillRect/></a:stretch></a:blipFill></wps:spPr><wps:bodyPr/>"#;
+@@ -151,10 +151,11 @@ fn own_picture_fill_keeps_image() {
+     assert!(doc.parts.is_empty());
+     let objects = &doc.body[0].as_para().unwrap().objects;
+     assert_eq!(objects.len(), 1);
+-    let InlineObject::Image { w, h, media, float, .. } = &objects[0] else {
++    let InlineObject::Shape { w, h, float, extra, .. } = &objects[0] else {
+         panic!("own picture fill lost: {:?}", objects[0]);
+     };
+     assert_eq!((*w, *h), (180.0, 80.0));
+     assert_eq!((float.wrap, float.x, float.y), (Wrap::InFrontOfText, 72.0, 100.0));
++    let media = extra.picture.as_ref().expect("the picture fill");
+     assert_eq!(doc.media[media].as_slice(), BLUE_PNG);
+ }
+diff --git a/crates/docx/tests/preset_shapes.rs b/crates/docx/tests/preset_shapes.rs
+new file mode 100644
+index 00000000..f4236feb
+--- /dev/null
++++ b/crates/docx/tests/preset_shapes.rs
+@@ -0,0 +1,189 @@
++//! More preset shapes and picture fills (#1534): the hexagon, octagon, pentagon, parallelogram,
++//! trapezoid, plus, chevron and decagon presets (ECMA-376 Part 1 §20.1.10.56 `ST_ShapeType`), and
++//! a shape filled with a picture (`a:blipFill` in `wps:spPr`, §20.1.8.14). Fixtures are
++//! hand-written.
++
++use std::io::{Read, Write};
++
++use wordcraft_doc::para::{Float, ShapeKind};
++use wordcraft_doc::props::{CharProps, Rgb};
++use wordcraft_doc::{Document, InlineObject, Paragraph, para_block};
++
++const NEW: [(ShapeKind, &str); 8] = [
++    (ShapeKind::Hexagon, "hexagon"),
++    (ShapeKind::Octagon, "octagon"),
++    (ShapeKind::Pentagon, "pentagon"),
++    (ShapeKind::Parallelogram, "parallelogram"),
++    (ShapeKind::Trapezoid, "trapezoid"),
++    (ShapeKind::Plus, "plus"),
++    (ShapeKind::Chevron, "chevron"),
++    (ShapeKind::Decagon, "decagon"),
++];
++
++fn zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
++    let mut zw = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
++    for (name, bytes) in entries {
++        zw.start_file(*name, zip::write::SimpleFileOptions::default()).unwrap();
++        zw.write_all(bytes).unwrap();
++    }
++    zw.finish().unwrap().into_inner()
++}
++
++fn png() -> Vec<u8> {
++    let img = image::RgbaImage::from_fn(8, 8, |x, _| if x < 4 { image::Rgba([200, 30, 30, 255]) } else { image::Rgba([30, 30, 200, 255]) });
++    let mut b = Vec::new();
++    image::DynamicImage::ImageRgba8(img).write_to(&mut std::io::Cursor::new(&mut b), image::ImageFormat::Png).unwrap();
++    b
++}
++
++/// A shape's plain colour (these shapes have no gradients).
++fn solid(f: &Option<wordcraft_doc::fill::Fill>) -> Option<Rgb> {
++    match f {
++        Some(wordcraft_doc::fill::Fill::Solid { color, .. }) => Some(*color),
++        _ => None,
++    }
++}
++
++fn shape(kind: ShapeKind, fill: Option<Rgb>, picture: Option<String>) -> InlineObject {
++    InlineObject::Shape {
++        kind,
++        w: 100.0,
++        h: 60.0,
++        fill: fill.map(wordcraft_doc::fill::Fill::solid),
++        stroke: Some(Rgb(0x0E, 0x40, 0x5A)),
++        stroke_width: 1.0,
++        float: Float::default(),
++        story: None,
++        freeform: None,
++        effects: Default::default(),
++        extra: wordcraft_doc::connector::ShapeExtra { picture, ..Default::default() },
++    }
++}
++
++fn doc_of(objs: Vec<InlineObject>) -> Document {
++    let mut p = Paragraph::with_text("x", CharProps::default());
++    for o in objs {
++        let n = p.len();
++        p.insert_object(n, o, &CharProps::default()).unwrap();
++    }
++    let mut d = Document::new();
++    d.body = vec![para_block(p)];
++    d
++}
++
++fn objects(d: &Document) -> Vec<InlineObject> {
++    d.body.iter().filter_map(|b| b.as_para()).flat_map(|p| p.objects.iter().cloned()).collect()
++}
++
++fn part(bytes: &[u8], name: &str) -> String {
++    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
++    let mut xml = String::new();
++    zip.by_name(name).unwrap().read_to_string(&mut xml).unwrap();
++    xml
++}
++
++#[test]
++fn new_presets_round_trip() {
++    let d = doc_of(NEW.iter().map(|(k, _)| shape(*k, Some(Rgb(0x15, 0x60, 0x82)), None)).collect());
++    let bytes = wordcraft_docx::write(&d).unwrap();
++    let xml = part(&bytes, "word/document.xml");
++    for (_, prst) in NEW {
++        assert!(xml.contains(&format!(r#"<a:prstGeom prst="{prst}">"#)), "{prst}");
++    }
++    let r = wordcraft_docx::read(&bytes).unwrap();
++    let kinds: Vec<ShapeKind> =
++        objects(&r).iter().filter_map(|o| if let InlineObject::Shape { kind, .. } = o { Some(*kind) } else { None }).collect();
++    assert_eq!(kinds, NEW.map(|(k, _)| k).to_vec());
++}
++
++/// A hand-written package: a hexagon whose `wps:spPr` has a stretched `a:blipFill`.
++#[test]
++fn picture_fill_reads_from_blip_fill() {
++    let rels = r#"<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>"#;
++    let doc_rels = r#"<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId7" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/fill.png"/></Relationships>"#;
++    let wsp = |fill: &str| {
++        format!(
++            r#"<w:r><w:drawing><wp:inline><wp:extent cx="1270000" cy="762000"/><wp:docPr id="1" name="Hexagon 1"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:cNvSpPr/><wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1270000" cy="762000"/></a:xfrm><a:prstGeom prst="hexagon"><a:avLst/></a:prstGeom>{fill}</wps:spPr><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>"#
++        )
++    };
++    let stretched = wsp(r#"<a:blipFill><a:blip r:embed="rId7"/><a:stretch><a:fillRect/></a:stretch></a:blipFill>"#);
++    // Tiled pictures load stretched; a fill whose picture is missing is no picture.
++    let tiled = wsp(r#"<a:blipFill rotWithShape="1"><a:blip r:embed="rId7"/><a:tile tx="0" ty="0" sx="100000" sy="100000"/></a:blipFill>"#);
++    let missing = wsp(r#"<a:blipFill><a:blip r:embed="rId99"/><a:stretch><a:fillRect/></a:stretch></a:blipFill>"#);
++    let body = format!("<w:p>{stretched}{tiled}{missing}</w:p>");
++    let doc = format!(
++        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><w:body>{body}</w:body></w:document>"#
++    );
++    let png = png();
++    let bytes = zip(&[
++        ("_rels/.rels", rels.as_bytes()),
++        ("word/document.xml", doc.as_bytes()),
++        ("word/_rels/document.xml.rels", doc_rels.as_bytes()),
++        ("word/media/fill.png", &png),
++    ]);
++    let d = wordcraft_docx::read(&bytes).unwrap();
++    let fills: Vec<(ShapeKind, Option<Rgb>, Option<Vec<u8>>)> = objects(&d)
++        .iter()
++        .filter_map(|o| match o {
++            InlineObject::Shape { kind, fill, extra, .. } => {
++                Some((*kind, solid(fill), extra.picture.as_ref().and_then(|k| d.media.get(k)).map(|b| b.to_vec())))
++            }
++            _ => None,
++        })
++        .collect();
++    assert_eq!(
++        fills,
++        vec![(ShapeKind::Hexagon, None, Some(png.clone())), (ShapeKind::Hexagon, None, Some(png.clone())), (ShapeKind::Hexagon, None, None)]
++    );
++}
++
++#[test]
++fn picture_fill_round_trips() {
++    let png = png();
++    let mut d = doc_of(vec![]);
++    let key = d.add_media(png.clone(), "png");
++    let mut p = Paragraph::with_text("x", CharProps::default());
++    p.insert_object(1, shape(ShapeKind::Hexagon, None, Some(key)), &CharProps::default()).unwrap();
++    d.body = vec![para_block(p)];
++    let bytes = wordcraft_docx::write(&d).unwrap();
++    let xml = part(&bytes, "word/document.xml");
++    assert!(xml.contains("<a:blipFill"), "{xml}");
++    assert!(xml.contains("<a:stretch><a:fillRect/></a:stretch>"), "{xml}");
++    let r = wordcraft_docx::read(&bytes).unwrap();
++    let got = objects(&r).into_iter().find_map(|o| match o {
++        InlineObject::Shape { kind, fill, extra, .. } => Some((kind, solid(&fill), extra.picture.and_then(|k| r.media.get(&k).map(|b| b.to_vec())))),
++        _ => None,
++    });
++    assert_eq!(got, Some((ShapeKind::Hexagon, None, Some(png))));
++}
++
++/// #1534 review: a freeform (`a:custGeom`) filled with a picture reads as a freeform with its
++/// picture fill, and saving keeps both.
++#[test]
++fn freeform_picture_fill_reads_and_round_trips() {
++    let rels = r#"<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>"#;
++    let doc_rels = r#"<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId7" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/fill.png"/></Relationships>"#;
++    let body = r#"<w:p><w:r><w:drawing><wp:inline><wp:extent cx="1270000" cy="762000"/><wp:docPr id="1" name="Freeform 1"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:cNvSpPr/><wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1270000" cy="762000"/></a:xfrm><a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst><a:path w="100" h="60"><a:moveTo><a:pt x="0" y="0"/></a:moveTo><a:lnTo><a:pt x="100" y="0"/></a:lnTo><a:lnTo><a:pt x="0" y="60"/></a:lnTo><a:close/></a:path></a:pathLst></a:custGeom><a:blipFill><a:blip r:embed="rId7"/><a:stretch><a:fillRect/></a:stretch></a:blipFill></wps:spPr><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"#;
++    let doc = format!(
++        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><w:body>{body}</w:body></w:document>"#
++    );
++    let png = png();
++    let bytes = zip(&[
++        ("_rels/.rels", rels.as_bytes()),
++        ("word/document.xml", doc.as_bytes()),
++        ("word/_rels/document.xml.rels", doc_rels.as_bytes()),
++        ("word/media/fill.png", &png),
++    ]);
++    let check = |d: &Document| {
++        let got = objects(d).into_iter().find_map(|o| match o {
++            InlineObject::Shape { kind, freeform, extra, .. } => {
++                Some((kind, freeform.map(|f| f.paths.len()), extra.picture.and_then(|k| d.media.get(&k).map(|b| b.to_vec()))))
++            }
++            _ => None,
++        });
++        assert_eq!(got, Some((ShapeKind::Freeform, Some(1), Some(png.clone()))));
++    };
++    let d = wordcraft_docx::read(&bytes).unwrap();
++    check(&d);
++    check(&wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap());
++}
+diff --git a/crates/engine/src/cmd/insert.rs b/crates/engine/src/cmd/insert.rs
+index c80082c8..b5fb6fcb 100644
+--- a/crates/engine/src/cmd/insert.rs
++++ b/crates/engine/src/cmd/insert.rs
+@@ -46,7 +46,7 @@ pub fn specs() -> Vec<CommandSpec> {
+         CommandSpec::new("insert.icon", "Icons", "Insert › Illustrations", icon)
+             .params(r#"{"id"?: string (omit to list the library), "color"?: "RRGGBB", "size"?: pt, "query"?: string, "category"?: string}"#),
+         CommandSpec::new("insert.shape", "Shapes", "Insert › Illustrations", shape)
+-            .params(r#"{"kind": "rectangle|roundedRectangle|ellipse|triangle|diamond|line|arrow|star|heart|straightConnector|elbowConnector|curvedConnector", "width"?: pt, "height"?: pt, "fill"?: "RRGGBB", "stroke"?: "RRGGBB", "arrow"?: "none"|"start"|"end"|"both" (lines and connectors; glue a connector's ends with shape.connect)}"#),
++            .params(r#"{"kind": "rectangle|roundedRectangle|ellipse|triangle|rightTriangle|diamond|line|arrow|star|heart|hexagon|octagon|pentagon|decagon|parallelogram|trapezoid|plus|chevron|straightConnector|elbowConnector|curvedConnector", "width"?: pt, "height"?: pt, "fill"?: "RRGGBB", "stroke"?: "RRGGBB", "arrow"?: "none"|"start"|"end"|"both" (lines and connectors; glue a connector's ends with shape.connect)}"#),
+         CommandSpec::new("insert.textBox", "Text Box", "Insert › Text", text_box)
+             .params(r#"{"text"?: string, "width"?: pt, "height"?: pt}"#)
+             .when(|s| {
+diff --git a/crates/engine/src/cmd/objects.rs b/crates/engine/src/cmd/objects.rs
+index 37726016..b26c8e11 100644
+--- a/crates/engine/src/cmd/objects.rs
++++ b/crates/engine/src/cmd/objects.rs
+@@ -35,6 +35,7 @@ use select::{has_group, holds_ink, obj_size, with_obj};
+ pub use select::{min_size, object_selection, picked_objects, selected, selected_all};
+ #[cfg(test)]
+ use shape::can_link;
++pub(crate) use shape::picture_fill;
+ pub(crate) use shape::set_text_body;
+ pub use shape::text_box_target;
+ pub use specs::specs;
+diff --git a/crates/engine/src/cmd/objects/shape.rs b/crates/engine/src/cmd/objects/shape.rs
+index afb19687..517d920e 100644
+--- a/crates/engine/src/cmd/objects/shape.rs
++++ b/crates/engine/src/cmd/objects/shape.rs
+@@ -1,4 +1,4 @@
+-use super::select::{all_objects, edit_obj, picked_objects, selected, selected_all};
++use super::select::{all_objects, edit_obj, picked_objects, selected, selected_all, with_obj};
+ use super::{CmdError, CmdResult, InlineObject, Pos, Rgb, Session, StoryRef, TextBody, Value, json, p};
+ 
+ pub(super) const NO_TEXT_BOX: &str = "select a text box first";
+@@ -169,3 +169,60 @@ pub(super) fn shape_effects(s: &mut Session, v: &Value) -> CmdResult {
+     }
+     Ok(json!({"shapes": targets.len(), "effects": serde_json::to_value(last).unwrap_or(Value::Null)}))
+ }
++
++/// Largest picture a shape fill takes (as Insert › Pictures).
++const MAX_FILL_PICTURE: usize = 200 << 20;
++
++/// Shape Fill › Picture: fill the selected shape with the picture at `path` or in base64 `data`,
++/// in place of its colour. Without either, the app is asked to pick one.
++pub(crate) fn picture_fill(s: &mut Session, v: &Value) -> CmdResult {
++    if !v.is_object() {
++        return Err(CmdError::Params("`picture`: {\"path\": string} or {\"data\": base64}".into()));
++    }
++    if !matches!(selected(s), Some((_, InlineObject::Shape { .. }))) {
++        return Err(CmdError::Disabled("select a shape first".into()));
++    }
++    let bytes = match (v.get("data"), v.get("path")) {
++        (Some(d), _) => {
++            let d = d.as_str().ok_or_else(|| CmdError::Params("`data`: base64 text".into()))?;
++            crate::cmd::insert::base64_decode(d).ok_or_else(|| CmdError::Params("bad base64 data".into()))?
++        }
++        (None, Some(path)) => {
++            let path = path.as_str().ok_or_else(|| CmdError::Params("`path`: text".into()))?;
++            read_fill_picture(path)?
++        }
++        (None, None) => {
++            s.ui_requests.push(json!({"open": "shapeFillPicture"}));
++            return crate::cmd::sel_result(s);
++        }
++    };
++    if bytes.len() > MAX_FILL_PICTURE {
++        return Err(CmdError::Failed("image is larger than 200 MB".into()));
++    }
++    // Only pictures the renderers can draw (bitmaps and metafiles) are kept.
++    let ext = if wordcraft_render::image_size(&bytes).is_some() {
++        crate::cmd::insert::image_ext(&bytes)
++    } else if let Some((_, _, ext)) = wordcraft_render::metafile_size(&bytes) {
++        ext
++    } else {
++        return Err(CmdError::Failed("not a supported image (PNG, JPEG, GIF, WebP, BMP, WMF, EMF)".into()));
++    };
++    let key = s.doc.add_media(bytes, ext);
++    with_obj(s, |o| {
++        if let InlineObject::Shape { fill, extra, .. } = o {
++            *fill = None;
++            extra.picture = Some(key.clone());
++        }
++    })
++}
++
++/// The picture file at `path`, refused by its size before it is read.
++#[cfg(not(target_arch = "wasm32"))]
++fn read_fill_picture(path: &str) -> Result<Vec<u8>, CmdError> {
++    crate::io::read_file_capped(path, MAX_FILL_PICTURE as u64, "picture").map_err(CmdError::Failed)
++}
++
++#[cfg(target_arch = "wasm32")]
++fn read_fill_picture(path: &str) -> Result<Vec<u8>, CmdError> {
++    crate::io::read_file(path).map_err(CmdError::Failed)
++}
+diff --git a/crates/engine/src/cmd/objects/tests.rs b/crates/engine/src/cmd/objects/tests.rs
+index 13836d60..1c7bb0e1 100644
+--- a/crates/engine/src/cmd/objects/tests.rs
++++ b/crates/engine/src/cmd/objects/tests.rs
+@@ -1537,3 +1537,82 @@ fn only_ink_members_pin_a_group() {
+     }
+     assert!(!holds_ink(&group), "a group of charts is not pinned");
+ }
++
++/// #1534: Insert › Shapes has the hexagon, octagon, pentagon, parallelogram, trapezoid,
++/// plus, chevron and decagon; an unknown kind is an error.
++#[test]
++fn new_preset_shapes_insert() {
++    use wordcraft_doc::para::ShapeKind;
++    for (name, kind) in [
++        ("hexagon", ShapeKind::Hexagon),
++        ("octagon", ShapeKind::Octagon),
++        ("pentagon", ShapeKind::Pentagon),
++        ("parallelogram", ShapeKind::Parallelogram),
++        ("trapezoid", ShapeKind::Trapezoid),
++        ("plus", ShapeKind::Plus),
++        ("chevron", ShapeKind::Chevron),
++        ("decagon", ShapeKind::Decagon),
++    ] {
++        let mut s = Session::new(wordcraft_doc::Document::new());
++        s.run("insert.shape", &json!({"kind": name})).unwrap();
++        let Some((_, InlineObject::Shape { kind: k, fill, .. })) = selected(&s) else { panic!("{name}: no shape") };
++        assert_eq!(k, kind, "{name}");
++        assert!(fill.is_some(), "{name} is filled");
++        // It lays out and draws.
++        assert!(object_area(&mut s).rect.w > 0.0, "{name}");
++    }
++    let mut s = Session::new(wordcraft_doc::Document::new());
++    assert!(s.run("insert.shape", &json!({"kind": "dodecahedron"})).is_err());
++    assert!(s.run("insert.shape", &json!({"kind": 7})).is_err());
++}
++
++/// #1534: Shape Fill › Picture fills the selected shape with a picture, one undo step; a
++/// colour or No Color takes it off; junk is an error that leaves the shape (and the
++/// document's pictures) as they were.
++#[test]
++fn shape_fill_takes_a_picture() {
++    let picture = |s: &Session| match selected(s) {
++        Some((_, InlineObject::Shape { fill, extra, .. })) => (fill, extra.picture),
++        _ => panic!("no shape selected"),
++    };
++    let mut s = Session::new(wordcraft_doc::Document::new());
++    s.run("insert.shape", &json!({"kind": "hexagon"})).unwrap();
++    let data = super::super::insert::base64_encode(&png(20, 10));
++    s.run("shape.fill", &json!({"picture": {"data": data}})).unwrap();
++    let (fill, pic) = picture(&s);
++    let key = pic.expect("a picture fill");
++    assert!(fill.is_none(), "the picture replaces the colour");
++    assert!(s.doc.media.contains_key(&key), "the picture is kept with the document");
++    s.run("edit.undo", &json!({})).unwrap();
++    assert_eq!(picture(&s), (Some(wordcraft_doc::fill::Fill::solid(Rgb(0x15, 0x60, 0x82))), None), "undo restores the colour");
++    s.run("edit.redo", &json!({})).unwrap();
++    assert!(picture(&s).1.is_some());
++    s.run("shape.fill", &json!({"color": "FF0000"})).unwrap();
++    assert_eq!(picture(&s), (Some(wordcraft_doc::fill::Fill::solid(Rgb(0xFF, 0, 0))), None), "a colour takes the picture off");
++    s.run("shape.fill", &json!({"picture": {"data": data}})).unwrap();
++    s.run("shape.fill", &json!({"color": null})).unwrap();
++    assert_eq!(picture(&s), (None, None), "No Color takes the picture off");
++    // Junk: bad base64, bytes that aren't a picture, a missing file, a wrong type.
++    let media = s.doc.media.len();
++    for bad in [
++        json!({"picture": {"data": "!!!"}}),
++        json!({"picture": {"data": super::super::insert::base64_encode(b"not a picture at all")}}),
++        json!({"picture": {"path": "/no/such/picture.png"}}),
++        json!({"picture": 42}),
++        json!({"picture": {"data": 42}}),
++    ] {
++        assert!(s.run("shape.fill", &bad).is_err(), "{bad}");
++        assert_eq!(picture(&s), (None, None), "{bad}");
++        assert_eq!(s.doc.media.len(), media, "{bad}: no picture held");
++    }
++    // Without a picture, the app is asked to pick one; nothing changes yet.
++    s.ui_requests.clear();
++    s.run("shape.fill", &json!({"picture": {}})).unwrap();
++    assert_eq!(picture(&s), (None, None));
++    assert!(s.ui_requests.iter().any(|r| r["open"] == "shapeFillPicture"), "{:?}", s.ui_requests);
++    // A picture can't fill a picture.
++    let mut s = Session::new(wordcraft_doc::Document::new());
++    s.run("insert.picture", &json!({"data": data})).unwrap();
++    s.run("select.objects", &json!({"index": 0})).unwrap();
++    assert!(s.run("shape.fill", &json!({"picture": {"data": data}})).is_err());
++}
+diff --git a/crates/engine/src/cmd/shape_fill.rs b/crates/engine/src/cmd/shape_fill.rs
+index ea415ceb..8f9ffed3 100644
+--- a/crates/engine/src/cmd/shape_fill.rs
++++ b/crates/engine/src/cmd/shape_fill.rs
+@@ -21,7 +21,7 @@ pub fn specs() -> Vec<CommandSpec> {
+     vec![
+         CommandSpec::new("shape.fill", "Shape Fill", "Shape Format › Shape Styles", shape_fill)
+             .params(
+-                r#"{"color": "RRGGBB" | null, "transparency"?: %} | {"gradient": {"stops": [{"pos": %, "color": "RRGGBB", "transparency"?: %}], "type"?: "linear|radial|rectangular|path", "angle"?: deg, "focus"?: [l, t, r, b], "tile"?: [l, t, r, b], "scaled"?: bool, "rotateWithShape"?: bool}}  (tile: percent insets of the gradient's area; scaled: a linear angle scaled with the shape; a colour alone keeps the shape's transparency; angle: linear only, 0 = left to right, 90 = top to bottom; focus: percent insets of where a radial, rectangular or path gradient starts; applies to every selected shape, text box and canvas background)"#,
++                r#"{"color": "RRGGBB" | null, "transparency"?: %} | {"picture": {"path"?: string, "data"?: base64}} (a picture is stretched over the shape and clipped to its outline; without a path or data the app asks for a file; one shape only) | {"gradient": {"stops": [{"pos": %, "color": "RRGGBB", "transparency"?: %}], "type"?: "linear|radial|rectangular|path", "angle"?: deg, "focus"?: [l, t, r, b], "tile"?: [l, t, r, b], "scaled"?: bool, "rotateWithShape"?: bool}}  (tile: percent insets of the gradient's area; scaled: a linear angle scaled with the shape; a colour alone keeps the shape's transparency; angle: linear only, 0 = left to right, 90 = top to bottom; focus: percent insets of where a radial, rectangular or path gradient starts; applies to every selected shape, text box and canvas background)"#,
+             )
+             .when(super::objects::has_shape_or_canvas),
+     ]
+@@ -36,6 +36,9 @@ enum Change {
+ }
+ 
+ fn shape_fill(s: &mut Session, v: &Value) -> CmdResult {
++    if let Some(pic) = v.get("picture") {
++        return super::objects::picture_fill(s, pic);
++    }
+     let change = parse(v)?;
+     let targets = targets(s);
+     if targets.is_empty() {
+@@ -45,7 +48,11 @@ fn shape_fill(s: &mut Session, v: &Value) -> CmdResult {
+     for pos in &targets {
+         let o = edit_obj(s, pos, |o| {
+             let slot = match o {
+-                InlineObject::Shape { fill, .. } => fill,
++                InlineObject::Shape { fill, extra, .. } => {
++                    // A colour or gradient takes a picture fill off.
++                    extra.picture = None;
++                    fill
++                }
+                 o => match super::canvas::style_mut(o) {
+                     Some(style) => &mut style.fill,
+                     None => return,
+diff --git a/crates/formats/src/odt/shapes.rs b/crates/formats/src/odt/shapes.rs
+index 21c937f5..04ba5954 100644
+--- a/crates/formats/src/odt/shapes.rs
++++ b/crates/formats/src/odt/shapes.rs
+@@ -124,6 +124,15 @@ pub(super) fn element_of(kind: ShapeKind) -> (&'static str, Option<&'static str>
+         ShapeKind::ArrowDown => custom("down-arrow"),
+         ShapeKind::Star => custom("star5"),
+         ShapeKind::Heart => custom("heart"),
++        ShapeKind::Hexagon => custom("hexagon"),
++        ShapeKind::Octagon => custom("octagon"),
++        ShapeKind::Pentagon => custom("regular-pentagon"),
++        ShapeKind::Parallelogram => custom("parallelogram"),
++        ShapeKind::Trapezoid => custom("trapezoid"),
++        ShapeKind::Plus => custom("cross"),
++        ShapeKind::Chevron => custom("chevron"),
++        // ODF has no decagon of its own: the DrawingML name, which the reader accepts back.
++        ShapeKind::Decagon => custom("ooxml-decagon"),
+         ShapeKind::Freeform => ("draw:path", None),
+         ShapeKind::Rectangle | ShapeKind::TextBox => ("draw:rect", None),
+     }
+@@ -169,3 +178,26 @@ pub(super) fn freeform(name: &str, a: &Attrs, w: f32, h: f32) -> Option<wordcraf
+         _ => None,
+     }
+ }
++
++#[cfg(test)]
++mod preset_tests {
++    use super::*;
++
++    /// #1534: each polygonal preset is written as a custom shape of its ODF type, so other
++    /// programs draw their own. Reading stays with the shape's own geometry (`geometry.rs`).
++    #[test]
++    fn polygonal_presets_are_written_as_custom_shapes() {
++        for (kind, ty) in [
++            (ShapeKind::Hexagon, "hexagon"),
++            (ShapeKind::Octagon, "octagon"),
++            (ShapeKind::Pentagon, "regular-pentagon"),
++            (ShapeKind::Parallelogram, "parallelogram"),
++            (ShapeKind::Trapezoid, "trapezoid"),
++            (ShapeKind::Plus, "cross"),
++            (ShapeKind::Chevron, "chevron"),
++            (ShapeKind::Decagon, "ooxml-decagon"),
++        ] {
++            assert_eq!(element_of(kind), ("draw:custom-shape", Some(ty)), "{kind:?}");
++        }
++    }
++}
+diff --git a/crates/layout/src/display.rs b/crates/layout/src/display.rs
+index 5622c078..46660a63 100644
+--- a/crates/layout/src/display.rs
++++ b/crates/layout/src/display.rs
+@@ -105,6 +105,21 @@ pub enum Draw {
+         /// A rounded rectangle's corner ([`wordcraft_doc::connector::ShapeExtra::corner`]).
+         corner: Option<u32>,
+     },
++    /// A shape's picture fill: picture `media` stretched over `rect` and clipped to the `kind`
++    /// outline (`corner`: a rounded rectangle's), or to a freeform's closed paths `clip` when
++    /// there are some. The shape's shadow and glow (`effects`, cast by the filled shape, grown
++    /// by half the outline's `stroke_width` when it has one) are drawn first, under the
++    /// picture. It comes just before the shape's [`Draw::Shape`] or paths, which draw the
++    /// outline over it.
++    ShapePicture {
++        rect: Rect,
++        kind: ShapeKind,
++        corner: Option<u32>,
++        media: String,
++        clip: Vec<PathSeg>,
++        effects: wordcraft_doc::effects::ShapeEffects,
++        stroke_width: Option<f32>,
++    },
+     /// An ink stroke: a line through `pts` (page points) with round ends and joins, `width`
+     /// wide, in `color` at opacity `alpha`.
+     Ink { pts: Vec<(f32, f32)>, color: Rgb, width: f32, alpha: f32 },
+diff --git a/crates/layout/src/display/objects.rs b/crates/layout/src/display/objects.rs
+index ee574e73..3580464e 100644
+--- a/crates/layout/src/display/objects.rs
++++ b/crates/layout/src/display/objects.rs
+@@ -118,6 +118,16 @@ pub(super) fn shape_draws(rect: Rect, look: &ShapeLook, opts: &DisplayOptions, o
+         return;
+     }
+     let Some(f) = freeform.filter(|_| kind == ShapeKind::Freeform) else {
++        // A picture fill casts the shape's effects itself, under the picture.
++        let effects = match &extra.picture {
++            Some(media) => {
++                let stroke_width = stroke.map(|_| stroke_width);
++                let (corner, media, clip) = (extra.corner, media.clone(), Vec::new());
++                out.push(Draw::ShapePicture { rect, kind, corner, media, clip, effects, stroke_width });
++                Default::default()
++            }
++            None => effects,
++        };
+         out.push(Draw::Shape {
+             rect,
+             kind,
+@@ -135,6 +145,20 @@ pub(super) fn shape_draws(rect: Rect, look: &ShapeLook, opts: &DisplayOptions, o
+         return;
+     }
+     let width = if stroke_width.is_finite() { stroke_width.clamp(0.0, 200.0) } else { 0.75 };
++    // A picture fill inside the closed paths, under their outlines.
++    if let Some(media) = extra.picture.as_ref().filter(|_| !f.is_ink()) {
++        let mut clip = Vec::new();
++        for (pts, _) in f.placed(rect.x, rect.y, rect.w, rect.h).into_iter().filter(|(_, closed)| *closed) {
++            for (i, [x, y]) in pts.iter().enumerate() {
++                clip.push(if i == 0 { PathSeg::Move(*x, *y) } else { PathSeg::Line(*x, *y) });
++            }
++            clip.push(PathSeg::Close);
++        }
++        if !clip.is_empty() {
++            let effects = Default::default();
++            out.push(Draw::ShapePicture { rect, kind, corner: None, media: media.clone(), clip, effects, stroke_width: None });
++        }
++    }
+     for (pts, closed) in f.placed(rect.x, rect.y, rect.w, rect.h) {
+         if f.is_ink() || (!closed && fill.is_none()) {
+             if let Some(color) = stroke {
+diff --git a/crates/pdf/src/exporter/draw.rs b/crates/pdf/src/exporter/draw.rs
+index 5ad2f16a..b1104c7b 100644
+--- a/crates/pdf/src/exporter/draw.rs
++++ b/crates/pdf/src/exporter/draw.rs
+@@ -64,6 +64,25 @@ impl Exporter<'_> {
+                 s.set_fill(None);
+                 s.set_stroke(None);
+             }
++            Draw::ShapePicture { rect, kind, corner, media, clip, effects, stroke_width } => {
++                // The filled shape's shadow and glow, under the picture.
++                let fx = effects.sanitized();
++                if !fx.is_empty() && clip.is_empty() {
++                    shape_effects(s, (*kind, *corner), rect, &fx, (true, stroke_width.is_some(), stroke_width.unwrap_or(0.0)));
++                }
++                // The picture stretched over the box, inside the outline (or a freeform's paths) only.
++                let clip = if clip.is_empty() {
++                    shape_path(*kind, rect, *corner)
++                } else {
++                    let mut pb = PathBuilder::new();
++                    append_path(&mut pb, &wordcraft_layout::display::seg_path(clip));
++                    pb.finish()
++                };
++                let Some(clip) = clip else { return };
++                s.push_clip_path(&clip, &FillRule::NonZero);
++                self.picture(s, rect, media, &[0.0; 4], 1.0, PicFx::default());
++                s.pop();
++            }
+             Draw::Ink { pts, color, width, alpha } => {
+                 let mut pb = PathBuilder::new();
+                 let mut used = 0usize;
+diff --git a/crates/pdf/src/paint.rs b/crates/pdf/src/paint.rs
+index cfa1139c..73bb270d 100644
+--- a/crates/pdf/src/paint.rs
++++ b/crates/pdf/src/paint.rs
+@@ -180,6 +180,18 @@ pub(crate) fn shape_path(kind: ShapeKind, r: &Rect, corner: Option<u32>) -> Opti
+             pb.move_to(cx, y0);
+             pb.line_to(cx, y1);
+         }
++        ShapeKind::Hexagon
++        | ShapeKind::Octagon
++        | ShapeKind::Pentagon
++        | ShapeKind::Parallelogram
++        | ShapeKind::Trapezoid
++        | ShapeKind::Plus
++        | ShapeKind::Chevron
++        | ShapeKind::Decagon => {
++            let unit = wordcraft_doc::preset::polygon(kind, r.w, r.h).unwrap_or_default();
++            let pts: Vec<(f32, f32)> = unit.iter().map(|(x, y)| (x0 + x * r.w, y0 + y * r.h)).collect();
++            poly(&mut pb, &pts)
++        }
+         ShapeKind::Triangle => poly(&mut pb, &[(cx, y0), (x1, y1), (x0, y1)]),
+         ShapeKind::RightTriangle => poly(&mut pb, &[(x0, y0), (x1, y1), (x0, y1)]),
+         ShapeKind::Diamond => poly(&mut pb, &[(cx, y0), (x1, cy), (cx, y1), (x0, cy)]),
+diff --git a/crates/pdf/src/tests.rs b/crates/pdf/src/tests.rs
+index d767b7b6..88d1012c 100644
+--- a/crates/pdf/src/tests.rs
++++ b/crates/pdf/src/tests.rs
+@@ -2736,6 +2736,143 @@ fn borders_are_dashed_with_words_patterns() {
+     assert!(raw.contains("[3 1 1 1]0 d") || raw.contains("[3 1 1 1] 0 d"), "the dash-dot border");
+ }
+ 
++/// #1534: a hexagon filled with a picture draws the picture (an image XObject) clipped to its
++/// outline; without the picture there is none. The new presets all have paths.
++#[test]
++fn picture_filled_shapes_draw_their_picture() {
++    use wordcraft_doc::para::ShapeKind;
++    let r = Rect::new(0.0, 0.0, 10.0, 10.0);
++    for k in [
++        ShapeKind::Hexagon,
++        ShapeKind::Octagon,
++        ShapeKind::Pentagon,
++        ShapeKind::Parallelogram,
++        ShapeKind::Trapezoid,
++        ShapeKind::Plus,
++        ShapeKind::Chevron,
++        ShapeKind::Decagon,
++    ] {
++        assert!(shape_path(k, &r, None).is_some(), "{k:?}");
++        assert!(shape_path(k, &Rect::new(0.0, 0.0, f32::NAN, 1.0), None).is_none(), "{k:?}");
++    }
++    let pdf = |picture: bool| {
++        let mut d = Document::new();
++        let key = picture.then(|| d.add_media(png(), "png"));
++        let shape = InlineObject::Shape {
++            kind: ShapeKind::Hexagon,
++            w: 120.0,
++            h: 80.0,
++            fill: None,
++            stroke: Some(wordcraft_doc::Rgb(0, 0, 0)),
++            stroke_width: 1.0,
++            float: Default::default(),
++            story: None,
++            freeform: None,
++            effects: Default::default(),
++            extra: wordcraft_doc::connector::ShapeExtra { picture: key, ..Default::default() },
++        };
++        let mut p = Paragraph::with_text("x", CharProps::default());
++        p.insert_object(1, shape, &CharProps::default()).unwrap();
++        d.body = vec![para_block(p)];
++        String::from_utf8_lossy(&export(&d, &PdfOptions { compress: false, ..Default::default() }).unwrap()).into_owned()
++    };
++    let image = |raw: String| raw.contains("/Subtype /Image") || raw.contains("/Subtype/Image");
++    assert!(image(pdf(true)), "the picture fill is an image");
++    assert!(!image(pdf(false)), "no picture, no image");
++}
++
++/// What a page draws, in order: `F` a filled path, `S` a stroked one, `I` an image.
++fn draw_order(bytes: &[u8]) -> String {
++    use hayro_interpret::font::Glyph;
++    use hayro_interpret::{
++        BlendMode, ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterCache, InterpreterSettings, Paint, PathDrawMode, SoftMask,
++        interpret_page,
++    };
++    use hayro_syntax::Pdf;
++    struct Rec(String);
++    impl Device<'_> for Rec {
++        fn set_soft_mask(&mut self, _: Option<SoftMask<'_>>) {}
++        fn set_blend_mode(&mut self, _: BlendMode) {}
++        fn draw_path(&mut self, _: &kurbo::BezPath, _: kurbo::Affine, _: &Paint<'_>, mode: &PathDrawMode) {
++            self.0.push(if matches!(mode, PathDrawMode::Stroke(_)) { 'S' } else { 'F' });
++        }
++        fn push_clip_path(&mut self, _: &ClipPath) {}
++        fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'_>>, _: BlendMode) {}
++        fn draw_glyph(&mut self, _: &Glyph<'_>, _: kurbo::Affine, _: kurbo::Affine, _: &Paint<'_>, _: &GlyphDrawMode) {}
++        fn draw_image(&mut self, _: Image<'_, '_>, _: kurbo::Affine) {
++            self.0.push('I');
++        }
++        fn pop_clip_path(&mut self) {}
++        fn pop_transparency_group(&mut self) {}
++    }
++    let pdf = Pdf::new(bytes.to_vec()).expect("parse");
++    let cache = InterpreterCache::new();
++    let page = pdf.pages().iter().next().expect("a page");
++    let mut ctx = Context::new(kurbo::Affine::IDENTITY, kurbo::Rect::new(0.0, 0.0, 1.0, 1.0), &cache, pdf.xref(), InterpreterSettings::default());
++    let mut rec = Rec(String::new());
++    interpret_page(page, &mut ctx, &mut rec);
++    rec.0
++}
++
++/// A document holding one shape `kind` (with `freeform` geometry and `effects`) filled with a
++/// picture and outlined, as a PDF.
++fn picture_filled_pdf(
++    kind: wordcraft_doc::para::ShapeKind,
++    freeform: Option<wordcraft_doc::freeform::Freeform>,
++    effects: wordcraft_doc::effects::ShapeEffects,
++) -> Vec<u8> {
++    let mut d = Document::new();
++    let key = d.add_media(png(), "png");
++    let shape = InlineObject::Shape {
++        kind,
++        w: 120.0,
++        h: 80.0,
++        fill: None,
++        stroke: Some(wordcraft_doc::Rgb(0, 0, 0)),
++        stroke_width: 1.0,
++        float: Default::default(),
++        story: None,
++        freeform: freeform.map(Arc::new),
++        effects,
++        extra: wordcraft_doc::connector::ShapeExtra { picture: Some(key), ..Default::default() },
++    };
++    let mut p = Paragraph::new();
++    p.insert_object(0, shape, &CharProps::default()).unwrap();
++    d.body = vec![para_block(p)];
++    export(&d, &PdfOptions::default()).unwrap()
++}
++
++/// #1534 review: a freeform (`a:custGeom`) shape filled with a picture draws the picture, then
++/// its path's outline.
++#[test]
++fn picture_filled_freeforms_draw_their_picture() {
++    use wordcraft_doc::freeform::{FreePath, Freeform};
++    let tri = Freeform {
++        w: 120.0,
++        h: 80.0,
++        paths: vec![FreePath { pts: vec![[0.0, 0.0], [120.0, 0.0], [0.0, 80.0]], closed: true }],
++        ..Default::default()
++    };
++    let order = draw_order(&picture_filled_pdf(wordcraft_doc::para::ShapeKind::Freeform, Some(tri), Default::default()));
++    assert_eq!(order, "IS", "the picture, then the outline");
++}
++
++/// #1534 review: a picture-filled shape's shadow and glow are filled silhouettes drawn before
++/// (under) the picture; only the outline is drawn over it.
++#[test]
++fn picture_fill_effects_sit_under_the_picture() {
++    use wordcraft_doc::effects::{Glow, Shadow, ShapeEffects};
++    let effects = ShapeEffects {
++        shadow: Some(Shadow { color: wordcraft_doc::Rgb(0, 0, 0), transparency: 0.0, blur: 0.0, distance: 10.0, angle: 90.0, rot_with_shape: false }),
++        glow: Some(Glow { color: wordcraft_doc::Rgb(0xC0, 0x50, 0x10), size: 4.0, transparency: 0.0 }),
++        soft_edge: None,
++    };
++    let order = draw_order(&picture_filled_pdf(wordcraft_doc::para::ShapeKind::Hexagon, None, effects));
++    let (before, after) = order.split_once('I').unwrap_or_else(|| panic!("no picture: {order}"));
++    assert!(!before.is_empty() && before.chars().all(|c| c == 'F'), "filled shadow and glow bands under the picture: {order}");
++    assert_eq!(after, "S", "only the outline over the picture: {order}");
++}
++
+ /// Exported text remains selectable; copies repeat complete padded sheet plans.
+ #[test]
+ fn imposed_pdf_keeps_text_sheet_geometry_and_copy_boundaries() {
+diff --git a/crates/render/src/lib.rs b/crates/render/src/lib.rs
+index 8e57e077..649d89dc 100644
+--- a/crates/render/src/lib.rs
++++ b/crates/render/src/lib.rs
+@@ -627,6 +627,7 @@ fn draw(ctx: &mut RenderContext, doc: &Document, it: &Draw, view: Affine, visibl
+         Draw::Art { .. } => draw_art(ctx, &fr, it),
+         Draw::Ink { .. } => draw_ink(ctx, &fr, it),
+         Draw::Shape { .. } => draw_shape(ctx, &fr, it),
++        Draw::ShapePicture { .. } => draw_shape_picture(ctx, doc, &fr, it),
+         Draw::Clip { rect, items } => {
+             let r = kurbo_rect(rect);
+             if !r.is_finite() || !r.overlaps(*visible) {
+@@ -1002,6 +1003,36 @@ fn shape_soft_edges(ctx: &mut RenderContext, fr: &Frame, geom: &ShapeGeom, (rad,
+     }
+ }
+ 
++/// A shape's picture fill: its shadow and glow, then the picture stretched over the box and
++/// clipped to the outline (or a freeform's paths).
++fn draw_shape_picture(ctx: &mut RenderContext, doc: &Document, fr: &Frame, it: &Draw) {
++    let Draw::ShapePicture { rect, kind, corner, media, clip, effects, stroke_width } = it else { return };
++    let r = kurbo_rect(rect);
++    if !r.is_finite() || r.width() <= 0.0 || r.height() <= 0.0 {
++        return;
++    }
++    ctx.set_transform(fr.view);
++    // The filled shape's shadow and glow, under the picture.
++    let fx = effects.sanitized();
++    if !fx.is_empty() && clip.is_empty() {
++        let geom = ShapeGeom { r, kind: *kind, corner: *corner, can_fill: true, stroked: stroke_width.is_some() };
++        let sw = stroke_width.unwrap_or(0.0);
++        let sw = if sw.is_finite() { sw.clamp(0.25, 200.0) as f64 } else { 0.75 };
++        shape_shadow_and_glow(ctx, fr, (&geom, sw), &fx);
++    }
++    if !r.overlaps(*fr.visible) {
++        return;
++    }
++    // The picture stretched over the box, inside the outline (or a freeform's paths) only.
++    let outline = if clip.is_empty() { shape_path(*kind, r, *corner) } else { wordcraft_layout::display::seg_path(clip) };
++    ctx.set_transform(fr.view);
++    ctx.push_clip_layer(&outline);
++    let image =
++        Draw::Image { rect: *rect, media: media.clone(), crop: [0.0; 4], alpha: 1.0, fx: Default::default(), alt: String::new(), decorative: false };
++    draw(ctx, doc, &image, fr.view, fr.visible, fr.opts);
++    ctx.pop_layer();
++}
++
+ fn draw_shape(ctx: &mut RenderContext, fr: &Frame, it: &Draw) {
+     let Draw::Shape { rect, kind, fill, stroke, stroke_width, effects, corner, dash, cap } = it else { return };
+     let r = kurbo_rect(rect);
+@@ -1095,6 +1126,18 @@ pub fn shape_path(kind: ShapeKind, r: kurbo::Rect, corner: Option<u32>) -> BezPa
+             p.line_to((cx, r.y1));
+             p
+         }
++        ShapeKind::Hexagon
++        | ShapeKind::Octagon
++        | ShapeKind::Pentagon
++        | ShapeKind::Parallelogram
++        | ShapeKind::Trapezoid
++        | ShapeKind::Plus
++        | ShapeKind::Chevron
++        | ShapeKind::Decagon => {
++            let unit = wordcraft_doc::preset::polygon(kind, r.width() as f32, r.height() as f32).unwrap_or_default();
++            let pts: Vec<(f64, f64)> = unit.iter().map(|(x, y)| (r.x0 + f64::from(*x) * r.width(), r.y0 + f64::from(*y) * r.height())).collect();
++            poly(&pts)
++        }
+         ShapeKind::Triangle => poly(&[(cx, r.y0), (r.x1, r.y1), (r.x0, r.y1)]),
+         ShapeKind::RightTriangle => poly(&[(r.x0, r.y0), (r.x1, r.y1), (r.x0, r.y1)]),
+         ShapeKind::Diamond => poly(&[(cx, r.y0), (r.x1, cy), (cx, r.y1), (r.x0, cy)]),
+diff --git a/crates/render/src/tests.rs b/crates/render/src/tests.rs
+index c18f7579..f292a4c8 100644
+--- a/crates/render/src/tests.rs
++++ b/crates/render/src/tests.rs
+@@ -1473,6 +1473,123 @@ fn a_line_runs_from_top_left_to_bottom_right() {
+     assert_eq!(p.elements(), &[kurbo::PathEl::MoveTo((10.0, 20.0).into()), kurbo::PathEl::LineTo((30.0, 60.0).into())]);
+ }
+ 
++/// #1534: a hexagon filled with a picture paints the picture inside its outline, and nothing
++/// at its box's corner, outside the hexagon; turned, the same. The new presets have paths.
++#[test]
++fn picture_fills_are_clipped_to_the_outline() {
++    use wordcraft_doc::para::{Anchor, Float, ShapeKind, Wrap};
++    let r = kurbo::Rect::new(0.0, 0.0, 10.0, 10.0);
++    for k in [
++        ShapeKind::Hexagon,
++        ShapeKind::Octagon,
++        ShapeKind::Pentagon,
++        ShapeKind::Parallelogram,
++        ShapeKind::Trapezoid,
++        ShapeKind::Plus,
++        ShapeKind::Chevron,
++        ShapeKind::Decagon,
++    ] {
++        assert!(!shape_path(k, r, None).elements().is_empty(), "{k:?}");
++        assert!(!shape_path(k, kurbo::Rect::new(0.0, 0.0, 0.0, 0.0), None).elements().is_empty(), "{k:?}");
++    }
++    let green = image::RgbaImage::from_pixel(8, 8, image::Rgba([0, 200, 0, 255]));
++    let mut png = Vec::new();
++    image::DynamicImage::ImageRgba8(green).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
++    let rendered = |rot: f32| {
++        let mut d = Document::new();
++        let key = d.add_media(png.clone(), "png");
++        let float = Float { wrap: Wrap::InFrontOfText, h_rel: Anchor::Page, v_rel: Anchor::Page, x: 100.0, y: 100.0, rot, ..Default::default() };
++        let shape = wordcraft_doc::para::InlineObject::Shape {
++            kind: ShapeKind::Hexagon,
++            w: 200.0,
++            h: 200.0,
++            fill: None,
++            stroke: None,
++            stroke_width: 0.0,
++            float,
++            story: None,
++            freeform: None,
++            effects: Default::default(),
++            extra: wordcraft_doc::connector::ShapeExtra { picture: Some(key), ..Default::default() },
++        };
++        let mut p = wordcraft_doc::Paragraph::new();
++        p.insert_object(0, shape, &Default::default()).unwrap();
++        d.body = vec![wordcraft_doc::para_block(p)];
++        let l = layout(&d, &mut LayoutCache::new(), &LayoutOptions::default());
++        render_page(&d, &l.pages[0], 1.0, &RenderOptions::default())
++    };
++    for rot in [0.0, 180.0] {
++        let img = rendered(rot);
++        assert_eq!(img.pixel(200, 200), [0, 200, 0, 255], "the picture fills the middle, turned {rot}");
++        assert_eq!(img.pixel(103, 103), [255, 255, 255, 255], "the box's corner is outside the hexagon, turned {rot}");
++        assert_eq!(img.pixel(297, 297), [255, 255, 255, 255], "the far corner too, turned {rot}");
++    }
++}
++
++/// A green picture filling a shape laid out at (100, 100) on the page: `kind`, 200 × 200,
++/// with `freeform` geometry, `effects` and a 1 pt black outline.
++fn picture_filled(
++    kind: wordcraft_doc::para::ShapeKind,
++    freeform: Option<wordcraft_doc::freeform::Freeform>,
++    effects: wordcraft_doc::effects::ShapeEffects,
++) -> Rendered {
++    use wordcraft_doc::para::{Anchor, Float, Wrap};
++    let green = image::RgbaImage::from_pixel(8, 8, image::Rgba([0, 200, 0, 255]));
++    let mut png = Vec::new();
++    image::DynamicImage::ImageRgba8(green).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
++    let mut d = Document::new();
++    let key = d.add_media(png, "png");
++    let float = Float { wrap: Wrap::InFrontOfText, h_rel: Anchor::Page, v_rel: Anchor::Page, x: 100.0, y: 100.0, ..Default::default() };
++    let shape = wordcraft_doc::para::InlineObject::Shape {
++        kind,
++        w: 200.0,
++        h: 200.0,
++        fill: None,
++        stroke: Some(Rgb::BLACK),
++        stroke_width: 1.0,
++        float,
++        story: None,
++        freeform: freeform.map(std::sync::Arc::new),
++        effects,
++        extra: wordcraft_doc::connector::ShapeExtra { picture: Some(key), ..Default::default() },
++    };
++    let mut p = wordcraft_doc::Paragraph::new();
++    p.insert_object(0, shape, &Default::default()).unwrap();
++    d.body = vec![wordcraft_doc::para_block(p)];
++    let l = layout(&d, &mut LayoutCache::new(), &LayoutOptions::default());
++    render_page(&d, &l.pages[0], 1.0, &RenderOptions::default())
++}
++
++/// #1534 review: a freeform (`a:custGeom`) shape filled with a picture shows the picture
++/// inside its path, and not outside it.
++#[test]
++fn picture_fills_follow_a_freeforms_path() {
++    use wordcraft_doc::freeform::{FreePath, Freeform};
++    // A triangle: the top-left half of its frame.
++    let tri = Freeform {
++        w: 200.0,
++        h: 200.0,
++        paths: vec![FreePath { pts: vec![[0.0, 0.0], [200.0, 0.0], [0.0, 200.0]], closed: true }],
++        ..Default::default()
++    };
++    let img = picture_filled(ShapeKind::Freeform, Some(tri), Default::default());
++    assert_eq!(img.pixel(140, 140), [0, 200, 0, 255], "inside the path");
++    assert_eq!(img.pixel(260, 260), [255, 255, 255, 255], "outside the path, inside the frame");
++}
++
++/// #1534 review: a picture-filled shape's shadow lies under the picture, cast by the whole
++/// shape (not by its outline only).
++#[test]
++fn picture_fill_shadows_sit_under_the_picture() {
++    use wordcraft_doc::effects::{Shadow, ShapeEffects};
++    // Straight down 10 pt, solid black, sharp.
++    let shadow = Shadow { color: Rgb::BLACK, transparency: 0.0, blur: 0.0, distance: 10.0, angle: 90.0, rot_with_shape: false };
++    let img = picture_filled(ShapeKind::Hexagon, None, ShapeEffects { shadow: Some(shadow), ..Default::default() });
++    assert_eq!(img.pixel(200, 110), [0, 200, 0, 255], "the picture, not the outline's shadow, 10 pt below the top edge");
++    assert_eq!(img.pixel(200, 200), [0, 200, 0, 255], "the middle");
++    assert!(img.pixel(200, 305)[0] < 60, "the shadow shows below the shape: {:?}", img.pixel(200, 305));
++}
++
+ #[test]
+ fn paths_far_past_every_canvas_are_not_flattened() {
+     let line = |x: f64| {
+diff --git a/crates/ui-egui/src/app/commands.rs b/crates/ui-egui/src/app/commands.rs
+index b3c6628f..2eae1ab3 100644
+--- a/crates/ui-egui/src/app/commands.rs
++++ b/crates/ui-egui/src/app/commands.rs
+@@ -467,6 +467,7 @@ impl WordApp {
+                 "exportPdf" => self.export_dialog("pdf"),
+                 "exportPng" => self.export_dialog("png"),
+                 "insertPicture" => self.pick_picture(),
++                "shapeFillPicture" => self.pick_fill_picture(),
+                 "addFont" => self.pick_font(),
+                 "loadSystemFonts" => self.load_system_fonts(),
+                 "print" => {
+diff --git a/crates/ui-egui/src/file_dialogs.rs b/crates/ui-egui/src/file_dialogs.rs
+index f6a3ff16..0cc7ef3c 100644
+--- a/crates/ui-egui/src/file_dialogs.rs
++++ b/crates/ui-egui/src/file_dialogs.rs
+@@ -55,12 +55,19 @@ pub fn open_filters(purpose: &str) -> &'static [(&'static str, &'static [&'stati
+     }
+ }
+ 
++/// The shape a pending Shape Fill › Picture is for: its document, position and content, so a
++/// replaced shape at the same place isn't taken for it.
++pub(crate) type FillTarget = (u64, wordcraft_doc::Pos, wordcraft_doc::para::InlineObject);
++
+ /// What to do with the path picked in a dialog.
+ pub(crate) enum AfterPick {
+     /// Open the picked document from the window showing `document` ([`WordApp::open_file`]).
+     OpenDocument { document: u64 },
+     /// Insert the picked picture, or replace the pending Change Picture target.
+     Picture,
++    /// Fill the shape that was selected when the dialog opened with the picked picture (Shape
++    /// Fill › Picture): the document's identity, the shape's position and the shape itself, checked again on return.
++    FillPicture { target: Option<Box<FillTarget>> },
+     /// Save the document there, then carry on.
+     SaveAs { after: AfterSave, document: u64 },
+     /// Save a copy there in this format (`pdf`, `docx`, `png`…).
+@@ -259,6 +266,14 @@ impl WordApp {
+                 };
+                 self.insert_or_change_picture(json!({"path": path}))
+             }
++            AfterPick::FillPicture { target } => {
++                let Some(path) = picked else { return Ok(json!({"cancelled": true})) };
++                // The selection (or document) may have changed while the dialog was open.
++                if target != self.selected_shape_target() {
++                    return Ok(json!({"cancelled": true}));
++                }
++                self.run("shape.fill", json!({"picture": {"path": path}}))
++            }
+             AfterPick::Font => {
+                 let Some(path) = picked else { return Ok(json!({"cancelled": true})) };
+                 self.add_fonts(vec![path])
+@@ -466,6 +481,23 @@ impl WordApp {
+         let _ = self.ask_file(FileDialogRequest::Open { purpose: "picture".into() }, AfterPick::Picture);
+     }
+ 
++    /// Shape Fill › Picture: pick the picture to fill the selected shape with. The browser has no
++    /// paths to hand the command, so it isn't offered there yet.
++    pub(crate) fn pick_fill_picture(&mut self) {
++        if self.services.open_async.is_some() {
++            self.status(tl!("Picture fills aren't available in the browser yet."));
++            return;
++        }
++        let target = self.selected_shape_target();
++        let _ = self.ask_file(FileDialogRequest::Open { purpose: "picture".into() }, AfterPick::FillPicture { target });
++    }
++
++    /// Which shape is selected, and in which document: what a pending picture fill is bound to.
++    fn selected_shape_target(&self) -> Option<Box<FillTarget>> {
++        let (pos, shape) = wordcraft_engine::cmd::objects::selected(&self.session)?;
++        Some(Box::new((self.session.document_id(), pos, shape)))
++    }
++
+     /// Pick a font file to add (Add Font…; web: it arrives through the inbox).
+     pub(crate) fn pick_font(&mut self) {
+         if let Some(f) = &self.services.open_async {
+diff --git a/crates/ui-egui/src/file_dialogs/tests.rs b/crates/ui-egui/src/file_dialogs/tests.rs
+index 853f22da..fd77034f 100644
+--- a/crates/ui-egui/src/file_dialogs/tests.rs
++++ b/crates/ui-egui/src/file_dialogs/tests.rs
+@@ -638,6 +638,77 @@ fn load_system_fonts_without_hook_reports_status() {
+     assert_eq!(a.status_msg.as_ref().map(|(s, _)| s.as_str()), Some("All system fonts are already available."));
+ }
+ 
++/// Shape Fill › Picture belongs to the shape (and document) that was selected when the dialog
++/// opened: if either changed while the dialog was up, the picked picture is dropped, not
++/// applied to whatever is selected now.
++#[test]
++fn picture_fill_stays_with_the_shape_it_was_opened_for() {
++    let png = crate::paste_picture::png_from_rgba(2, 2, vec![255; 16]).unwrap();
++    let dir = scratch("fill");
++    let path = dir.join("fill.png");
++    std::fs::write(&path, png).unwrap();
++    let path = path.to_string_lossy().into_owned();
++    let filled = |a: &WordApp| matches!(wordcraft_engine::cmd::objects::selected(&a.session), Some((_, wordcraft_doc::para::InlineObject::Shape { extra, .. })) if extra.picture.is_some());
++    let setup = || {
++        let (mut a, shown) = async_app();
++        a.run("insert.shape", json!({"kind": "rectangle", "width": 100, "height": 50})).unwrap();
++        a.pick_fill_picture();
++        assert_eq!(shown.borrow().len(), 1, "the picker opened");
++        (a, shown)
++    };
++    // Nothing changes while the picker is up: the shape is filled.
++    let (mut a, shown) = setup();
++    answer(&shown, Some(&path));
++    assert!(a.poll_file_dialog().is_some());
++    assert!(filled(&a));
++    // Another shape is selected meanwhile: the picture is dropped, not put on that one.
++    let (mut a, shown) = setup();
++    a.run("insert.shape", json!({"kind": "ellipse", "width": 40, "height": 40})).unwrap();
++    answer(&shown, Some(&path));
++    assert_eq!(a.poll_file_dialog().unwrap().unwrap(), json!({"cancelled": true}));
++    assert!(!filled(&a));
++    // Another document replaces this one, with a shape in the same place: dropped too.
++    let (mut a, shown) = setup();
++    a.session.set_document(wordcraft_doc::Document::new());
++    a.run("insert.shape", json!({"kind": "rectangle", "width": 100, "height": 50})).unwrap();
++    answer(&shown, Some(&path));
++    assert_eq!(a.poll_file_dialog().unwrap().unwrap(), json!({"cancelled": true}));
++    assert!(!filled(&a));
++}
++
++/// The ribbon's Shape Fill › Picture… item opens the picker for the selected shape, and the
++/// chosen picture fills that shape (through the menu, not a direct call).
++#[test]
++fn shape_fill_picture_menu_item_opens_the_picker_and_fills() {
++    use egui_kittest::kittest::Queryable;
++    let png = crate::paste_picture::png_from_rgba(2, 2, vec![255; 16]).unwrap();
++    let dir = scratch("fillmenu");
++    let path = dir.join("fill.png");
++    std::fs::write(&path, png).unwrap();
++    let path = path.to_string_lossy().into_owned();
++    let (mut a, shown) = async_app();
++    a.run("insert.shape", json!({"kind": "rectangle", "width": 100, "height": 50})).unwrap();
++    a.ui.tab = "Shape Format".into();
++    let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
++        |ui, app: &mut WordApp| {
++            let ctx = ui.ctx().clone();
++            app.logic(&ctx);
++            app.ui(ui);
++        },
++        a,
++    );
++    h.run_steps(6);
++    h.get_by_label("Shape Fill").click();
++    h.run_steps(3);
++    h.get_by_label("Picture… ").click();
++    h.run_steps(3);
++    assert_eq!(shown.borrow().len(), 1, "the picker opened");
++    answer(&shown, Some(&path));
++    h.run_steps(4);
++    let filled = matches!(wordcraft_engine::cmd::objects::selected(&h.state().session), Some((_, wordcraft_doc::para::InlineObject::Shape { extra, .. })) if extra.picture.is_some());
++    assert!(filled, "the picture fills the selected shape");
++}
++
+ /// The bundled face `file` of family `original` renamed `family` (as long as `original`), so it
+ /// is a font the database doesn't have.
+ fn renamed_font(file: &str, original: &str, family: &str) -> Vec<u8> {
+diff --git a/crates/ui-egui/src/icons.rs b/crates/ui-egui/src/icons.rs
+index 11734938..fcfec0ee 100644
+--- a/crates/ui-egui/src/icons.rs
++++ b/crates/ui-egui/src/icons.rs
+@@ -1666,6 +1666,39 @@ fn shape(pen: &Pen, kind: &str) -> bool {
+                 .collect();
+             pen.closed(&pts, c);
+         }
++        "hexagon" | "octagon" | "pentagon" | "decagon" => {
++            let n = match kind {
++                "hexagon" => 6,
++                "octagon" => 8,
++                "pentagon" => 5,
++                _ => 10,
++            };
++            let off = if n == 5 || n == 10 { -std::f32::consts::FRAC_PI_2 } else { std::f32::consts::PI / n as f32 };
++            let pts: Vec<(f32, f32)> = (0..n)
++                .map(|i| {
++                    let ang = off + i as f32 * std::f32::consts::TAU / n as f32;
++                    (10.0 + 7.5 * ang.cos(), 10.0 + 7.5 * ang.sin())
++                })
++                .collect();
++            solid(&pts);
++        }
++        "parallelogram" => solid(&[(7.0, 4.5), (17.0, 4.5), (13.0, 15.5), (3.0, 15.5)]),
++        "trapezoid" => solid(&[(6.5, 4.5), (13.5, 4.5), (17.0, 15.5), (3.0, 15.5)]),
++        "plus" => solid(&[
++            (7.5, 3.5),
++            (12.5, 3.5),
++            (12.5, 7.5),
++            (16.5, 7.5),
++            (16.5, 12.5),
++            (12.5, 12.5),
++            (12.5, 16.5),
++            (7.5, 16.5),
++            (7.5, 12.5),
++            (3.5, 12.5),
++            (3.5, 7.5),
++            (7.5, 7.5),
++        ]),
++        "chevron" => solid(&[(3.5, 4.5), (11.5, 4.5), (16.5, 10.0), (11.5, 15.5), (3.5, 15.5), (8.5, 10.0)]),
+         "straightConnector" => ends(&[(4.0, 15.0), (16.0, 5.0)], false),
+         "straightArrowConnector" => ends(&[(4.0, 15.0), (16.0, 5.0)], true),
+         "elbowConnector" => ends(&[(4.0, 15.0), (10.0, 15.0), (10.0, 5.0), (16.0, 5.0)], false),
+diff --git a/crates/ui-egui/src/ribbon/insert.rs b/crates/ui-egui/src/ribbon/insert.rs
+index bd383f76..c0e92d81 100644
+--- a/crates/ui-egui/src/ribbon/insert.rs
++++ b/crates/ui-egui/src/ribbon/insert.rs
+@@ -3,7 +3,7 @@ use super::language::mi_check;
+ use super::{Ui, WordApp, big, group, json, menu_button, small};
+ 
+ /// The basic shapes of Insert › Shapes: tooltip and `insert.shape` kind.
+-pub(super) const SHAPE_TILES: [(&str, &str); 9] = [
++pub(super) const SHAPE_TILES: [(&str, &str); 17] = [
+     ("Rectangle", "rectangle"),
+     ("Rounded Rectangle", "roundedRectangle"),
+     ("Oval", "ellipse"),
+@@ -13,6 +13,14 @@ pub(super) const SHAPE_TILES: [(&str, &str); 9] = [
+     ("Arrow", "arrow"),
+     ("Star", "star"),
+     ("Heart", "heart"),
++    ("Hexagon", "hexagon"),
++    ("Octagon", "octagon"),
++    ("Regular Pentagon", "pentagon"),
++    ("Decagon", "decagon"),
++    ("Parallelogram", "parallelogram"),
++    ("Trapezoid", "trapezoid"),
++    ("Cross", "plus"),
++    ("Chevron", "chevron"),
+ ];
+ 
+ /// Shapes per row of the Insert › Shapes grid.
+diff --git a/crates/ui-egui/src/ribbon/shape.rs b/crates/ui-egui/src/ribbon/shape.rs
+index f318a8aa..9f0cf131 100644
+--- a/crates/ui-egui/src/ribbon/shape.rs
++++ b/crates/ui-egui/src/ribbon/shape.rs
+@@ -61,6 +61,7 @@ pub(super) fn shape_format(app: &mut WordApp, ui: &mut Ui) {
+                     mi(ui, app, "No Color", "shape.fill", json!({"color": null}));
+                     crate::colors::menu(ui, app, &theme, Target::cmd("shape.fill"));
+                     ui.separator();
++                    mi(ui, app, "Picture…", "shape.fill", json!({"picture": {}}));
+                     ui.menu_button(tl!("Gradient"), |ui| gradient_menu(ui, app, fill.as_ref()));
+                 },
+             );

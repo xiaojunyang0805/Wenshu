@@ -737,6 +737,31 @@ same thread confirmed F10/F12 in Word (modes 11, 12, 14: ½ em per line, left-al
 too, plus an em per mark in the last unit) and F41 within its ranges for mode 15 (k = 1, 3, 6 on
 30-unit lines: 6–6.5, 9–9.75, 9–10.5 pt; k/(k + n/32) em gives 6, 9.2, 10.4).
 
+## F45. WPS has two layout modes, chosen by `docProps/app.xml`'s `Application`
+
+Measured 2026-11-13 (WPS 12.1, COM page counts). A file whose `<Application>` **contains**
+`WPS Office` (case-sensitive) is laid out by one set of rules; any other file (Word's
+`Microsoft Office Word`, `WordCraft`, `Wenshu`, `Kingsoft Office`, `WPS`, `wps office`, or no
+`Application` at all) by another. Found by bisecting J5's last two page changes: Wenshu's saves of
+`29a7772dfb` (WPS 11.1) and `ef14cd2f88` (WPS 12.1) went 27 → 29 and 35 → 36 pages in WPS, and
+swapping parts between original and save pinned it on `docProps/app.xml` alone (the body,
+styles, settings, headers and footers made no difference). Only the name matters: `WPS Office`,
+`WPS Office (Wenshu)` and `Wenshu WPS Office` all give 27 and 35; the version suffix and `Pages`
+don't. 74 of the 200 corpus documents are WPS's.
+
+- **Saving (patch 0067):** a save keeps the file's `Application` when it names WPS Office (as the
+  writer already keeps `Company` and `Template`); anything else is still written as WordCraft.
+  J5 after it: WPS page count unchanged 200 / 200 (was 198).
+- **Layout (open):** which rules differ between the modes is not measured. Most probes so far
+  were built from python-docx's template, which doesn't name WPS Office, so F1–F44 were measured
+  in the other-application mode, while the WPS-authored references were laid out in WPS's own
+  mode. With the mode flipped, 4 of the 14 documents still a page off on Windows get Wenshu's page
+  count: `29a7772dfb` (WPS's, matches in the other mode) and `f7d3afdfdb`, `2d6a9da333`,
+  `9c189a35a9` (not WPS's, match in WPS's own mode). So Wenshu's rules mix the two modes; repeating
+  the probes with `Application` set both ways would separate them.
+- New documents Wenshu creates are written as WordCraft (so WPS uses the other-application mode);
+  whether to name WPS Office there is a product decision, not taken.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

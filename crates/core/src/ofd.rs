@@ -364,8 +364,38 @@ impl Writer<'_> {
         self.clips.pop();
     }
 
+    /// `f`'s objects clipped to the area `b` (page points) encloses.
+    fn clipped_to(&mut self, b: &BezPath, f: impl FnOnce(&mut Self)) {
+        let area = self.segs(b);
+        if area.is_empty() {
+            return;
+        }
+        self.clips.push(area);
+        f(self);
+        self.clips.pop();
+    }
+
     fn draw(&mut self, d: &Draw) {
         match d {
+            // A picture fill: the picture stretched over the box, inside the shape's outline (or
+            // a freeform's closed paths). The shape's outline follows as its own draw.
+            Draw::ShapePicture {
+                rect,
+                kind,
+                corner,
+                media,
+                clip,
+                ..
+            } => {
+                let area = if clip.is_empty() {
+                    shape_bez(*kind, rect, *corner)
+                } else {
+                    Some(wordcraft_layout::display::seg_path(clip))
+                };
+                if let Some(area) = area {
+                    self.clipped_to(&area, |me| me.picture(rect, media, &[0.0; 4], 1.0));
+                }
+            }
             Draw::Figure { draws, .. } => {
                 for d in draws {
                     self.draw(d);
@@ -1457,6 +1487,21 @@ fn shape_bez(kind: ShapeKind, r: &Rect, corner: Option<u32>) -> Option<BezPath> 
             b.line_to((x1, cy));
             b.move_to((cx, y0));
             b.line_to((cx, y1));
+        }
+        ShapeKind::Hexagon
+        | ShapeKind::Octagon
+        | ShapeKind::Pentagon
+        | ShapeKind::Parallelogram
+        | ShapeKind::Trapezoid
+        | ShapeKind::Plus
+        | ShapeKind::Chevron
+        | ShapeKind::Decagon => {
+            let pts: Vec<(f64, f64)> = wordcraft_doc::preset::polygon(kind, r.w, r.h)
+                .unwrap_or_default()
+                .iter()
+                .map(|&(u, v)| (x0 + f(u) * w, y0 + f(v) * h))
+                .collect();
+            poly(&mut b, &pts);
         }
         ShapeKind::Triangle => poly(&mut b, &[(cx, y0), (x1, y1), (x0, y1)]),
         ShapeKind::RightTriangle => poly(&mut b, &[(x0, y0), (x1, y1), (x0, y1)]),

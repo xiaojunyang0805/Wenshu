@@ -2,6 +2,41 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-13: J5 at 200 / 200: picture-filled shapes (0066), WPS's two layout modes (F45, 0067)
+
+- **Picture fills (0066):** the last text loss (`aae80ea709`: a text box in a `horizontalScroll`
+  shape filled with a picture, read as a picture so its text was dropped) is fixed by backporting
+  upstream's open PR [#6453](https://github.com/storytold/wordcraft/pull/6453) (picture fills
+  and eight preset shapes, by its upstream author), which applied cleanly on our queue.
+  `wenshu-core::ofd` draws the new `ShapePicture` (clipped to the outline) and the new polygon
+  shapes. Unknown presets such as `horizontalScroll` are still written back as `rect`
+  (WordCraft-wide; outside J5's criteria).
+- **F45, found by bisecting J5's last two page changes** (`29a7772dfb` 27 → 29, `ef14cd2f88`
+  35 → 36 in WPS after a save): swapping parts between original and save pinned it on
+  `docProps/app.xml`. WPS lays out a file whose `Application` contains `WPS Office` by one set of
+  rules and every other file by another. **Patch 0067:** a save keeps a WPS Office `Application`
+  (the writer already kept `Company`, `Template`); anything else is written as WordCraft. Test.
+- **Lead from F45:** with the mode flipped, 4 of the 14 documents still a page off on Windows get
+  Wenshu's page count (`29a7772dfb` in the other-application mode; `f7d3afdfdb`, `2d6a9da333`,
+  `9c189a35a9` in WPS's own mode). Most probes were built from python-docx's template (not
+  WPS), so the mix of modes in our rules is a new line of measurement.
+- **Round-trip metric:** `roundtrip.py` counts East Asian fonts on runs that show text (and
+  paragraph marks) only; an empty run's font draws nothing and may be dropped by a writer.
+- **J5 re-measured** (all 200 re-saved, WPS renders of the saves, `out/rt/summary.txt`): text
+  identical **200 / 200**, tables 200 / 200, East Asian font names **200 / 200**, WPS page count
+  unchanged **200 / 200** (was 198), mean saved vs original 0.9950 → **0.9970**, pixel-identical
+  168 → 179.
+- **Gates:** Windows 186 / 200, mean 0.9435 (unchanged, PASS). **J4:** recall 0.9987 → 0.9992,
+  all characters 174 / 200, fonts embedded and subset 200 / 200, PDF vs screen > 0.99 in
+  198 / 200. **OFD:** 200 / 200 converted, pages equal 200 / 200, recall 1.0000, placed 0.9991;
+  package and fonts clean in 199 / 200: `896cafeedf` maps some `hint="eastAsia"` CJK characters to
+  the Times New Roman face beside it (60 cmap misses, placed 0.9964). It has no shapes, and the
+  OFD check hadn't run since the pin bump, so it is from the bump: open.
+- **Tests:** docx, doc, layout, render, pdf, formats (all pass); `wenshu-core`, `wenshu-ofd`,
+  `wenshu-cli` pass; clippy clean on `wenshu-core`. The queue 0001–0067 reproduces the tested tree.
+- **Next:** the OFD cmap regression (`896cafeedf`); F45 probes in both modes; Linux long documents
+  and 小标宋; web build.
+
 ## 2026-11-09 (3): WordCraft pin bumped to `05f781cf` (3,146 commits)
 
 - **Re-fit:** a worktree at `05f781cf` (upstream `main`'s merge base with our PR branches), one

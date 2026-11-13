@@ -83,7 +83,14 @@ def text(xml):
 
 
 def ea_fonts(xml):
-    return set(re.findall(r'w:eastAsia="([^"]+)"', ' '.join(re.findall(r'<w:rFonts [^>]*>', xml))))
+    # The East Asian fonts of runs that show text: a run with no text (only properties) draws
+    # nothing, and a writer may drop it. Paragraph marks' fonts (w:pPr/w:rPr) count, as they set
+    # an empty line's height.
+    xml = re.sub(r'<mc:Fallback.*?</mc:Fallback>', '', xml, flags=re.S)
+    shown = re.findall(r'<w:r(?:(?!</w:r>).)*?<w:t[ >](?:(?!</w:r>).)*</w:r>', xml, flags=re.S)
+    marks = re.findall(r'<w:pPr>(?:(?!</w:pPr>).)*</w:pPr>', xml, flags=re.S)
+    tags = re.findall(r'<w:rFonts [^>]*>', ' '.join(shown + marks))
+    return set(re.findall(r'w:eastAsia="([^"]+)"', ' '.join(tags)))
 
 
 def kind(n):

@@ -16,7 +16,7 @@ Writer only. Slides and Sheets come after the MVP.
 | J2 | Write a new 公文 from a template | `wenshu gongwen new` (CLI) and File › New › 公文 (desktop) produce a document that passes all 8 `gongwen check` rules | **Met.** Both paths; a test checks the five templates pass |
 | J3 | Check a 公文 against the standard | `wenshu gongwen check` reports page, margins, type area, grid, body font and size | **Met** (CLI and 检查公文格式 on the ribbon) |
 | J4 | Export PDF to send or print | PDF with embedded subset fonts, selectable Chinese text | **Met, measured 2026-11-03** (`corpus/tools/pdf_check.py`): 200 / 200 PDFs written, page counts equal to Wenshu's layout 200 / 200; every font embedded and subset 200 / 200; text extractable: mean recall 0.9986 (Chinese 0.9984), all characters in 169 / 200, the rest above 0.995 except 7 (a vertical text box, hollow text, a few others); pages look like the screen (worst page > 0.99 in 198 / 200; the two others show screen-only markup, absent from WPS's PDF too); median 0.2 s and 164 KB. Found on the way: mixed-font field results drew wrong glyphs and broke font embedding (patch 0037). Re-measured 2026-11-05 on `main` (patches through 0065): the same or better (recall 0.9987, all characters in 173 / 200, fonts 200 / 200, median 0.1 s) |
-| J5 | Save back to .docx that WPS opens unchanged | Text, tables, headers and East Asian font names survive a round-trip (100% on corpus) | **Measured 2026-11-03** (`corpus/tools/roundtrip.py`): WPS opens all 200 saves; text identical **199 / 200** (body, headers, footers, notes; recalculated fields such as page numbers left out), tables 200 / 200, East Asian font names 199 / 200; page count unchanged 197 / 200, mean page score saved vs original 0.993, 161 pixel-identical. The one text loss: a text box in a picture-filled shape (`aae80ea709`), read as a picture. Found on the way: an invisible WordArt watermark became visible after a save (patch 0039). Not yet 100%. **Re-measured 2026-11-09** (patches through 0065, the v0.1.4 CLI): text 199 / 200, tables 200 / 200, East Asian font names 199 / 200, page count unchanged **198 / 200**, mean page score 0.9939; the two page changes are documents Wenshu itself lays out a page off |
+| J5 | Save back to .docx that WPS opens unchanged | Text, tables, headers and East Asian font names survive a round-trip (100% on corpus) | **Met** (2026-11-13). Measured 2026-11-03 (`corpus/tools/roundtrip.py`): WPS opens all 200 saves; text identical **199 / 200** (body, headers, footers, notes; recalculated fields such as page numbers left out), tables 200 / 200, East Asian font names 199 / 200; page count unchanged 197 / 200, mean page score saved vs original 0.993, 161 pixel-identical. The one text loss: a text box in a picture-filled shape (`aae80ea709`), read as a picture. Found on the way: an invisible WordArt watermark became visible after a save (patch 0039). Not yet 100%. **Re-measured 2026-11-09** (patches through 0065, the v0.1.4 CLI): text 199 / 200, tables 200 / 200, East Asian font names 199 / 200, page count unchanged **198 / 200**, mean page score 0.9939; the two page changes are documents Wenshu itself lays out a page off. **Met 2026-11-13: 200 / 200** on every measure (text, tables, East Asian font names, WPS page count; mean saved vs original 0.9970, 179 pixel-identical) after picture-filled shapes (0066) and keeping WPS Office's `Application` name, which WPS uses to pick its layout mode (F45, 0067) |
 
 ## Milestones
 
@@ -33,7 +33,7 @@ $500–1,500 on Opus 5.5**, because most of the engine already exists.
 
 ## Where the MVP stands (2026-11-09)
 
-All five jobs are met except J5's 100% (199 / 200 texts, 198 / 200 page counts). The plan of
+All five jobs are met (J5 reached 200 / 200 on 2026-11-13). The plan of
 2026-11-04 is done: Linux fidelity measured (173 / 200), the desktop editing pass and IME test,
 OFD export with outline and links, the regression gate, and the VS Code preview extension (in the
 release workflow since v0.1.4). Releases: v0.1.0, v0.1.2, v0.1.3 and **v0.1.4** (2026-11-09: OFD,
@@ -54,8 +54,10 @@ Engineering, in order:
 2. ✅ **WordCraft pin bumped** 2026-11-09: `3b7f7ed` → `05f781cf` (3,146 commits), 65 patches
    re-fitted; gates Windows 186 / 200 (0.9435), Linux 173 / 200 (0.9232); J4 and J5 equal or
    better (docs/UPSTREAM.md).
-3. **J5's last documents**: the text box in a picture-filled shape (`aae80ea709`) and the two
-   documents a page off.
+3. ✅ **J5's last documents** 2026-11-13: J5 200 / 200 (0066 picture fills, 0067 and F45: WPS
+   picks its layout mode from `Application`). Follow-ups: the OFD cmap regression from the pin
+   bump (`896cafeedf`); F45 probes in both modes (4 of the 14 off documents match with the mode
+   flipped).
 4. **Linux**: the 12 documents still running long; an open 小标宋 for titles.
 5. **Web build** (M4's engineering part).
 

@@ -1,0 +1,106 @@
+Upstream: (not opened; WPS-specific: a save keeps docProps/app.xml's Application when it names WPS Office, because WPS lays out a file whose Application contains "WPS Office" by its own rules and any other file by different ones; measured in WPS 12.1, two corpus saves moved by 1 and 2 pages; WPS-FINDINGS F45)
+diff --git a/crates/docx/src/package.rs b/crates/docx/src/package.rs
+index 656a2ad..73f2677 100644
+--- a/crates/docx/src/package.rs
++++ b/crates/docx/src/package.rs
+@@ -120,6 +120,17 @@ pub const APP_KEPT: &str = "wordcraft:app.kept";
+ /// the file Word saved, not the one WordCraft writes.
+ pub const APP_KEPT_PROPS: &[&str] =
+     &["Template", "Manager", "Company", "HyperlinkBase", "ScaleCrop", "LinksUpToDate", "SharedDoc", "HyperlinksChanged"];
++/// The producing application's name, kept (as an [`APP_KEPT`] line) only when it names WPS
++/// Office: WPS lays out a file whose `Application` contains `WPS Office` by its own rules and any
++/// other file (Word's, WordCraft's, none) by different ones, so writing our own name would change
++/// how WPS lays out a document it wrote (WPS 12.1, measured: page counts of two documents moved
++/// by one and two pages). Any other application's name is replaced by WordCraft's.
++pub const APP_KEPT_APPLICATION: &str = "Application";
++
++/// Whether an `Application` value is WPS Office's (see [`APP_KEPT_APPLICATION`]).
++pub fn is_wps_application(value: &str) -> bool {
++    value.contains("WPS Office")
++}
+ /// Parts WordCraft doesn't model, carried verbatim: `owner\ttype\tpart` lines (owner `P` for
+ /// the package, `D` for the main document), with their bytes and relationships in the
+ /// [`EmbeddedManifest`]. Not a package part: WordCraft's own bookkeeping.
+diff --git a/crates/docx/src/read/meta.rs b/crates/docx/src/read/meta.rs
+index a51d7e8..dfc48eb 100644
+--- a/crates/docx/src/read/meta.rs
++++ b/crates/docx/src/read/meta.rs
+@@ -183,7 +183,8 @@ impl Reader<'_> {
+         for e in root.els() {
+             let name = e.local();
+             let value = e.text();
+-            if crate::package::APP_KEPT_PROPS.contains(&name) && value.len() <= 2048 && !value.contains(['\t', '\n']) {
++            let wps = name == crate::package::APP_KEPT_APPLICATION && crate::package::is_wps_application(&value);
++            if (wps || crate::package::APP_KEPT_PROPS.contains(&name)) && value.len() <= 2048 && !value.contains(['\t', '\n']) {
+                 kept.push_str(&format!("{name}\t{value}\n"));
+             }
+         }
+diff --git a/crates/docx/src/write/settings.rs b/crates/docx/src/write/settings.rs
+index 5643210..b282499 100644
+--- a/crates/docx/src/write/settings.rs
++++ b/crates/docx/src/write/settings.rs
+@@ -355,7 +355,14 @@ pub(super) fn app_xml(doc: &Document) -> Vec<u8> {
+             ("xmlns:vt", "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"),
+         ],
+     );
+-    w.leaf("Application", &[], "WordCraft");
++    // WPS Office's name, when the file was WPS's, so WPS keeps laying it out by its own rules.
++    let kept = doc.passthrough.get(crate::package::APP_KEPT).map(|k| String::from_utf8_lossy(k).into_owned()).unwrap_or_default();
++    let application = kept
++        .lines()
++        .filter_map(|l| l.split_once('\t'))
++        .find(|(n, v)| *n == crate::package::APP_KEPT_APPLICATION && crate::package::is_wps_application(v))
++        .map_or("WordCraft", |(_, v)| v);
++    w.leaf("Application", &[], application);
+     w.leaf("Words", &[], &doc.word_count().to_string());
+     w.leaf("Paragraphs", &[], &doc.paragraph_count().to_string());
+     w.leaf("DocSecurity", &[], "0");
+@@ -363,7 +370,8 @@ pub(super) fn app_xml(doc: &Document) -> Vec<u8> {
+     // information on save.
+     let private = doc.settings.remove_personal_info;
+     if let Some(kept) = doc.passthrough.get(crate::package::APP_KEPT) {
+-        for line in String::from_utf8_lossy(kept).lines().take(crate::package::APP_KEPT_PROPS.len()) {
++        // One line per kept property, and the application's name (written above).
++        for line in String::from_utf8_lossy(kept).lines().take(crate::package::APP_KEPT_PROPS.len() + 1) {
+             let Some((name, value)) = line.split_once('\t') else { continue };
+             let Some(name) = crate::package::APP_KEPT_PROPS.iter().find(|n| **n == name) else { continue };
+             if private && matches!(*name, "Company" | "Manager") {
+diff --git a/crates/docx/tests/it/passthrough.rs b/crates/docx/tests/it/passthrough.rs
+index 6a04043..4f1054b 100644
+--- a/crates/docx/tests/it/passthrough.rs
++++ b/crates/docx/tests/it/passthrough.rs
+@@ -359,6 +359,34 @@ fn extended_properties_are_kept_without_words_counts_and_personal_ones_follow_th
+     assert!(private.contains("<Template>Normal.dotm</Template>"));
+ }
+ 
++#[test]
++fn wps_office_keeps_its_application_name_so_wps_keeps_its_own_layout() {
++    let save_app = |application: &str| {
++        let app = format!(
++            r#"<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Template>Normal.dotm</Template><Pages>27</Pages><Company>C</Company><ScaleCrop>false</ScaleCrop><LinksUpToDate>false</LinksUpToDate><SharedDoc>false</SharedDoc><HyperlinksChanged>false</HyperlinksChanged><Manager>M</Manager><HyperlinkBase>h</HyperlinkBase><Application>{application}</Application></Properties>"#
++        );
++        let b = package(
++            "<w:p><w:r><w:t>x</w:t></w:r></w:p>",
++            &[],
++            &[("rIdA", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties", "docProps/app.xml")],
++            &[("docProps/app.xml", app.as_str())],
++        );
++        text(&save(&wordcraft_docx::read(&b).unwrap()), "docProps/app.xml")
++    };
++    let wps = save_app("WPS Office_12.1.0.17857_F1E327BC-269C-435d-A152-05C5408002CA");
++    assert!(wps.contains("<Application>WPS Office_12.1.0.17857_F1E327BC-269C-435d-A152-05C5408002CA</Application>"), "{wps}");
++    assert_eq!(wps.matches("<Application>").count(), 1, "{wps}");
++    // Every kept property is still written beside it (the last one too).
++    for kept in ["Template", "Company", "ScaleCrop", "LinksUpToDate", "SharedDoc", "HyperlinksChanged", "Manager", "HyperlinkBase"] {
++        assert!(wps.contains(&format!("<{kept}>")), "{kept}: {wps}");
++    }
++    assert!(!wps.contains("<Pages>"), "{wps}");
++    for other in ["Microsoft Office Word", "wps office", "Kingsoft Office"] {
++        let a = save_app(other);
++        assert!(a.contains("<Application>WordCraft</Application>") && !a.contains(other), "{other}: {a}");
++    }
++}
++
+ /// `name` with its letters' case flipped by the bits of `i`.
+ fn spelling(name: &str, i: u32) -> String {
+     let mut bit = 0;
