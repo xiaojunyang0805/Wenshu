@@ -1,0 +1,151 @@
+Upstream: (not opened; WPS-measured: Chinese text a fallback face draws takes SimSun's Windows line box where SimSun is missing (on Windows SimSun is that fallback), so Linux lays it out as Windows does)
+diff --git a/crates/fonts/src/word.rs b/crates/fonts/src/word.rs
+--- a/crates/fonts/src/word.rs
++++ b/crates/fonts/src/word.rs
+@@ -253,6 +253,21 @@ pub fn missing_font_line(family: &str, resolved: &Resolved) -> Option<(f64, f64)
+     }
+ }
+ 
++/// The line (ascent, descent) in ems of Chinese text a fallback face draws (the run's fonts lack
++/// it) where SimSun isn't installed: SimSun's, the face Chinese falls back to on Windows, not the
++/// fallback's own (Noto Sans CJK's made such lines 45% taller). `None` where SimSun is installed:
++/// it is the fallback there.
++pub fn chinese_fallback_line() -> Option<(f64, f64)> {
++    chinese_fallback_line_in(FontDb::global())
++}
++
++fn chinese_fallback_line_in(db: &FontDb) -> Option<(f64, f64)> {
++    if db.has_family("SimSun") {
++        return None;
++    }
++    windows_line(220.0, 36.0, 256.0)
++}
++
+ /// A Windows Chinese face's East Asian line in ems, from its win ascent and descent.
+ fn windows_line(win_ascent: f64, win_descent: f64, upem: f64) -> Option<(f64, f64)> {
+     east_asian_line(0x0004_0000, win_ascent, win_descent, upem).map(|(a, d)| (a / upem, d / upem))
+@@ -1035,6 +1050,18 @@ mod tests {
+         assert_eq!(substitutes(charset_base_family("Times New Roman Cyr")), substitutes("Times New Roman"));
+     }
+ 
++    /// Chinese text a fallback face draws takes SimSun's box where SimSun is missing, and the
++    /// face's own (SimSun's, the fallback there) where it is installed.
++    #[cfg(not(target_arch = "wasm32"))]
++    #[test]
++    fn chinese_in_a_fallback_face_takes_simsuns_box_where_simsun_is_missing() {
++        let db = FontDb::with_font_dirs(Vec::new());
++        assert_eq!(chinese_fallback_line_in(&db), Some((258.0 / 256.0, 74.0 / 256.0)));
++        let file = std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts/SourceSerif4-Regular.ttf")).unwrap();
++        db.add_document_fonts(vec![(file, "SimSun".to_string())], 0);
++        assert_eq!(chinese_fallback_line_in(&db), None);
++    }
++
+     #[test]
+     fn a_missing_dfkai_keeps_its_own_line_box() {
+         let mut r = resolve("Arial", false, false);
+diff --git a/crates/layout/src/para/builder.rs b/crates/layout/src/para/builder.rs
+--- a/crates/layout/src/para/builder.rs
++++ b/crates/layout/src/para/builder.rs
+@@ -27,6 +27,17 @@ pub(super) struct Builder<'a> {
+     pub(super) line_faces: Vec<Option<u32>>,
+ }
+ 
++/// Is `sub`, drawn in `face`, Chinese text in the run's East Asian fallback face (`ea_face`: the
++/// run's fonts lack it), not in a font it names? Hangul isn't: SimSun, which Chinese falls back
++/// to on Windows, lacks it.
++fn chinese_fallback(face: Option<FaceRef>, ea_face: Option<FaceRef>, primary_ea: Option<FaceRef>, sub: &str) -> bool {
++    let id = |f: Option<FaceRef>| f.map(|f| f.id());
++    face.is_some()
++        && id(face) == id(ea_face)
++        && id(face) != id(primary_ea)
++        && !sub.chars().any(|c| matches!(u32::from(c), 0x1100..=0x11FF | 0x3130..=0x318F | 0xA960..=0xA97F | 0xAC00..=0xD7FF))
++}
++
+ /// The fonts a run asks for that aren't installed (see [`Builder::note_missing_fonts`]).
+ struct MissingFonts<'a> {
+     /// The Latin font.
+@@ -112,12 +123,21 @@ impl<'a> Builder<'a> {
+ 
+     /// Style index for a resolved char in `face` (caps-scaled `size` override for small caps).
+     pub(super) fn style(&mut self, rc: &Arc<ResolvedChar>, face_override: Option<FaceRef>, small: bool) -> u32 {
+-        self.style_with_line(rc, face_override, small, None)
++        self.style_with_line(rc, face_override, small, None, false)
+     }
+ 
+     /// [`Self::style`] whose line height comes from `line_face` when given: a face only filling in
+     /// characters the run's fonts lack by font linking adds no height to the line (WPS).
+-    pub(super) fn style_with_line(&mut self, rc: &Arc<ResolvedChar>, face_override: Option<FaceRef>, small: bool, line_face: Option<FaceRef>) -> u32 {
++    /// `chinese_fallback`: the text is Chinese a fallback face draws because the run's fonts lack
++    /// it ([`chinese_fallback`]).
++    pub(super) fn style_with_line(
++        &mut self,
++        rc: &Arc<ResolvedChar>,
++        face_override: Option<FaceRef>,
++        small: bool,
++        line_face: Option<FaceRef>,
++        chinese_fallback: bool,
++    ) -> u32 {
+         let r = wordcraft_fonts::word::resolve(lookup_family(self.env.doc, &rc.font), rc.bold, rc.italic);
+         let face = face_override.unwrap_or(r.face);
+         // The display list reads every run's format (link target, strike kind, underline colour,
+@@ -129,10 +149,12 @@ impl<'a> Builder<'a> {
+             let mut h = std::collections::hash_map::DefaultHasher::new();
+             (face.id(), small, &rc.font, rc.size.to_bits(), rc.bold, rc.italic, rc.color, rc.highlight, rc.shading).hash(&mut h);
+             (rc.underline_color, rc.strike, rc.double_strike, &rc.link, rc.ins, rc.del, rc.hidden).hash(&mut h);
+-            line_face.map(|f| f.id()).hash(&mut h);
++            let line_id = if chinese_fallback { Some(u32::MAX) } else { line_face.map(|f| f.id()) };
++            line_id.hash(&mut h);
+             h.finish()
+         };
+-        let line_id = line_face.map(|f| f.id());
++        // A Chinese fallback's line is SimSun's box, not a face's: told apart by an id no face has.
++        let line_id = if chinese_fallback { Some(u32::MAX) } else { line_face.map(|f| f.id()) };
+         let bucket = self.style_index.entry(key).or_default();
+         // Formats that never compare equal (a NaN from a hostile file) get their own styles; a capped
+         // scan keeps such a bucket from turning quadratic.
+@@ -160,6 +182,7 @@ impl<'a> Builder<'a> {
+         let (a, d) = match wordcraft_fonts::word::symbol_line(&rc.font, &r)
+             .or_else(ea_missing)
+             .or_else(|| wordcraft_fonts::word::missing_font_line(&rc.font, &r))
++            .or_else(|| chinese_fallback.then(wordcraft_fonts::word::chinese_fallback_line).flatten())
+         {
+             Some((a, d)) => (a * metrics.upem, d * metrics.upem),
+             None => wordcraft_fonts::word::text_line_metrics(&metrics),
+@@ -367,8 +390,11 @@ impl<'a> Builder<'a> {
+                 && key.face.map(|f| f.id()) != primary_ea.map(|f| f.id())
+                 && !sub.is_empty()
+                 && sub.chars().all(|c| matches!(u32::from(c), 0xF900..=0xFAFF | 0x2F800..=0x2FA1F));
+-            let si =
+-                if linked { self.style_with_line(rc, key.face, small, Some(primary_ea.unwrap_or(primary))) } else { self.style(rc, key.face, small) };
++            let si = if linked {
++                self.style_with_line(rc, key.face, small, Some(primary_ea.unwrap_or(primary)), false)
++            } else {
++                self.style_with_line(rc, key.face, small, None, chinese_fallback(key.face, ea_face, primary_ea, sub))
++            };
+             let Some(st) = self.styles.get(si as usize).cloned() else { continue };
+             let upper = rc.caps || small;
+             // All Caps and Small Caps draw a letter's full capital, which can be several
+@@ -858,3 +884,23 @@ impl Builder<'_> {
+ pub(crate) fn left_out(doc: &Document, rc: &ResolvedChar, show_hidden: bool, hide_deleted: crate::HideDeleted) -> bool {
+     (rc.hidden && !show_hidden) || hide_deleted.hides(doc, rc.del)
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    /// Only the run's East Asian fallback face counts, not a font the run names (its installed
++    /// East Asian font), and not for Hangul.
++    #[test]
++    fn chinese_fallback_is_the_fallback_face_drawing_chinese() {
++        let db = wordcraft_fonts::FontDb::global();
++        let fallback = Some(FaceRef::of(&db.face("Source Serif 4", "Regular")));
++        let named = Some(FaceRef::of(&db.face("Source Sans 3", "Regular")));
++        assert!(chinese_fallback(fallback, fallback, named, "永嘉县文件"));
++        assert!(chinese_fallback(fallback, fallback, None, "永嘉县，文件"));
++        assert!(!chinese_fallback(named, fallback, named, "永嘉县文件"), "the run's own East Asian font");
++        assert!(!chinese_fallback(fallback, fallback, fallback, "永嘉县文件"), "the fallback is the font it names");
++        assert!(!chinese_fallback(None, fallback, None, "永嘉县文件"), "the run's primary face");
++        assert!(!chinese_fallback(fallback, fallback, None, "한국어"), "Hangul");
++    }
++}

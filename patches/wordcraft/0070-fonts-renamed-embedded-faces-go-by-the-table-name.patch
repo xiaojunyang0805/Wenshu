@@ -1,0 +1,71 @@
+Upstream: (not opened yet; a candidate: an embedded face renamed to its font-table name kept answering to its own full, PostScript and localized names, so a WPS file's SimSun subset embedded as 黑体 stood in for 宋体 where SimSun is missing; also the 华文 (STxxx) faces' Windows line boxes when missing, WPS-measured)
+diff --git a/crates/fonts/src/fontdb/catalog.rs b/crates/fonts/src/fontdb/catalog.rs
+--- a/crates/fonts/src/fontdb/catalog.rs
++++ b/crates/fonts/src/fontdb/catalog.rs
+@@ -144,6 +144,12 @@ impl FontDb {
+                     if let Some(n) = name.as_deref().filter(|n| !face.named(n) && !face.local_names.iter().any(|l| l.name.eq_ignore_ascii_case(n))) {
+                         face.family = n.to_string();
+                         face.legacy_family = n.to_string();
++                        // Only by that name: WPS embeds a few glyphs of the face it drew under the
++                        // table's name (SimSun as 黑体), and the copy kept answering to SimSun and
++                        // 宋体, so where SimSun is missing 宋体 text resolved to a five-glyph subset.
++                        face.full_name = None;
++                        face.postscript = None;
++                        face.local_names.clear();
+                     }
+                     new.push(Arc::new(face));
+                 }
+diff --git a/crates/fonts/src/fontdb/tests/sysfonts.rs b/crates/fonts/src/fontdb/tests/sysfonts.rs
+--- a/crates/fonts/src/fontdb/tests/sysfonts.rs
++++ b/crates/fonts/src/fontdb/tests/sysfonts.rs
+@@ -798,6 +798,25 @@ fn a_documents_copy_of_an_installed_font_does_not_stop_it_loading() {
+     let _ = std::fs::remove_dir_all(dir);
+ }
+ 
++/// A file a document embeds under a table name it doesn't go by (WPS embeds a SimSun subset as
++/// 黑体) goes by that name only: not by its own full, PostScript or localized names, or 宋体
++/// resolved to a few glyphs of SimSun where SimSun isn't installed.
++#[test]
++fn an_embedded_face_under_another_name_goes_by_that_name_only() {
++    let db = FontDb::with_font_dirs(Vec::new());
++    db.set_system_fallback(false);
++    let owner = crate::DocumentFonts::new_owner();
++    let song = with_family_names("SourceSans3-Regular.ttf", &[(0x0409, "Songti Test"), (0x0804, "测试宋体")]);
++    db.add_document_fonts(vec![(song, "测试黑体".to_string())], owner);
++    db.add_document_fonts(vec![(named_face("SourceSerif4-Regular.ttf", "Mingti Test"), "Other Table".to_string())], owner);
++    let _doc = crate::DocumentFonts::enter(owner);
++    assert!(db.has_family("测试黑体") && db.has_family("Other Table"), "the table's names");
++    for own in ["Songti Test", "测试宋体", "Mingti Test", "Mingti Test Regular", "MingtiTest-Regular"] {
++        assert!(!db.has_family(own), "{own}");
++    }
++    assert_eq!(db.english_family("测试宋体"), None);
++}
++
+ /// A document's embedded font that has a localized name (an embedded 仿宋_GB2312) names that
+ /// family only for its own document: to another, the localized name stays unknown, so the
+ /// family is substituted as if nothing were embedded (it resolved to the generic fallback, and
+diff --git a/crates/fonts/src/word.rs b/crates/fonts/src/word.rs
+--- a/crates/fonts/src/word.rs
++++ b/crates/fonts/src/word.rs
+@@ -237,6 +237,11 @@ pub fn missing_font_line(family: &str, resolved: &Resolved) -> Option<(f64, f64)
+         "微软雅黑" | "microsoft yahei" => windows_line(2167.0, 536.0, 2048.0),
+         "微軟正黑體" | "微软正黑体" | "microsoft jhenghei" => windows_line(2203.0, 521.0, 2048.0),
+         "等线" | "dengxian" => windows_line(1659.0, 475.0, 2048.0),
++        // The 华文 (STxxx) faces Microsoft Office installs on Windows, where WPS lays them out in
++        // their own box (华文中宋 lines grew 4 pt at 16 pt in Noto Serif CJK's).
++        "华文中宋" | "stzhongsong" => windows_line(912.0, 225.0, 1000.0),
++        "华文楷体" | "stkaiti" | "华文仿宋" | "stfangsong" | "华文宋体" | "stsong" => windows_line(860.0, 260.0, 1000.0),
++        "华文细黑" | "stxihei" => windows_line(871.0, 208.0, 1000.0),
+         // Any other missing font the application draws as one of those faces (新細明體, 华文宋体,
+         // 方正黑体… as 宋体 or 黑体): that face's box, as where the face is installed.
+         _ => match provided(family).and_then(|l| l.first()).copied() {
+@@ -1048,6 +1053,9 @@ mod tests {
+         for name in ["宋体", "SimSun", "黑体", "仿宋_GB2312", "楷体", "KaiTi_GB2312"] {
+             assert_eq!(missing_font_line(name, &r), Some((258.0 / 256.0, 74.0 / 256.0)), "{name}");
+         }
++        let (a, d) = missing_font_line("华文中宋", &r).expect("STZhongsong");
++        assert!(((a + d) - 1.3 * 1137.0 / 1000.0).abs() < 0.001, "{a} + {d}");
++        assert_eq!(missing_font_line("华文楷体", &r), missing_font_line("STKaiti", &r));
+         let (a, d) = missing_font_line("微软雅黑", &r).expect("Microsoft YaHei");
+         assert!(((a + d) - 3513.0 / 2048.0).abs() < 0.001, "{a} + {d}");
+         // Installed, the font's own metrics count.
