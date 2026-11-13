@@ -2,6 +2,32 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-13 (4): Linux 174 → 182 / 200: embedded subsets, Chinese fallback boxes (0070, 0071)
+
+- **Method:** the 14 documents that match on Windows but not on Linux, converted on both
+  (`out/lx/`), compared line by line, then probes. Three causes:
+- **Embedded subsets answering for other fonts (0070):** WPS embeds the face it drew under the
+  font table's name, often a few glyphs of SimSun as 黑体, 等线 or 仿宋_GB2312. The face was renamed
+  to the table name but still answered to SimSun and 宋体, so where SimSun is missing 宋体 text
+  resolved to a 5-glyph subset and fell back glyph by glyph into the embedded 方正小标宋 (taller
+  lines). A renamed face now goes by the table name only. `ce628d9760`: 9 → 6 pages (matches).
+- **华文 faces (0070):** Office installs 华文中宋, 华文楷体, 华文仿宋, 华文宋体, 华文细黑 on Windows;
+  missing on Linux they took Noto CJK's box (华文中宋 lines +4 pt at 16 pt). They keep their Windows
+  box now (win metrics read from the installed files).
+- **Chinese in a fallback face (0071):** text in a font neither system has (宋体-PUA, unknown
+  names) falls back to SimSun on Windows; on Linux to Noto Sans CJK, whose box made its lines 45%
+  taller (22.6 vs 15.6 pt at 12 pt). Where SimSun isn't installed, such text takes SimSun's box.
+- **Tests:** fonts (the naming test fails without 0070), layout; fonts, layout, docx, engine all
+  pass. Clippy: only `shape_around`'s complexity (earlier patch, unchanged).
+- **Gate:** **Linux 182 / 200** (was 174), mean 0.9238 → **0.9249**, none lower (queue re-applied
+  from scratch in WSL, commit 29e3cb1); **Windows 187 / 200**, 0.9445 → 0.9447. Baselines updated.
+- **Left on Linux (7):** all font widths, not layout rules: 朱雀仿宋's Latin letters wider than
+  Windows FangSong's half-width ones (`b7e49d691e`), its narrower glyphs elsewhere (`447f1d5cb4`,
+  `70caf3a6de` run short), titles and 標楷體 text (`8c26a30bd3`, `3275566be0`, `cd82c17bf5`,
+  `de24610147`). A closer open FangSong, or width overrides, would be the next step; no open 小标宋
+  exists (titles fall back to Noto Serif CJK in 方正小标宋's measured box).
+- **Next:** the web build (discuss first).
+
 ## 2026-11-13 (3): F45 measured: WPS's own mode lays out as compatibility mode 14 (0069), header floats (F46)
 
 - **Method:** the four documents a page off that matched with `Application` flipped, re-rendered

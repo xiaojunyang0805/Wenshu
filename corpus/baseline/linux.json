@@ -8,9 +8,9 @@
   },
   "02_mixed_cjk.docx": {
    "error": null,
-   "pages": 6,
+   "pages": 4,
    "ref": 4,
-   "score": 0.8586
+   "score": 0.8799
   },
   "dc-administrative-1d61b2728b.docx": {
    "error": null,
@@ -52,7 +52,7 @@
    "error": null,
    "pages": 43,
    "ref": 43,
-   "score": 0.9032
+   "score": 0.9099
   },
   "dc-administrative-668a6d7886.docx": {
    "error": null,
@@ -94,7 +94,7 @@
    "error": null,
    "pages": 2,
    "ref": 2,
-   "score": 0.9165
+   "score": 0.9167
   },
   "dc-administrative-bd6b721e4e.docx": {
    "error": null,
@@ -106,7 +106,7 @@
    "error": null,
    "pages": 2,
    "ref": 2,
-   "score": 0.9391
+   "score": 0.9393
   },
   "dc-administrative-ef14cd2f88.docx": {
    "error": null,
@@ -142,7 +142,7 @@
    "error": null,
    "pages": 9,
    "ref": 9,
-   "score": 0.9597
+   "score": 0.9615
   },
   "dc-correspondence-31310a47c6.docx": {
    "error": null,
@@ -202,7 +202,7 @@
    "error": null,
    "pages": 2,
    "ref": 2,
-   "score": 0.9518
+   "score": 0.953
   },
   "dc-correspondence-ccbaad306d.docx": {
    "error": null,
@@ -232,7 +232,7 @@
    "error": null,
    "pages": 2,
    "ref": 2,
-   "score": 0.8199
+   "score": 0.8138
   },
   "dc-creative-65628ecb9b.docx": {
    "error": null,
@@ -250,7 +250,7 @@
    "error": null,
    "pages": 3,
    "ref": 3,
-   "score": 0.8993
+   "score": 0.9024
   },
   "dc-creative-e67370879a.docx": {
    "error": null,
@@ -286,7 +286,7 @@
    "error": null,
    "pages": 13,
    "ref": 13,
-   "score": 0.9563
+   "score": 0.9573
   },
   "dc-educational-aa1a5e719d.docx": {
    "error": null,
@@ -302,9 +302,9 @@
   },
   "dc-educational-be4a26d95e.docx": {
    "error": null,
-   "pages": 8,
+   "pages": 7,
    "ref": 7,
-   "score": 0.8981
+   "score": 0.9257
   },
   "dc-educational-d0aa0369b2.docx": {
    "error": null,
@@ -314,9 +314,9 @@
   },
   "dc-educational-da84530838.docx": {
    "error": null,
-   "pages": 6,
+   "pages": 4,
    "ref": 4,
-   "score": 0.8619
+   "score": 0.9273
   },
   "dc-forms-0fa1839a73.docx": {
    "error": null,
@@ -328,7 +328,7 @@
    "error": null,
    "pages": 1,
    "ref": 1,
-   "score": 0.9595
+   "score": 0.9599
   },
   "dc-forms-173ff7b3a5.docx": {
    "error": null,
@@ -338,9 +338,9 @@
   },
   "dc-forms-19cd5f62ce.docx": {
    "error": null,
-   "pages": 18,
+   "pages": 14,
    "ref": 14,
-   "score": 0.9622
+   "score": 0.9772
   },
   "dc-forms-1a9cff202d.docx": {
    "error": null,
@@ -386,15 +386,15 @@
   },
   "dc-forms-63fb911e67.docx": {
    "error": null,
-   "pages": 2,
+   "pages": 1,
    "ref": 1,
-   "score": 0.9454
+   "score": 0.9745
   },
   "dc-forms-6c9f280d2f.docx": {
    "error": null,
-   "pages": 2,
+   "pages": 1,
    "ref": 1,
-   "score": 0.9254
+   "score": 0.9572
   },
   "dc-forms-7abe5be4e9.docx": {
    "error": null,
@@ -442,7 +442,7 @@
    "error": null,
    "pages": 25,
    "ref": 25,
-   "score": 0.9293
+   "score": 0.9432
   },
   "dc-legal-59d7b8bb94.docx": {
    "error": null,
@@ -488,9 +488,9 @@
   },
   "dc-legal-ce628d9760.docx": {
    "error": null,
-   "pages": 9,
+   "pages": 6,
    "ref": 6,
-   "score": 0.9274
+   "score": 0.9424
   },
   "dc-legal-cf046fe702.docx": {
    "error": null,
@@ -556,7 +556,7 @@
    "error": null,
    "pages": 57,
    "ref": 57,
-   "score": 0.9503
+   "score": 0.9512
   },
   "dc-policies-7380cfbea3.docx": {
    "error": null,
@@ -586,13 +586,13 @@
    "error": null,
    "pages": 23,
    "ref": 23,
-   "score": 0.9238
+   "score": 0.9208
   },
   "dc-policies-af80f1c025.docx": {
    "error": null,
-   "pages": 19,
+   "pages": 17,
    "ref": 17,
-   "score": 0.9128
+   "score": 0.9377
   },
   "dc-policies-b6747d9df3.docx": {
    "error": null,
@@ -646,7 +646,7 @@
    "error": null,
    "pages": 16,
    "ref": 16,
-   "score": 0.8977
+   "score": 0.8998
   },
   "dc-reference-69d9f94c70.docx": {
    "error": null,
@@ -664,7 +664,7 @@
    "error": null,
    "pages": 8,
    "ref": 8,
-   "score": 0.9011
+   "score": 0.9029
   },
   "dc-reference-ce8e10b9e6.docx": {
    "error": null,
@@ -772,7 +772,7 @@
    "error": null,
    "pages": 6,
    "ref": 6,
-   "score": 0.8736
+   "score": 0.8817
   },
   "dc-technical-41063c56dd.docx": {
    "error": null,
@@ -1024,7 +1024,7 @@
    "error": null,
    "pages": 1,
    "ref": 1,
-   "score": 0.9644
+   "score": 0.9635
   },
   "gen-probe-23-line-spacing.docx": {
    "error": null,
@@ -1060,7 +1060,7 @@
    "error": null,
    "pages": 1,
    "ref": 1,
-   "score": 0.9934
+   "score": 0.9952
   },
   "gen-probe-29-snap-off-in-grid.docx": {
    "error": null,
@@ -1192,7 +1192,7 @@
    "error": null,
    "pages": 19,
    "ref": 19,
-   "score": 0.9712
+   "score": 0.9711
   },
   "gov-yn-kjt.docx": {
    "error": null,
@@ -1202,8 +1202,8 @@
   }
  },
  "machine": "Windows-11-10.0.26200-SP0",
- "mean_score": 0.9238,
+ "mean_score": 0.9249,
  "page_count_compared": 200,
- "page_count_matches": 174,
+ "page_count_matches": 182,
  "platform": "linux"
 }

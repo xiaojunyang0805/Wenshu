@@ -12,7 +12,7 @@ Writer only. Slides and Sheets come after the MVP.
 
 | # | Job | MVP acceptance | Status (2026-11-13) |
 |---|---|---|---|
-| J1 | Open a .docx received from WPS/Word and read it correctly | ≥ 90% of corpus docs open without error; FangSong/Kai/Song/Hei never fall back to sans; page count matches the WPS reference on ≥ 80% | **Met.** 200 / 200 open without error. Page count matches on **187 / 200 (93.5%)** on Windows, mean page score 0.9445 (2026-11-13; baseline 2026-10-31: 112 / 200, 0.903), and on **174 / 200** on Linux with the packaged fonts (mean 0.9238; see open question 2). Fonts: 仿宋/楷体/宋体/黑体 and the Traditional ones (標楷體, 新細明體) map to their designs (on Linux: 朱雀仿宋, 霞鹜文楷 GB, Noto Serif CJK, Noto Sans CJK); Chinese text with no font of its own falls back to 宋体, as in WPS. The 13 documents still a page off on Windows are analysed in docs/PROGRESS.md (2026-11-04); that work is now in maintenance mode (see Next) |
+| J1 | Open a .docx received from WPS/Word and read it correctly | ≥ 90% of corpus docs open without error; FangSong/Kai/Song/Hei never fall back to sans; page count matches the WPS reference on ≥ 80% | **Met.** 200 / 200 open without error. Page count matches on **187 / 200 (93.5%)** on Windows, mean page score 0.9445 (2026-11-13; baseline 2026-10-31: 112 / 200, 0.903), and on **182 / 200** on Linux with the packaged fonts (mean 0.9249; see open question 2). Fonts: 仿宋/楷体/宋体/黑体 and the Traditional ones (標楷體, 新細明體) map to their designs (on Linux: 朱雀仿宋, 霞鹜文楷 GB, Noto Serif CJK, Noto Sans CJK); Chinese text with no font of its own falls back to 宋体, as in WPS. The 13 documents still a page off on Windows are analysed in docs/PROGRESS.md (2026-11-04); that work is now in maintenance mode (see Next) |
 | J2 | Write a new 公文 from a template | `wenshu gongwen new` (CLI) and File › New › 公文 (desktop) produce a document that passes all 8 `gongwen check` rules | **Met.** Both paths; a test checks the five templates pass |
 | J3 | Check a 公文 against the standard | `wenshu gongwen check` reports page, margins, type area, grid, body font and size | **Met** (CLI and 检查公文格式 on the ribbon) |
 | J4 | Export PDF to send or print | PDF with embedded subset fonts, selectable Chinese text | **Met, measured 2026-11-03** (`corpus/tools/pdf_check.py`): 200 / 200 PDFs written, page counts equal to Wenshu's layout 200 / 200; every font embedded and subset 200 / 200; text extractable: mean recall 0.9986 (Chinese 0.9984), all characters in 169 / 200, the rest above 0.995 except 7 (a vertical text box, hollow text, a few others); pages look like the screen (worst page > 0.99 in 198 / 200; the two others show screen-only markup, absent from WPS's PDF too); median 0.2 s and 164 KB. Found on the way: mixed-font field results drew wrong glyphs and broke font embedding (patch 0037). Re-measured 2026-11-05 on `main` (patches through 0065): the same or better (recall 0.9987, all characters in 173 / 200, fonts 200 / 200, median 0.1 s) |
@@ -43,10 +43,12 @@ pre-releases.
 Since then (2026-11-13): J5 reached 200 / 200 (0066, 0067); OFD export is clean on 200 / 200 again
 after a math-layout regression from the pin bump (0068); WPS was found to pick its layout mode
 from `docProps/app.xml` (F45), and its own mode lays out as compatibility mode 14 (F47, 0069),
-which took the gates to **187 / 200** on Windows and **174 / 200** on Linux.
+which took the gates to **187 / 200** on Windows and **174 / 200** on Linux. Then Linux to
+**182 / 200**: embedded font subsets no longer stand in for other fonts (0070), and Chinese text
+in a fallback face takes SimSun's box as on Windows (0071).
 
 Upstream: 9 PRs on WordCraft (8 ready for review), none merged; the first human review arrived on #5006
-(kennyfs, Word measurements that agree with the WPS-measured rules). The patch queue is 69
+(kennyfs, Word measurements that agree with the WPS-measured rules). The patch queue is 71
 WordCraft patches and 1 winit patch. Upstream `main` is 114 commits past our pin `05f781cf`.
 
 ## Next (decided 2026-11-09)
@@ -65,7 +67,8 @@ Engineering, in order:
    tables placed as mode 14 in WPS files, F47, 0069 → Windows 187, Linux 174). Left from F45:
    F46 (a header's floating picture doesn't push the header text in WPS files; no corpus document
    has one) and two off documents (`29a7772dfb`, `2d6a9da333`) still unexplained.
-4. **Linux**: the 12 documents still running long; an open 小标宋 for titles.
+4. ✅ **Linux** 2026-11-13: 174 → 182 / 200 (0070, 0071). The 7 left are font widths
+   (朱雀仿宋 vs Windows FangSong, 標楷體); no open 小标宋 exists.
 5. **Web build** (M4's engineering part).
 
 Then publish (a release with the above). Then business: code signing (notes for the decision in
@@ -98,7 +101,8 @@ beyond what upstream offers.
    | + patch 0064: missing Windows Chinese faces keep their own line box (Noto CJK's is taller) | 150 / 200 | 0.915 |
    | + metric-compatible Latin fonts (Liberation 2, Carlito, Caladea) | 167 / 200 | 0.921 |
    | + 0064 extended: missing fonts drawn as a Windows face (新細明體 as 宋体) take its box | **173 / 200** | **0.923** |
-   | + WPS files laid out as compatibility mode 14 (0069, 2026-11-13) | **174 / 200** | **0.924** |
+   | + WPS files laid out as compatibility mode 14 (0069, 2026-11-13) | 174 / 200 | 0.924 |
+   | + embedded subsets go by their table name, Chinese fallback in SimSun's box (0070, 0071) | **182 / 200** | **0.925** |
    | Windows, for comparison | 187 / 200 | 0.9445 |
 
    Every package now bundles the Latin fonts as well (OFL, SHA-256-pinned, 2026-11-04; the .tar.gz
@@ -111,5 +115,5 @@ beyond what upstream offers.
 3. **Governance:** work as a CJK working group inside the storytold/ArtCraft community, or as a
    separate organisation? This affects branding and CLA.
 4. **Engine risk:** WordCraft is young (a few weeks old when Wenshu pinned it on 2026-10-30). If
-   upstream stalls, the patch queue (69 WordCraft patches and 1 winit patch by 2026-11-13)
+   upstream stalls, the patch queue (71 WordCraft patches and 1 winit patch by 2026-11-13)
    becomes a fork; none has been merged upstream yet (9 PRs open, no maintainer review). `wenshu-core` keeps that cost contained.

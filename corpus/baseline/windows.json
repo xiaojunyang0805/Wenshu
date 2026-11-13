@@ -442,7 +442,7 @@
    "error": null,
    "pages": 25,
    "ref": 25,
-   "score": 0.9491
+   "score": 0.9615
   },
   "dc-legal-59d7b8bb94.docx": {
    "error": null,
@@ -1202,7 +1202,7 @@
   }
  },
  "machine": "Windows-11-10.0.26200-SP0",
- "mean_score": 0.9445,
+ "mean_score": 0.9447,
  "page_count_compared": 200,
  "page_count_matches": 187,
  "platform": "windows"
