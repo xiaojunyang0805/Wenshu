@@ -137,17 +137,41 @@ struct Scan {
     text_by_font: HashMap<(String, u32), usize>,
 }
 
+/// One section's page settings.
+#[derive(Debug, Default)]
+struct Section {
+    page: Option<(u32, u32)>,
+    margins: Option<(u32, u32, u32, u32)>,
+    grid: Option<(String, u32)>,
+}
+
+/// The page, margins and grid are the first section's: a 公文 opens with its header and body
+/// (GB/T 9704's 首页), and attachments that follow in sections of their own (a landscape table)
+/// may be laid out otherwise. The last section's settings, read before, judged a document by its
+/// attachment; the section with the most text could be a large table too.
 fn scan_document(xml: &str, defaults: &RunProps) -> Scan {
     let mut reader = Reader::from_str(xml);
     let mut scan = Scan::default();
     let mut run: Option<RunProps> = None;
     let mut in_text = false;
+    let mut section = Section::default();
+    let mut body: Option<Section> = None;
+    // Paragraphs open (text boxes nest them), and a paragraph's own `w:sectPr` waiting for the
+    // paragraph to end: that section includes the paragraph's text, which follows its properties.
+    let mut para_depth = 0usize;
+    let mut pending: Option<(usize, Section)> = None;
+    let close = |section: Section, body: &mut Option<Section>| {
+        if body.is_none() {
+            *body = Some(section);
+        }
+    };
     loop {
         let event = match reader.read_event() {
             Ok(Event::Eof) | Err(_) => break,
             Ok(e) => e,
         };
         match event {
+            Event::Start(e) if e.name().as_ref() == b"w:p" => para_depth += 1,
             Event::Start(e) | Event::Empty(e) => match e.name().as_ref() {
                 b"w:r" => run = Some(RunProps::default()),
                 b"w:rFonts" => {
@@ -161,7 +185,7 @@ fn scan_document(xml: &str, defaults: &RunProps) -> Scan {
                     }
                 }
                 b"w:t" => in_text = run.is_some(),
-                b"w:pgSz" => scan.page = num(&e, b"w:w").zip(num(&e, b"w:h")),
+                b"w:pgSz" => section.page = num(&e, b"w:w").zip(num(&e, b"w:h")),
                 b"w:pgMar" => {
                     if let (Some(t), Some(r), Some(b), Some(l)) = (
                         num(&e, b"w:top"),
@@ -169,11 +193,11 @@ fn scan_document(xml: &str, defaults: &RunProps) -> Scan {
                         num(&e, b"w:bottom"),
                         num(&e, b"w:left"),
                     ) {
-                        scan.margins = Some((t, r, b, l));
+                        section.margins = Some((t, r, b, l));
                     }
                 }
                 b"w:docGrid" => {
-                    scan.grid = Some((
+                    section.grid = Some((
                         attr(&e, b"w:type").unwrap_or_default(),
                         num(&e, b"w:linePitch").unwrap_or(0),
                     ))
@@ -181,6 +205,18 @@ fn scan_document(xml: &str, defaults: &RunProps) -> Scan {
                 _ => {}
             },
             Event::End(e) => match e.name().as_ref() {
+                b"w:sectPr" if para_depth > 0 => {
+                    pending = Some((para_depth, std::mem::take(&mut section)))
+                }
+                b"w:sectPr" => close(std::mem::take(&mut section), &mut body),
+                b"w:p" => {
+                    if pending.as_ref().is_some_and(|(d, _)| *d == para_depth)
+                        && let Some((_, s)) = pending.take()
+                    {
+                        close(s, &mut body);
+                    }
+                    para_depth = para_depth.saturating_sub(1);
+                }
                 b"w:r" => run = None,
                 b"w:t" => in_text = false,
                 _ => {}
@@ -201,6 +237,11 @@ fn scan_document(xml: &str, defaults: &RunProps) -> Scan {
             }
             _ => {}
         }
+    }
+    if let Some(b) = body {
+        scan.page = b.page;
+        scan.margins = b.margins;
+        scan.grid = b.grid;
     }
     scan
 }
@@ -290,4 +331,45 @@ fn findings(scan: &Scan) -> Vec<Finding> {
         format!("{} pt", f64::from(size) / 2.0),
     );
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sect(w: u32, h: u32, top: u32) -> String {
+        format!(
+            r#"<w:sectPr><w:pgSz w:w="{w}" w:h="{h}"/><w:pgMar w:top="{top}" w:right="1474" w:bottom="1984" w:left="1588"/><w:docGrid w:type="linesAndChars" w:linePitch="579"/></w:sectPr>"#
+        )
+    }
+
+    fn para(text: &str, sect_pr: &str) -> String {
+        format!(r#"<w:p><w:pPr>{sect_pr}</w:pPr><w:r><w:t>{text}</w:t></w:r></w:p>"#)
+    }
+
+    /// A landscape attachment after the body (its settings in the body's closing `w:sectPr`),
+    /// however much text it holds, doesn't stand for the document: the first section does.
+    #[test]
+    fn the_body_section_is_checked_not_a_landscape_attachment() {
+        let body = "正文".repeat(200);
+        let xml = format!(
+            "<w:document><w:body>{}{}{}</w:body></w:document>",
+            para(&body, &sect(11906, 16838, 2098)),
+            para(&"附件表格".repeat(500), ""),
+            sect(16838, 11906, 1800)
+        );
+        let scan = scan_document(&xml, &RunProps::default());
+        assert_eq!(scan.page, Some((11906, 16838)));
+        assert_eq!(scan.margins.map(|m| m.0), Some(2098));
+        // One section: its settings, as before.
+        let one = format!(
+            "<w:document><w:body>{}{}</w:body></w:document>",
+            para(&body, ""),
+            sect(11906, 16838, 2098)
+        );
+        assert_eq!(
+            scan_document(&one, &RunProps::default()).page,
+            Some((11906, 16838))
+        );
+    }
 }

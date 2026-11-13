@@ -2,6 +2,17 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-13 (7): 公文 check reads the first section
+
+- `gongwen check` took the page, margins and grid from the last `w:sectPr` read, so a 公文
+  ending in a landscape attachment (`ce628d9760`) failed all 8 rules. It now checks the first
+  section (GB/T 9704's 首页: header and body; attachments follow in sections of their own), a
+  paragraph's own `w:sectPr` closing its section at the paragraph's end. "The section with the
+  most text" was tried first and rejected: a large landscape table attachment can hold more text
+  than the body (`43c2246cf6`: 6 → 1 passing rules). Corpus: 10 documents pass more rules, one
+  fewer (`4b135c5e2f`, a statistics form whose first section is its table, not a 公文).
+  `ce628d9760`: 0 → 3. Test in `check.rs` (fails on the old reading). Desktop, web and CLI share it.
+
 ## 2026-11-13 (6): the web app 59.7 → 34.3 MB (profile `web`, 0073)
 
 - **Where the 60 MB went:** code 40 MB (the desktop's speed-first `release`: opt-level 3, thin
