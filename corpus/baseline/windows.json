@@ -88,7 +88,7 @@
    "error": null,
    "pages": 14,
    "ref": 14,
-   "score": 0.9623
+   "score": 0.964
   },
   "dc-administrative-bc2cf558d0.docx": {
    "error": null,
@@ -578,9 +578,9 @@
   },
   "dc-policies-a5beccd773.docx": {
    "error": null,
-   "pages": 20,
+   "pages": 19,
    "ref": 19,
-   "score": 0.9213
+   "score": 0.9475
   },
   "dc-policies-a78d52e7ee.docx": {
    "error": null,
@@ -1144,7 +1144,7 @@
    "error": null,
    "pages": 38,
    "ref": 38,
-   "score": 0.9233
+   "score": 0.9288
   },
   "gov-nmpa-6.docx": {
    "error": null,
@@ -1202,8 +1202,8 @@
   }
  },
  "machine": "Windows-11-10.0.26200-SP0",
- "mean_score": 0.9465,
+ "mean_score": 0.9469,
  "page_count_compared": 200,
- "page_count_matches": 190,
+ "page_count_matches": 191,
  "platform": "windows"
 }

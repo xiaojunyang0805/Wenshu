@@ -1,0 +1,56 @@
+Upstream: (not opened; WPS-measured: a floating table placed relative to the text (w:vertAnchor="text") that is too tall for a page runs across pages in the text from its own offset below it (w:tblpY), not flush; a5beccd773's 2.65 pt)
+diff --git a/crates/layout/src/table_flow.rs b/crates/layout/src/table_flow.rs
+--- a/crates/layout/src/table_flow.rs
++++ b/crates/layout/src/table_flow.rs
+@@ -184,8 +184,12 @@ pub(crate) fn place_table(ctx: &mut Ctx, pb: &mut PageBuilder, t: &wordcraft_doc
+             return;
+         }
+         // Too tall for a page: Word lets it run across pages like a table in the text, from its
+-        // own left edge.
++        // own left edge, and (WPS) from its own offset below the text when placed relative to
++        // it: 2.65 pt (`w:tblpY="53"`) lower than a table in the text.
+         tl.x = float_table_x(pb, tl.width, &f, legacy, ctx.mirror) - pb.col_x();
++        if f.v_rel == Anchor::Paragraph && f.v_align.is_none() && f.y.is_finite() && f.y > 0.0 {
++            pb.y += f.y.min(MAX_TABLE_SPACE);
++        }
+     }
+     // Its own space above (ODT), not at the top of a page.
+     if let Some(s) = t.props.space_before.filter(|s| s.is_finite() && *s > 0.0 && !pb.at_top()) {
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -7690,6 +7690,34 @@ fn a_floating_table_taller_than_a_page_runs_across_pages() {
+     assert_eq!(rows, 80);
+ }
+ 
++/// A floating table placed relative to the text keeps its offset below it when it is too tall for
++/// a page and runs across pages in the text (WPS: `w:tblpY="53"` puts it 2.65 pt lower).
++#[test]
++fn a_floating_table_taller_than_a_page_keeps_its_offset_below_the_text() {
++    crate::test_fonts();
++    use wordcraft_doc::para::Anchor;
++    use wordcraft_doc::props::TableFloat;
++    let first_row = |y: f32| {
++        let mut d = Document::from_text("Before the table.
++After the table.");
++        let mut t = Table::new(80, 1, 300.0);
++        for (i, r) in t.rows.iter_mut().enumerate() {
++            r.cells[0].blocks = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text(&format!("Row {i}"), Default::default()))];
++        }
++        t.props.float = Some(TableFloat { h_rel: Anchor::Margin, v_rel: Anchor::Paragraph, y, overlap: false, ..Default::default() });
++        d.insert_block(StoryRef::Body, &Path::top(1), wordcraft_doc::Block::Table(t)).unwrap();
++        let l = lay(&d);
++        assert!(l.pages.len() >= 2, "{} page(s)", l.pages.len());
++        l.pages[0]
++            .items
++            .iter()
++            .find_map(|it| if let Placed::Lines { y, story: StoryRef::Body, path, .. } = it { (path.0.len() > 1).then_some(*y) } else { None })
++            .unwrap()
++    };
++    let (flush, lower) = (first_row(0.0), first_row(2.65));
++    assert!((lower - flush - 2.65).abs() < 0.01, "first row at {lower}, {flush} without the offset");
++}
++
+ /// #534: a table placed on the page (`w:tblpPr w:vertAnchor="page"`) whose anchor comes after a
+ /// page full of text goes to the next page with it, like Word, instead of covering that text.
+ #[test]

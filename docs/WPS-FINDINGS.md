@@ -942,6 +942,16 @@ squeeze from the automatic spaces in proportion. Every sweep then takes WPS's re
 remaining offsets (0.15 pt per group) are Wenshu's natural widths for the sweep's Calibri digits
 and spaces, not the rule. `a5beccd773` now starts pages as WPS through page 12 (was 9).
 
+## F56. A floating table too tall for a page keeps its offset
+
+Found 2026-11-14 in `dc-policies-a5beccd773` (pages 10 and 13): its forms tables are floating
+(`w:tblpPr w:vertAnchor="text" w:tblpY="53"`, 2.65 pt below the text). Cut down to 3–9 rows
+(fitting a page) Wenshu placed them at their offset, as WPS; with 11 rows or more (too tall for a
+page, so run across pages in the text) it dropped the offset and drew them 2.65 pt higher; WPS keeps
+it either way (`out/f55/mkrows.py`, 3–13 rows). That was enough to leave page 13's last row 0.15 pt
+short of fitting, so it moved on whole instead of splitting. Patch 0089: a too-tall floating table
+placed relative to the text starts its offset below it. `a5beccd773` now matches (19 pages).
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).
