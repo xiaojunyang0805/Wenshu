@@ -873,6 +873,12 @@ measure sizes with a break, so the break is handled elsewhere for this paragraph
 paragraph's last character, followed by an empty 20 pt run and a 20 pt mark). Next: find where. Its watermark (WordArt in
 the header) is drawn as text by Wenshu, as outlines by WPS, which line comparisons must skip.
 
+Found 2026-11-14: that break is a **page** break (`w:br w:type="page"`), which 0084 didn't cover.
+Probes (`out/f55/probe_pbr.py`, page and column breaks, 20 pt and 12 pt, with a tab and a 20 pt
+mark after it as in the document; both modes, grid on and off): WPS ignores their size too. Patch
+0087; all 20 probes match. `a5beccd773`'s pages now start as in WPS up to page 9 (was page 1); it
+is still a page over, from F55.
+
 ## F53. The wrap area includes the effect room
 
 Measured 2026-11-14 (`out/f53/mk.py`: `dc-administrative-a9f763a2b4` with only its QR code's
@@ -899,6 +905,28 @@ row, a continuation's top); all probes then match within 0.1 pt. `thinThickSmall
 at 0.5 pt) is left as it was: not measured closely enough to set its parts.
 
 With F53 and F54, `dc-administrative-a9f763a2b4` matches (4 pages).
+
+## F55. Digits change how a justified mode-15 line hangs its closing mark
+
+Measured 2026-11-14 (`out/f55/sweep_hang.py`: 新細明體 11.5 and 12 pt, zh lines of 20, 27 and 35
+characters ending in `。` exactly at the margin, 0–6 single-digit groups, each with its two
+automatic spaces; widths swept in 0.25 pt steps; 42 sweeps). Without digits WPS hangs the mark
+whole from the natural width (F42). With digits there are two ways to keep the last character:
+
+- **Whole hang**, the automatic spaces squeezed as needed: allowed down to 2.75 / 2.0 / 1.25 pt
+  under the natural width with one group (20 / 27 / 35 characters; 3.0 / 2.25 / 1.5 at 12 pt), 1.0
+  / 0.5 / not at all with two, never with three or more.
+- **Half in**: the automatic spaces squeezed until the mark's inked half fits inside (its blank
+  half past the margin). From two groups on, preferred whenever it fits, even where a whole hang
+  needs no squeeze. The squeeze it may take is half the automatic spaces' width (0.5 em for two
+  groups), capped by an amount that falls with groups and length: about 0.5 / 0.48 / 0.43 em for
+  three groups, 0.43 / 0.41 / 0.39 for four, 0.37 / 0.35 / 0.35 for six (11.5 pt; 12 pt within one
+  step).
+
+Wenshu hangs whole from the natural width whatever the digits (no squeeze). `a5beccd773`'s
+`…第1121601131號令辦理。` (four groups) is kept by Wenshu and broken before `理` by WPS (pages 9
+and 12), which is what keeps it a page over. Not implemented: the caps need a rule (cf. F42(5)'s
+r and 0080's 1 + 0.08 g), and a finer sweep.
 
 ## Still to measure
 

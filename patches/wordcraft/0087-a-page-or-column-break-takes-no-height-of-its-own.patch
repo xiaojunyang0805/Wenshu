@@ -1,0 +1,55 @@
+Upstream: (not opened; WPS-measured, F52 continued: a page or column break ending a line with other characters takes no height of its own, as a line break (0084); 20 probes, both modes, with and without a line grid)
+diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
+--- a/crates/layout/src/para/lines.rs
++++ b/crates/layout/src/para/lines.rs
+@@ -433,13 +433,13 @@ impl<'e> Breaker<'e> {
+         let rp = &self.rp;
+         let mut ex = Extents { asc: 0.0, desc: 0.0, obj_asc: 0.0, obj_desc: 0.0, text: false };
+         let mut any = false;
+-        // A line break ending a line with other characters takes no height of its own (WPS, both
+-        // modes: a 20 pt break after 12 pt text leaves the line as tall as a 12 pt one); a line
+-        // of only the break keeps its size.
++        // A line, page or column break ending a line with other characters takes no height of
++        // its own (WPS, both modes: a 20 pt break after 12 pt text leaves the line as tall as a
++        // 12 pt one); a line of only the break keeps its size.
+         let mut break_style = None;
+         let dropped = pl.drop_cap.map_or(0, |d| d.0);
+         for (k, c) in pl.clusters.get(c0..c1).into_iter().flatten().enumerate() {
+-            if c.kind == ClKind::LineBreak {
++            if matches!(c.kind, ClKind::LineBreak | ClKind::PageBreak | ClKind::ColumnBreak) {
+                 break_style = Some(c.style);
+                 continue;
+             }
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -10656,6 +10656,29 @@ Next",
+     assert!(large[0] > small[0] + 2.0, "a line of only the break keeps its size: {large:?} vs {small:?}");
+ }
+ 
++/// A page or column break ending a line takes no height of its own either (WPS, both modes, with
++/// and without a line grid: 12 pt text before a 20 pt page or column break sits where it does
++/// before a 12 pt one).
++#[test]
++fn a_page_or_column_break_takes_no_height_of_its_own() {
++    crate::test_fonts();
++    for brk in [wordcraft_doc::para::PAGE_BREAK, wordcraft_doc::para::COLUMN_BREAK] {
++        let text = format!("Text{brk}Next");
++        let first = |break_size: f32| {
++            let mut d = Document::new();
++            d.body = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text(&text, Default::default()))];
++            d.format_range(&Pos::body(0, 0), &Pos::body(0, text.len()), &|c| c.size = Some(12.0)).unwrap();
++            let at = text.find(brk).unwrap();
++            d.format_range(&Pos::body(0, at), &Pos::body(0, at + brk.len_utf8()), &|c| c.size = Some(break_size)).unwrap();
++            let l = lay(&d);
++            let para = l.pages[0].items.iter().find_map(|i| if let Placed::Lines { para, .. } = i { Some(para.clone()) } else { None }).unwrap();
++            para.lines.first().map(|l| l.height).unwrap()
++        };
++        let (small, large) = (first(12.0), first(20.0));
++        assert!((small - large).abs() < 0.01, "{brk:?}: a 20 pt break: {large}, a 12 pt one: {small}");
++    }
++}
++
+ /// An empty last paragraph right after a nested table takes no room: the cell ends at the nested
+ /// table's bottom (WPS Office, probed 2026-11-04 with and without the line grid). With text, or
+ /// with a second empty paragraph, the paragraphs count.
