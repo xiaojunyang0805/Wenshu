@@ -135,9 +135,10 @@ pages kept, saved vs original 0.9950, 168 pixel-identical.
 | 0081-text-below-its-top-and-bottom-object-keeps-its-space-before | layout | F50: text below its own paragraph's top-and-bottom object starts the paragraph's space before below it, also at the top of a page or a cell (`keep_space_before_below`, body flow and boxes; `FloatAnchor::own_before`). 16 WPS probes match. Layout test (fails without: text at the picture's bottom despite 9 pt before) | not opened: WPS-measured |
 | 0082-wps-ignores-hide-mark | layout | F51: a cell with `w:hideMark` lays out as any other (WPS, both modes); upstream follows Word, where the empty last paragraph takes no room. The upstream test becomes `a_hidden_cell_mark_changes_nothing` | not for upstream: WPS behaviour against Word's |
 | 0083-row-split-keeps-a-picture-with-its-paragraph | layout | F51: at a row split a picture or graphic anchored in a paragraph whose first line moves on goes with it (`leaving_paragraphs`, `anchored_in`). Layout test (fails without: the picture on page 1, its caption on page 2) | a candidate: Word keeps an anchor with its object too |
+| 0084-a-line-break-takes-no-height-of-its-own | layout | F52: a line break ending a line with other characters takes no height of its own; a line of only the break keeps its size. 12 WPS probes match. Layout test (fails without: a 30.5 pt line, not 18.3) | not opened: WPS-measured |
 | winit/0001-windows-ime-results-once-and-unannounced | winit (storytold fork, Windows) | An empty composition string beside a result ends the composition (Wubi: every word was committed twice); a result with no composition announced is committed (Jidian Wubi's full-width punctuation was lost), unless the last composition already committed at its end. Hand-tested | could go upstream (storytold/winit, winit) |
 
-All 83 apply in order on `05f781cf` (0066–0075 added 2026-11-13, 0076–0083 2026-11-14; re-fitted 2026-11-09; before that, 64 on `3b7f7ed`, checked 2026-11-04); the
+All 84 apply in order on `05f781cf` (0066–0075 added 2026-11-13, 0076–0084 2026-11-14; re-fitted 2026-11-09; before that, 64 on `3b7f7ed`, checked 2026-11-04); the
 `wordcraft-layout` (613), `-fonts` (109 + 1), `-doc` (242), `-docx` (375 + 134 integration) and
 `-engine` (1095) suites pass with them, and fmt and clippy are clean.
 

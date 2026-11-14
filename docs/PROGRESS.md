@@ -2,6 +2,18 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-14 (6): a line break takes no height of its own (0084, F52)
+
+- **`a5beccd773`** (a page over): not the semicolon of the 2026-11-04 table any more. Page 1's last
+  line (`信封請註明…`) went over in Wenshu: a 20 pt line break after the 12 pt text made the line
+  taller. WPS probes (`out/f52`, both modes, grid on and off): the break's size doesn't count, nor
+  an empty run after it. **0084**; all 12 probes match; a test failing without it. The document
+  itself is unchanged: there the break's size still decides the line's place by another path
+  (a copy with a 12 pt break matches); not yet traced. Its header watermark comes out as text in
+  Wenshu's PDF and as outlines in WPS's: line comparisons must skip it.
+- **Gates:** Windows 189 / 200, 0.9457; Linux 189 / 200, 0.934; unchanged.
+- **Next:** that other path in `a5beccd773`; `a9f763a2b4`; `39de0888eb`'s list-label line.
+
 ## 2026-11-14 (5): 189 / 200 on both: 8f343b7812 matches (0082, 0083)
 
 - **The empty row** at page 3's bottom (`8f343b7812`): its cell has `w:hideMark`. Probes in both

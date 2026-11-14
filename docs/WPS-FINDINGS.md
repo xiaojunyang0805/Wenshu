@@ -855,6 +855,20 @@ exactly with 9 pt before and after, arriving at a page bottom with 2, 10 and 25 
 
 With F50, `dc-creative-8f343b7812` now matches (6 pages, every page start as in WPS).
 
+## F52. A line break takes no height of its own
+
+Measured 2026-11-14 (`out/f52/probe_br.py`, both modes, with and without a line grid): 12 pt text
+ended by a line break in a 20 pt run makes a line as tall as with a 12 pt break; an empty 20 pt run
+after the break adds no height to the next line either (it takes the paragraph's other text).
+Wenshu counted the break's size (a 30.5 pt line instead of 18.3). Patch 0084: a line break ending
+a line with other characters is left out of its height; a line of only the break keeps its size
+(not measured). All 12 probes match.
+
+Found in `dc-policies-a5beccd773` (its 20 pt break after a 12 pt line at page 1's bottom), whose
+own case is still off: there the break's size still decides the line's place (a copy with a 12 pt
+break matches WPS), by a path the probes don't take; not yet traced. Its watermark (WordArt in
+the header) is drawn as text by Wenshu, as outlines by WPS, which line comparisons must skip.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).
