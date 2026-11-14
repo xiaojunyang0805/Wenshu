@@ -137,9 +137,10 @@ pages kept, saved vs original 0.9950, 168 pixel-identical.
 | 0083-row-split-keeps-a-picture-with-its-paragraph | layout | F51: at a row split a picture or graphic anchored in a paragraph whose first line moves on goes with it (`leaving_paragraphs`, `anchored_in`). Layout test (fails without: the picture on page 1, its caption on page 2) | a candidate: Word keeps an anchor with its object too |
 | 0084-a-line-break-takes-no-height-of-its-own | layout | F52: a line break ending a line with other characters takes no height of its own; a line of only the break keeps its size. 12 WPS probes match. Layout test (fails without: a 30.5 pt line, not 18.3) | not opened: WPS-measured |
 | 0085-wrap-area-keeps-the-effect-room-clear | layout | F53: a floating object's wrap area includes the room its file keeps for effects (`wp:effectExtent`). WPS probes at 0, 1.5, 10, 20 pt match. Unit test (fails without: the area starts at 1.0, not −0.5) | not opened: WPS-measured |
+| 0086-double-borders-take-the-room-of-their-lines | layout | F54: a double or triple cell border takes the room of all its lines and gaps (3 × / 5 × its width) above a row's text and in its height. WPS probes (single, double at 0.5 and 1.5 pt, triple) match within 0.1 pt. Layout test (fails without: a 40.5 pt row pitch, not 41.5) | not opened: WPS-measured |
 | winit/0001-windows-ime-results-once-and-unannounced | winit (storytold fork, Windows) | An empty composition string beside a result ends the composition (Wubi: every word was committed twice); a result with no composition announced is committed (Jidian Wubi's full-width punctuation was lost), unless the last composition already committed at its end. Hand-tested | could go upstream (storytold/winit, winit) |
 
-All 85 apply in order on `05f781cf` (0066–0075 added 2026-11-13, 0076–0085 2026-11-14; re-fitted 2026-11-09; before that, 64 on `3b7f7ed`, checked 2026-11-04); the
+All 86 apply in order on `05f781cf` (0066–0075 added 2026-11-13, 0076–0086 2026-11-14; re-fitted 2026-11-09; before that, 64 on `3b7f7ed`, checked 2026-11-04); the
 `wordcraft-layout` (613), `-fonts` (109 + 1), `-doc` (242), `-docx` (375 + 134 integration) and
 `-engine` (1095) suites pass with them, and fmt and clippy are clean.
 

@@ -885,7 +885,20 @@ wrap area. Patch 0085 adds it (with a rotated object's bounds, whichever is larg
 In `a9f763a2b4` this was the "squeezed `、`": with 1.5 pt less room the lines beside the QR code
 can no longer fit a squeezed mark, and page 3 now breaks line for line as in WPS. The document is
 still a page short: column 2's rota table rows come out 2–4 pt shorter than WPS's, which leaves
-room on page 3 for the two empty paragraphs that end the document (WPS: an empty page 4).
+room on page 3 for the two empty paragraphs that end the document (WPS: an empty page 4). That is
+F54.
+
+## F54. A double border takes the room of all its lines
+
+Measured 2026-11-14 (`out/f53/mktbl2.py`: `a9f763a2b4` cut to its rota table, its cells' double
+borders swapped): against single borders, each row under a 0.5 pt double border is 1 pt taller,
+3 pt under a 1.5 pt one, and 2 pt under a 0.5 pt triple one: the border takes all its lines and
+gaps, each as wide as its width (3 × and 5 × the width). WPS draws the double's lines 1 pt apart at
+0.5 pt. Wenshu kept only the width. Patch 0086 (the cell text's top band, the room kept below a
+row, a continuation's top); all probes then match within 0.1 pt. `thinThickSmallGap` (about +1.5 pt
+at 0.5 pt) is left as it was: not measured closely enough to set its parts.
+
+With F53 and F54, `dc-administrative-a9f763a2b4` matches (4 pages).
 
 ## Still to measure
 

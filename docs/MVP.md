@@ -49,7 +49,7 @@ in a fallback face takes SimSun's box as on Windows (0071). Then to **187 / 200*
 document: text in a missing Windows Chinese face takes that face's fixed half-em / one-em widths (0075).
 
 Upstream: 9 PRs on WordCraft (8 ready for review), none merged; the first human review arrived on #5006
-(kennyfs, Word measurements that agree with the WPS-measured rules). The patch queue is 85
+(kennyfs, Word measurements that agree with the WPS-measured rules). The patch queue is 86
 WordCraft patches and 1 winit patch. Upstream `main` is 114 commits past our pin `05f781cf`.
 
 ## Next (decided 2026-11-09)
@@ -119,5 +119,5 @@ beyond what upstream offers.
 3. **Governance:** work as a CJK working group inside the storytold/ArtCraft community, or as a
    separate organisation? This affects branding and CLA.
 4. **Engine risk:** WordCraft is young (a few weeks old when Wenshu pinned it on 2026-10-30). If
-   upstream stalls, the patch queue (85 WordCraft patches and 1 winit patch by 2026-11-14)
+   upstream stalls, the patch queue (86 WordCraft patches and 1 winit patch by 2026-11-14)
    becomes a fork; none has been merged upstream yet (9 PRs open, no maintainer review). `wenshu-core` keeps that cost contained.

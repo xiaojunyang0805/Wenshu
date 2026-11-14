@@ -80,9 +80,9 @@
   },
   "dc-administrative-a9f763a2b4.docx": {
    "error": null,
-   "pages": 3,
+   "pages": 4,
    "ref": 4,
-   "score": 0.9158
+   "score": 0.9663
   },
   "dc-administrative-b7e49d691e.docx": {
    "error": null,
@@ -124,7 +124,7 @@
    "error": null,
    "pages": 4,
    "ref": 4,
-   "score": 0.9197
+   "score": 0.9286
   },
   "dc-administrative-f96ef99a79.docx": {
    "error": null,
@@ -244,7 +244,7 @@
    "error": null,
    "pages": 6,
    "ref": 6,
-   "score": 0.9695
+   "score": 0.9717
   },
   "dc-creative-a23594df1d.docx": {
    "error": null,
@@ -292,7 +292,7 @@
    "error": null,
    "pages": 4,
    "ref": 4,
-   "score": 0.864
+   "score": 0.8639
   },
   "dc-educational-b8de3ae296.docx": {
    "error": null,
@@ -358,7 +358,7 @@
    "error": null,
    "pages": 3,
    "ref": 3,
-   "score": 0.9153
+   "score": 0.9536
   },
   "dc-forms-40991f97da.docx": {
    "error": null,
@@ -514,7 +514,7 @@
    "error": null,
    "pages": 14,
    "ref": 14,
-   "score": 0.9543
+   "score": 0.9546
   },
   "dc-policies-1403def07e.docx": {
    "error": null,
@@ -578,9 +578,9 @@
   },
   "dc-policies-a5beccd773.docx": {
    "error": null,
-   "pages": 20,
+   "pages": 21,
    "ref": 19,
-   "score": 0.8636
+   "score": 0.864
   },
   "dc-policies-a78d52e7ee.docx": {
    "error": null,
@@ -676,7 +676,7 @@
    "error": null,
    "pages": 10,
    "ref": 10,
-   "score": 0.9379
+   "score": 0.9446
   },
   "dc-reports-0f0af1ece4.docx": {
    "error": null,
@@ -1202,8 +1202,8 @@
   }
  },
  "machine": "Windows-11-10.0.26200-SP0",
- "mean_score": 0.9457,
+ "mean_score": 0.9459,
  "page_count_compared": 200,
- "page_count_matches": 189,
+ "page_count_matches": 190,
  "platform": "windows"
 }

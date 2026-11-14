@@ -1,0 +1,87 @@
+Upstream: (not opened; WPS-measured, F54: a double or triple cell border takes the room of all its lines and gaps (3x / 5x its width) above a row's text and in its height: rows under 0.5 pt doubles 1 pt taller than under singles, 3 pt at 1.5 pt, 2 pt under 0.5 pt triples)
+diff --git a/crates/layout/src/table.rs b/crates/layout/src/table.rs
+--- a/crates/layout/src/table.rs
++++ b/crates/layout/src/table.rs
+@@ -3,7 +3,7 @@
+ //! moves whole rows or splits them between lines (`split_row`).
+ 
+ use wordcraft_doc::numbering::Counters;
+-use wordcraft_doc::props::{Align, Border, Borders, HeightRule, Rgb, TextDirection, VAlign, VMerge};
++use wordcraft_doc::props::{Align, Border, BorderStyle, Borders, HeightRule, Rgb, TextDirection, VAlign, VMerge};
+ use wordcraft_doc::styles::{PartSet, TablePart, TableStyleProps};
+ use wordcraft_doc::{Block, Blocks, Paragraph, Path, Row, StoryRef, Table};
+ use wordcraft_geom::Rect;
+@@ -89,6 +89,21 @@ struct Turned {
+ 
+ /// The number of grid columns of `t` ([`Table::cols`]), which walks every row (each row counted
+ /// as a step of [`crate::work`]).
++/// The room a visible border takes across its edge: its width, or for a double or triple border
++/// all of its lines and the gaps between them, each as wide as the width (WPS, measured: rows
++/// under a 0.5 pt double border are 1 pt taller than under a single one, 3 pt at 1.5 pt, and
++/// 2 pt under a 0.5 pt triple one).
++fn band(b: Option<Border>) -> f32 {
++    b.filter(Border::is_visible).map_or(0.0, |b| {
++        let w = b.width.clamp(0.0, 12.0);
++        match b.style {
++            BorderStyle::Double => w * 3.0,
++            BorderStyle::Triple => w * 5.0,
++            _ => w,
++        }
++    })
++}
++
+ fn grid_cols(t: &Table) -> usize {
+     crate::work::steps(t.rows.len());
+     t.cols()
+@@ -599,7 +614,6 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
+             }
+             // Word keeps the cell's text clear of its top border (and the last row's of its bottom
+             // border): the border's width sits on top of the cell margin.
+-            let band = |b: Option<Border>| b.filter(Border::is_visible).map_or(0.0, |b| b.width.clamp(0.0, 12.0));
+             let (band_t, band_b) = (band(borders.top), if ri + 1 == nrows { band(borders.bottom) } else { 0.0 });
+             // A shared edge painted by the row above still clears this cell's text and minimum.
+             let band_t = if band_t > 0.0 || cell.props.vmerge == VMerge::Continue {
+@@ -892,7 +906,7 @@ fn finish_table_rows(ctx: &mut Ctx, input: TableRows<'_>) -> TableLayout {
+                 story,
+                 clip: exact && c.h > span_h + 0.01,
+             });
+-            let top = c.margins[0] + c.borders.top.filter(Border::is_visible).map_or(0.0, |b| b.width.clamp(0.0, 12.0));
++            let top = c.margins[0] + band(c.borders.top);
+             parts.push(CellPart { top, items: first..items.len(), end, align });
+         }
+         out.push(RowLayout {
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -6097,6 +6097,31 @@ fn at_least_rows_add_cell_margins_and_border_bands() {
+     assert!((tops[0] - (72.0 + 0.5 + 5.0)).abs() < 0.01, "first cell text at {}", tops[0]);
+ }
+ 
++/// A double or triple border takes the room of all its lines and gaps, each as wide as the
++/// border's width (WPS, measured: rows under 0.5 pt double borders 1 pt taller than under single
++/// ones, under triple ones 2 pt).
++#[test]
++fn a_double_border_takes_the_room_of_its_lines_and_gap() {
++    crate::test_fonts();
++    use wordcraft_doc::props::{Border, BorderStyle, Borders, HeightRule};
++    for (style, band) in [(BorderStyle::Single, 0.5), (BorderStyle::Double, 1.5), (BorderStyle::Triple, 2.5)] {
++        let mut d = Document::from_text("");
++        let line = Some(Border { style, width: 0.5, color: None, space: 0.0 });
++        let mut t = Table::new(2, 1, 200.0);
++        t.props.borders = Some(Borders { top: line, left: line, bottom: line, right: line, between: line, inside_v: line });
++        t.props.cell_margins = Some([5.0, 5.4, 5.0, 5.4]);
++        for (r, text) in t.rows.iter_mut().zip(["one", "two"]) {
++            r.props.height = Some(30.0);
++            r.props.height_rule = HeightRule::AtLeast;
++            r.cells[0].blocks = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text(text, Default::default()))];
++        }
++        d.body = vec![std::sync::Arc::new(wordcraft_doc::Block::Table(t))];
++        let tops = line_tops(&lay(&d));
++        assert!((tops[1] - tops[0] - (40.0 + band)).abs() < 0.01, "{style:?}: row pitch {}", tops[1] - tops[0]);
++        assert!((tops[0] - (72.0 + band + 5.0)).abs() < 0.01, "{style:?}: first cell text at {}", tops[0]);
++    }
++}
++
+ /// Word gives every cell in a row the row's largest top and bottom margins: a cell without its
+ /// own lines up with a neighbour that has them, and the row is as tall as if all had them.
+ #[test]
