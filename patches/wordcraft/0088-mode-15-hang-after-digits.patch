@@ -1,0 +1,253 @@
+Upstream: (not opened; WPS-measured, F55: a justified mode-15 line ending in a closing mark that may hang, after automatic spaces beside digits: the mark's inked half kept inside when the spaces can give the room (half of each, capped 0.905/(1+n/102.6)/(1+0.08a) em), else hung whole only with one or two digit groups (5/12-n/120, 0.2125-n/171 em of squeeze); 35 sweeps at 0.05 pt)
+diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
+--- a/crates/layout/src/para.rs
++++ b/crates/layout/src/para.rs
+@@ -144,6 +144,32 @@ pub(crate) fn justified_squeeze(k: f32, n: f32, g: usize) -> f32 {
+     k / (k + n / 32.0) / (1.0 + 0.08 * g.min(1000) as f32)
+ }
+ 
++/// How a justified mode-15 line may keep a closing mark that hangs past the margin when automatic
++/// spaces beside digits or Latin text come before it ([`ParaLayout::digit_hang`]): the room the
++/// automatic spaces may give up with the mark's inked half inside the margin, and with the mark
++/// hung whole (`None`: not at all).
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub(crate) struct DigitHang {
++    pub(crate) half: f32,
++    pub(crate) whole: Option<f32>,
++}
++
++/// [`DigitHang`] for `a` automatic spaces on a line `n` em long, in ems (WPS, F55: 新細明體 11.5 and
++/// 12 pt, 15- to 35-character lines, 0–6 digit groups, 0.05 pt steps). Half in: half of each space,
++/// at most 0.905 / (1 + n / 102.6) / (1 + 0.08 a) em. Whole: only with one group (5/12 − n/120 em)
++/// or two (0.2125 − n/171 em), the spaces giving up half each at most.
++pub(crate) fn digit_hang_room(a: usize, gaps: f32, n: f32) -> DigitHang {
++    let a_f = a.min(1000) as f32;
++    let half = (gaps / 2.0).min(0.905 / (1.0 + n / 102.6) / (1.0 + 0.08 * a_f));
++    let whole = match a {
++        0 => Some(0.0),
++        1 | 2 => Some(5.0 / 12.0 - n / 120.0),
++        3 | 4 => Some(0.2125 - n / 171.4),
++        _ => None,
++    };
++    DigitHang { half, whole: whole.filter(|w| *w >= 0.0).map(|w| w.min(gaps / 2.0)) }
++}
++
+ /// Room one side of a full-width punctuation mark may give up when its line is squeezed.
+ #[derive(Clone, Copy, Debug, PartialEq)]
+ pub struct Squeeze {
+@@ -210,6 +236,29 @@ impl ParaLayout {
+         }
+     }
+ 
++    /// The automatic spaces of clusters `c0..c1` ([`auto_space`]) that are not a closing mark's
++    /// free blank half: (cluster, width).
++    pub(crate) fn gaps(&self, c0: usize, c1: usize) -> impl Iterator<Item = (usize, f32)> + '_ {
++        self.auto_space.iter().filter(move |(k, w)| (c0..c1).contains(k) && *w > 0.0 && self.end_marks.binary_search(k).is_err()).copied()
++    }
++
++    /// [`DigitHang`] in points for the line `c0..=j` ending in a mark that may hang (F55): `None`
++    /// unless the line is justified in mode 15, `j` may hang and automatic spaces come before it.
++    pub(crate) fn digit_hang(&self, c0: usize, j: usize) -> Option<DigitHang> {
++        if self.squeeze_rule != SqueezeRule::Justified || self.hang_at(j) <= 0.0 {
++            return None;
++        }
++        let (a, gaps) = self.gaps(c0, j).fold((0usize, 0.0f32), |(a, w), (_, g)| (a + 1, w + g));
++        let em = self.clusters.get(j).map_or(0.0, |c| c.adv);
++        if a == 0 || !(em > 0.0 && gaps.is_finite()) {
++            return None;
++        }
++        let width: f32 = self.clusters.get(c0..=j).unwrap_or_default().iter().map(|c| c.adv).sum();
++        let n = if width.is_finite() { (width / em).clamp(0.0, 10_000.0) } else { 0.0 };
++        let h = digit_hang_room(a, gaps / em, n);
++        Some(DigitHang { half: h.half * em, whole: h.whole.map(|w| w * em) })
++    }
++
+     fn ends_in_free_mark(&self, c0: usize, c1: usize) -> bool {
+         c1 > c0 && self.end_marks.binary_search(&(c1 - 1)).is_ok()
+     }
+diff --git a/crates/layout/src/para/lines.rs b/crates/layout/src/para/lines.rs
+--- a/crates/layout/src/para/lines.rs
++++ b/crates/layout/src/para/lines.rs
+@@ -596,8 +596,11 @@ impl<'e> Breaker<'e> {
+         } else {
+             0.0
+         };
++        // After automatic spaces a justified mode-15 line keeps such a mark's inked half inside
++        // when they can make the room, else hangs it whole if they may (F55).
++        let (hang, gaps) = end_hang(pl, sc, c1, hang);
+         if display.is_none() && last_tab.is_none() {
+-            squeeze_line(pl, sc, c1, hang);
++            squeeze_line(pl, sc, c1, hang, gaps);
+         }
+         let content_end = content_end(pl, sc, c1);
+         // A mark hanging into the margin leaves no slack, and the line isn't shrunk for it.
+@@ -766,21 +769,80 @@ struct Measure {
+     text_desc: f32,
+ }
+ 
++/// The room a cluster `j` ending the line `c0..=j` may take past the margin: what the marks squeeze
++/// (`squeeze`, or a grid hang), or for a mark that may hang whole, that beside what the marks
++/// before it squeeze. After automatic spaces on a justified mode-15 line (F55) the mark's inked
++/// half must fit with what they give up, or the mark hangs whole with less from them, or not at
++/// all.
++fn end_room(pl: &ParaLayout, (c0, j): (usize, usize), squeeze: f32, overflow: f32) -> f32 {
++    if overflow <= 0.0 {
++        return squeeze;
++    }
++    let before = pl.squeeze_room(c0, j);
++    match pl.digit_hang(c0, j) {
++        Some(h) => (squeeze + h.half).max(h.whole.map_or(0.0, |w| before + overflow + w)),
++        None => (before + overflow).max(squeeze),
++    }
++}
++
++/// The room the character before a mark that may hang has when automatic spaces come first
++/// (F55): what they may give up for the mark, which is then checked exactly; the line breaks
++/// before the character when the mark can't be kept.
++fn before_hang(pl: &ParaLayout, c0: usize, j: usize) -> f32 {
++    pl.digit_hang(c0, j + 1).map_or(0.0, |h| h.whole.unwrap_or(0.0).max(h.half) + pl.squeeze_room(c0, j + 1))
++}
++
++/// How far the line `c0..c1` lets its last cluster hang past the margin, and how much its
++/// automatic spaces give up for it ([`end_room`]): the mark's inked half kept inside when that
++/// fits, else hung whole.
++fn end_hang(pl: &ParaLayout, sc: &Scan, c1: usize, hang: f32) -> (f32, f32) {
++    let Some(h) = (c1 > sc.c0).then(|| pl.digit_hang(sc.c0, c1 - 1)).flatten() else { return (hang, 0.0) };
++    let over = content_end(pl, sc, c1) - sc.right_edge;
++    if over <= pl.squeeze_room(sc.c0, c1) + h.half + 0.01 { (0.0, h.half) } else { (hang, h.whole.unwrap_or(0.0)) }
++}
++
++/// Takes `amount` out of the automatic spaces of the line `c0..c1` (F55), each in proportion to
++/// its width: the clusters after each one move left.
++fn squeeze_gaps(pl: &ParaLayout, sc: &mut Scan, c1: usize, amount: f32) {
++    let c0 = sc.c0;
++    let total: f32 = pl.gaps(c0, c1).map(|(_, w)| w).sum();
++    if !(amount > 0.0 && total > 0.0) {
++        return;
++    }
++    let f = (amount / total).min(0.5);
++    let mut shift = 0.0;
++    let mut gaps = pl.gaps(c0, c1).peekable();
++    for k in c0..c1 {
++        if let Some(x) = sc.xs.get_mut(k - c0) {
++            *x -= shift;
++        }
++        while let Some((_, w)) = gaps.next_if(|(g, _)| *g == k) {
++            shift += f * w;
++        }
++    }
++}
++
+ /// Punctuation compression: a line that overflows (it fitted only by counting its marks' squeeze
+ /// room) takes the overflow out of its compressible marks, each in proportion to its blank half
+ /// (the same share at one size), never more than the line's room, so it ends at the margin as
+ /// WPS lays it out. An opening mark moves left itself; after a closing mark the rest of the line
+ /// does.
+-fn squeeze_line(pl: &ParaLayout, sc: &mut Scan, c1: usize, hang: f32) {
++fn squeeze_line(pl: &ParaLayout, sc: &mut Scan, c1: usize, hang: f32, gaps: f32) {
+     let c0 = sc.c0;
+     let over = content_end(pl, sc, c1) - sc.right_edge - hang;
+     let room = pl.squeeze_room(c0, c1);
+     let marks = pl.squeeze_marks(c0, c1);
+     let halves: f32 = marks.iter().map(|s| s.room).sum();
+-    if over <= 0.0 || room <= 0.0 || halves <= 0.0 {
++    if over <= 0.0 {
++        return;
++    }
++    // What the marks can't give, automatic spaces may (F55), each in proportion to its width.
++    let taken = if room > 0.0 && halves > 0.0 { over.min(room) } else { 0.0 };
++    squeeze_gaps(pl, sc, c1, (over - taken).min(gaps));
++    if taken <= 0.0 {
+         return;
+     }
+-    let f = (over.min(room) / halves).min(1.0);
++    let f = (taken / halves).min(1.0);
+     let (mut shift, mut m) = (0.0, 0);
+     for k in c0..=c1 {
+         let mut after = 0.0;
+@@ -990,7 +1052,7 @@ impl Scan {
+         // So may a closing mark under `w:overflowPunct`, whole, beside what the marks before it
+         // squeeze (WPS: `…意见、` fits by squeezing an earlier 、 and hanging the last).
+         let overflow = pl.hang_at(j);
+-        let room = if overflow > 0.0 { (pl.squeeze_room(c0, j) + overflow).max(squeeze.max(hang)) } else { squeeze.max(hang) };
++        let room = end_room(pl, (c0, j), squeeze.max(hang), overflow).max(before_hang(pl, c0, j));
+         let fits = absorbs
+             || self.x + advance - pl.auto_space_after(j) <= self.right_edge + shrink + room + 0.01
+             || c.kind == ClKind::Space
+diff --git a/crates/layout/src/tests/compress.rs b/crates/layout/src/tests/compress.rs
+--- a/crates/layout/src/tests/compress.rs
++++ b/crates/layout/src/tests/compress.rs
+@@ -295,6 +295,73 @@ fn the_mode_15_limit_follows_wps_with_automatic_spaces() {
+     }
+ }
+ 
++/// Mode 15, justified, a mark ending the line past the margin after digits (F55): what the automatic
++/// spaces give up with the mark's inked half inside, and with it hung whole, against WPS (12 pt,
++/// 0.05 pt steps): n characters, g digit groups (two automatic spaces of 0.25 em each), points.
++#[test]
++fn the_mode_15_hang_after_digits_follows_wps() {
++    // (n, g, half, whole: None when WPS never hangs whole)
++    let cases = [
++        (20.0, 1, 3.1, Some(3.1)),
++        (25.0, 1, 3.1, Some(2.5)),
++        (35.0, 1, 3.1, Some(1.5)),
++        (15.0, 2, 6.05, Some(1.55)),
++        (25.0, 2, 6.05, Some(0.8)),
++        (35.0, 2, 6.05, Some(0.15)),
++        (20.0, 3, 6.2, None),
++        (35.0, 3, 5.4, None),
++        (25.0, 4, 5.3, None),
++        (20.0, 6, 4.65, None),
++        (35.0, 6, 4.25, None),
++    ];
++    for (n, g, half, whole) in cases {
++        let h = crate::para::digit_hang_room(2 * g, g as f32 * 0.5, n);
++        assert!((h.half * 12.0 - half).abs() <= 0.25, "{n} chars, {g} groups: half in {} pt, WPS {half}", h.half * 12.0);
++        match (h.whole, whole) {
++            (Some(got), Some(wps)) => assert!((got * 12.0 - wps).abs() <= 0.25, "{n} chars, {g} groups: whole {} pt, WPS {wps}", got * 12.0),
++            (None, None) => {}
++            (got, wps) => panic!("{n} chars, {g} groups: whole {got:?}, WPS {wps:?}"),
++        }
++    }
++}
++
++/// Mode 15, justified, a closing mark that may hang ending the line after digits (F55): with four
++/// digit groups WPS doesn't hang it whole, and keeps it only if the automatic spaces can bring its
++/// inked half inside (not at 0.02 em past the character before it: that goes down with it); with
++/// one group it hangs it whole with the spaces squeezed (0.2 em short of the natural width).
++#[test]
++fn mode_15_hangs_a_mark_after_digits_as_wps() {
++    let lay15 = |text: &str, width: Option<f32>| {
++        let mut d = doc(text, CharSpacing::CompressPunctuation, width);
++        d.settings.compat_mode = 15;
++        if let Some(Block::Para(p)) = d.body.first_mut().map(Arc::make_mut) {
++            p.props.align = Some(Align::Justify);
++            p.props.auto_space_dn = Some(true);
++            for r in &mut p.runs {
++                r.props.lang_ea = Some("zh-TW".into());
++            }
++        }
++        first_para(&lay(&d))
++    };
++    // Four groups take no whole hang whatever the mark's width; the squeezed whole hang of one
++    // group needs full-width marks.
++    let cases: &[(&str, f32, bool)] = if full_width_marks() {
++        &[("甲中1中中2中中3中中4中中中中中理。", 0.02, false), ("甲中中1中中中中中中中中中中中中理。", -0.2, true)]
++    } else {
++        &[("甲中1中中2中中3中中4中中中中中理。", 0.02, false)]
++    };
++    for &(text, past, kept) in cases {
++        let n = text.chars().count();
++        let g = lay15(text, None);
++        assert!(!g.auto_space.is_empty(), "automatic spaces beside the digits");
++        // The natural width up to the mark (the end of the character before it), in ems.
++        let natural = (g.lines[0].xs[n - 1] - g.lines[0].xs[0]) / SIZE;
++        let g = lay15(text, Some(natural + past));
++        let chars = g.lines[0].c1 - g.lines[0].c0;
++        assert_eq!(chars == n, kept, "{text} on a line {past} em past its natural width: {chars} of {n} characters kept");
++    }
++}
++
+ /// Mode 15, justified: automatic spaces beside digits aren't squeezed, but each cuts what the marks
+ /// may give, by 1 / (1 + 0.08 g) for g of them (WPS sweeps: two commas and two digit runs on a
+ /// 22-unit line give up 0.54 em in all, not the 0.74 of the same line's commas without digits).

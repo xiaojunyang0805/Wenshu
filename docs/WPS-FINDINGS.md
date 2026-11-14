@@ -925,8 +925,22 @@ whole from the natural width (F42). With digits there are two ways to keep the l
 
 Wenshu hangs whole from the natural width whatever the digits (no squeeze). `a5beccd773`'s
 `…第1121601131號令辦理。` (four groups) is kept by Wenshu and broken before `理` by WPS (pages 9
-and 12), which is what keeps it a page over. Not implemented: the caps need a rule (cf. F42(5)'s
-r and 0080's 1 + 0.08 g), and a finer sweep.
+and 12).
+
+**The rule** (`out/f55/sweep_fine.py`: 12 pt, 15–35 characters, 0–6 groups, 0.05 pt steps; the
+0.25 pt sweeps at 11.5 pt agree within a step), for a automatic spaces on a line n em long:
+
+- Half in: the spaces give up half each, at most 0.905 / (1 + n / 102.6) / (1 + 0.08 a) em (the
+  cap is the same for every group count once divided by 0.0080's 1 + 0.08 a; within 0.12 pt).
+- Whole: one group (a = 2) at most 5/12 − n/120 em; two (a = 4) 0.2125 − n/171 em; three or more
+  not at all, even where no squeeze is needed.
+- Half in wins whenever it fits.
+
+Patch 0088: the line keeps the mark when either fits (the character before it is let through on
+that room, the mark itself checked exactly), and lays it out in the regime WPS picks, taking the
+squeeze from the automatic spaces in proportion. Every sweep then takes WPS's regime; the
+remaining offsets (0.15 pt per group) are Wenshu's natural widths for the sweep's Calibri digits
+and spaces, not the rule. `a5beccd773` now starts pages as WPS through page 12 (was 9).
 
 ## Still to measure
 
