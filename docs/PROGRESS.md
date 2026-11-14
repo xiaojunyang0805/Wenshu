@@ -2,6 +2,22 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-14 (9): a5beccd773's break was a page break (0087); F55 measured
+
+- **`a5beccd773`:** the 20 pt break at page 1's bottom is `w:br w:type="page"`, which 0084 (line
+  breaks) didn't cover. Probes (`out/f55/probe_pbr.py`, page and column breaks, both modes, grid on
+  and off): WPS ignores their size too. **0087**; all 20 probes match; a test failing without it.
+  The document's pages now start as in WPS up to page 9 (was page 1); score 0.86 → 0.91.
+- **What keeps it a page over** (F55): a justified mode-15 line `…第1121601131號令辦理。` with four
+  digit groups. Wenshu hangs `。` whole; WPS breaks before `理`. 42 sweeps (0–6 groups, 20/27/35
+  characters, 11.5/12 pt): with digits WPS either hangs whole with the automatic spaces squeezed
+  (one or two groups only, a budget falling with length) or squeezes them until the mark's inked
+  half fits (two groups on, preferred, a cap falling with groups and length). Numbers in F55; no
+  rule yet, not implemented.
+- **Gates:** Windows 190 / 200, 0.9464; Linux 190 / 200, 0.9346. Baselines updated.
+- **Next:** a rule for F55's two budgets (finer sweep, then compare with F42(5) and 0080);
+  `39de0888eb`'s list-label line; `2d6a9da333`.
+
 ## 2026-11-14 (8): 190 / 200 on both: a9f763a2b4 matches (0085, 0086)
 
 - **The "squeezed `、`"** beside the picture was really the wrap edge: the line is beside the QR
