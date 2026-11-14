@@ -2,6 +2,19 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-14 (11): 191 / 200 on both: a5beccd773 matches (0089)
+
+- **Page 13** of `a5beccd773`: its last row (`6-2`) fitted but for the 0.5 pt border below it, and
+  a split was refused (the cut fell below the row's own height), so the row moved on whole. The
+  real difference was 2.65 pt above: the forms tables are floating (`w:tblpY="53"`, relative to
+  the text); too tall for a page, Wenshu ran them in the text without that offset, WPS keeps it
+  (row-count cuts `out/f55/mkrows.py`: fitting tables matched, from 11 rows on they didn't).
+  **0089** (F56); a test failing without it. The document matches (19 pages).
+- **Gates:** Windows 191 / 200, 0.9469; Linux 191 / 200, 0.9349. Baselines updated.
+- **Left for later:** a row that fits but for the border below it moves on whole rather than
+  splitting (no case in the corpus now); `其` after `；` on page 13 (no effect on pages).
+- **Next:** `39de0888eb`'s list-label line; `2d6a9da333` (F49 digits).
+
 ## 2026-11-14 (10): F55's rule (0088)
 
 - **Sweep** (`out/f55/sweep_fine.py`, 35 sweeps at 0.05 pt: 12 pt, 15–35 characters, 0–6 digit
