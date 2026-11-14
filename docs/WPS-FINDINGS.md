@@ -866,7 +866,11 @@ a line with other characters is left out of its height; a line of only the break
 
 Found in `dc-policies-a5beccd773` (its 20 pt break after a 12 pt line at page 1's bottom), whose
 own case is still off: there the break's size still decides the line's place (a copy with a 12 pt
-break matches WPS), by a path the probes don't take; not yet traced. Its watermark (WordArt in
+break matches WPS), by a path the probes don't take. Traced further 2026-11-14: only that line
+moves (11.4 pt lower; every other line of the document is where it is with a 12 pt break), the
+line before it is one line in both, and the paragraph's lines don't show up among those the line
+measure sizes with a break, so the break is handled elsewhere for this paragraph (it is the
+paragraph's last character, followed by an empty 20 pt run and a 20 pt mark). Next: find where. Its watermark (WordArt in
 the header) is drawn as text by Wenshu, as outlines by WPS, which line comparisons must skip.
 
 ## Still to measure
