@@ -1,0 +1,82 @@
+Upstream: (not opened; WPS-measured, F41 (2): on a justified mode-15 line automatic spaces beside digits or Latin text aren't squeezed but cut what the marks may give, by 1 / (1 + 0.08 g))
+diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
+--- a/crates/layout/src/para.rs
++++ b/crates/layout/src/para.rs
+@@ -136,6 +136,14 @@ pub enum SqueezeRule {
+     Justified,
+ }
+ 
++/// The squeeze a justified mode-15 line allows in all, in ems, before what its last unit adds:
++/// k / (k + n/32) for k marks on a line n em long before its last unit (F41), cut by
++/// 1 / (1 + 0.08 g) for g automatic spaces beside digits or Latin text, which aren't squeezed
++/// themselves (WPS sweeps, 20- and 30-unit lines, 1–4 marks, 1–4 digit runs: within 0.05 em).
++pub(crate) fn justified_squeeze(k: f32, n: f32, g: usize) -> f32 {
++    k / (k + n / 32.0) / (1.0 + 0.08 * g.min(1000) as f32)
++}
++
+ /// Room one side of a full-width punctuation mark may give up when its line is squeezed.
+ #[derive(Clone, Copy, Debug, PartialEq)]
+ pub struct Squeeze {
+@@ -237,7 +245,8 @@ impl ParaLayout {
+                 // the last unit (n em long), so a longer line squeezes less.
+                 let before: f32 = self.clusters.get(c0..unit).unwrap_or_default().iter().map(|c| c.adv).sum();
+                 let n = if before.is_finite() && em > 0.0 { (before / em).clamp(0.0, 10_000.0) } else { 0.0 };
+-                (k / (k + n / 32.0), 0.5)
++                let g = self.auto_space.iter().filter(|(c, _)| (c0..c1).contains(c) && self.end_marks.binary_search(c).is_err()).count();
++                (justified_squeeze(k, n, g), 0.5)
+             }
+         };
+         let unit_w: f32 = self.clusters.get(unit..c1).unwrap_or_default().iter().map(|c| c.adv).sum();
+diff --git a/crates/layout/src/tests/compress.rs b/crates/layout/src/tests/compress.rs
+--- a/crates/layout/src/tests/compress.rs
++++ b/crates/layout/src/tests/compress.rs
+@@ -282,6 +282,49 @@ fn marks_in_the_last_unit_enlarge_the_lines_squeeze() {
+     assert_eq!(first_line_chars(&alone, CharSpacing::CompressPunctuation, 19.4).0, 18);
+ }
+ 
++/// The mode-15 limit itself, against WPS's sweeps (justified 16 pt lines; what the marks gave up in
++/// all, in ems, n the line's length before its last unit): 20-unit lines with two commas and no,
++/// one, two and four digit runs (two automatic spaces each), four commas with two runs, a 30-unit
++/// line with two runs.
++#[test]
++fn the_mode_15_limit_follows_wps_with_automatic_spaces() {
++    let cases = [(2.0, 21.0, 0, 0.76), (2.0, 21.5, 2, 0.61), (2.0, 22.0, 4, 0.55), (2.0, 22.0, 8, 0.46), (4.0, 22.0, 4, 0.66), (2.0, 33.0, 4, 0.50)];
++    for (k, n, g, wps) in cases {
++        let got = crate::para::justified_squeeze(k, n, g);
++        assert!((got - wps).abs() <= 0.05, "{k} marks, {n} em, {g} spaces: {got} em, WPS {wps}");
++    }
++}
++
++/// Mode 15, justified: automatic spaces beside digits aren't squeezed, but each cuts what the marks
++/// may give, by 1 / (1 + 0.08 g) for g of them (WPS sweeps: two commas and two digit runs on a
++/// 22-unit line give up 0.54 em in all, not the 0.74 of the same line's commas without digits).
++#[test]
++fn mode_15_automatic_spaces_cut_the_marks_squeeze() {
++    if !full_width_marks() {
++        return;
++    }
++    let text = "甲中中中，中12中中中34中中，中中中中中中中瑞国国国";
++    let n = text.chars().count() - 3;
++    let lay15 = |width: Option<f32>| {
++        let mut d = doc(text, CharSpacing::CompressPunctuation, width);
++        d.settings.compat_mode = 15;
++        if let Some(Block::Para(p)) = d.body.first_mut().map(Arc::make_mut) {
++            p.props.align = Some(Align::Justify);
++            p.props.auto_space_dn = Some(true);
++        }
++        first_para(&lay(&d))
++    };
++    let g = lay15(None);
++    assert!(!g.auto_space.is_empty(), "automatic spaces beside the digits");
++    let natural = (g.lines[0].xs[n] - g.lines[0].xs[0]) / SIZE;
++    let chars = |w: f32| {
++        let g = lay15(Some(w));
++        g.lines[0].c1 - g.lines[0].c0
++    };
++    assert_eq!(chars(natural - 0.53), n, "0.53 em is within what the line squeezes");
++    assert!(chars(natural - 0.58) < n, "0.58 em is more than a line with four automatic spaces squeezes");
++}
++
+ #[test]
+ fn automatic_spaces_beside_digits_share_the_pool_giving_up_half_themselves() {
+     if !full_width_marks() {

@@ -673,7 +673,10 @@ Still open, measured: (1) a line ending in a hanging closing mark squeezes less,
 on long lines, and long such lines take the other fit (the end mark inside the margin, the inner
 marks squeezed to their full half); (2) automatic spaces beside digits are not squeezed but cut
 what the marks may give (two commas: 0.31 em instead of 0.38 on a 20-unit line), which is what
-keeps `cd82c17bf5` and `39de0888eb` one character short; (3) on a character grid WPS squeezes
+keeps `cd82c17bf5` and `39de0888eb` one character short. Measured 2026-11-14 (`sweep_lines.py …
+asmarks`, mode 15, justified: 20- and 30-unit lines, 1–4 marks, 0–4 digit runs): the limit is
+divided by 1 + 0.08 g for g automatic spaces on the line (within 0.05 em of all ten; patch 0080);
+both documents now first differ much later (page 10, and line 32 instead of 17); (3) on a character grid WPS squeezes
 `：、` by half a pitch where Wenshu doesn't (`2d6a9da333`).
 
 ## F42. Mode 15 hangs closing marks on justified lines only

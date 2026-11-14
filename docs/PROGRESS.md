@@ -2,6 +2,25 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-14 (3): automatic spaces cut the mode-15 squeeze (0080); F49 digits narrowed down
+
+- **F49 digits, further:** WPS's 8.5 pt digits in `2d6a9da333` are not from
+  `balanceSingleByteDoubleByteWidth` or `w:hint="eastAsia"` (probes `out/f49/probes2`, `probes3`:
+  9 pt either way); they appear on lines WPS squeezed, so the digits' grid adjustment seems to
+  give way with the marks. Not implemented (one document; needs its own sweep).
+- **F41 (2), measured** (`sweep_lines.py … asmarks`, mode 15, justified, 20- and 30-unit lines,
+  1–4 marks, 0–4 digit runs): automatic spaces beside digits aren't squeezed but divide the limit
+  by 1 + 0.08 g for g of them. Wenshu matched the no-digit cases and squeezed 0.14–0.28 em too
+  much with digits; with **0080** all ten match within 0.04 em (the sweep's step 0.02).
+  `cd82c17bf5` now first differs on page 10 (was 2), `39de0888eb` at line 32 (was 17: a list
+  label's line, two marks, still one character short); their page counts are unchanged.
+- **Tests:** a unit test of the limit against the sweeps (the layout tests' fonts draw `，`
+  proportionally, so the compression tests return early there); a layout test for machines with a
+  CJK font. Clippy: only `shape_around`.
+- **Gates:** Windows 188 / 200, 0.9454; Linux 188 / 200, 0.9336; unchanged.
+- **Next:** group A's other two (`8f343b7812` −1, `a9f763a2b4` −1), group B (`a5beccd773`, a
+  semicolon that doesn't hang).
+
 ## 2026-11-14 (2): 188 / 200 on both: 29a7772dfb matches (0078, 0079); grid squeeze (0077)
 
 - **`29a7772dfb`** (WPS's own file, two pages over): (1) a paragraph of only a page break after a
