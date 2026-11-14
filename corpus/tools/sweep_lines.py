@@ -71,9 +71,16 @@ SETS["asmarks"] = {
     "k2-r0-30": "甲中中中，中中中中中中中中中中中中中中，中中中中中中中中中中中瑞",
     "k2-r2-30": "甲中中中，中中中中12中中中中中34中中中中，中中中中中中中中中中中瑞",
 }
+# A mark whose blank half faces a digit or a Latin letter: does it squeeze? (dc-administrative-a9f763a2b4)
+SETS["marklatin"] = {
+    "k1-cjk": "甲中中中中中中中中中、中中中中中中中中瑞",
+    "k1-digit": "甲中中中中中中中中中、3中中中中中中中瑞",
+    "k1-letter": "甲中中中中中中中中中、a中中中中中中中瑞",
+    "k1-digitbefore": "甲中中中中中中中中3、中中中中中中中中瑞",
+}
 CASES = SETS[sys.argv[3]] if len(sys.argv) > 3 else list(SETS.values())[-1]
-SZ, FONT, EM = 32, "仿宋", 16.0
 import os
+SZ, FONT, EM = 32, os.environ.get("SWEEP_FONT", "仿宋"), 16.0
 # SWEEP_MODE=15 SWEEP_JC=both for justified mode-15 lines
 MODE, JC = os.environ.get("SWEEP_MODE", "14"), os.environ.get("SWEEP_JC", "left")
 # SWEEP_PPR: extra paragraph properties, e.g. '<w:overflowPunct w:val="0"/>'

@@ -2,6 +2,25 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-14 (7): a5beccd773 and a9f763a2b4 narrowed down (no patch)
+
+- **`a5beccd773`:** with a 12 pt break the document matches WPS; with its 20 pt break only page 1's
+  last line moves (11.4 pt lower). That paragraph's lines never reach the line measure's break
+  handling (debug prints), so the break is sized elsewhere for it (it ends the paragraph, then an
+  empty 20 pt run and a 20 pt mark). Next: find that path. (WPS-FINDINGS F52.)
+- **`a9f763a2b4`** (a page short; two-column bulletin, a Word file without a compatibility mode,
+  i.e. a legacy mode): every line breaks as in WPS until page 3, but Wenshu's lines drift up
+  1–2 pt at a time, then 7.8 pt at a URL line: WPS keeps `名連結` with the URL (a JhengHei line, two
+  grid pitches), because on an earlier line Wenshu squeezes a `、` (12 → 6.8 pt) beside a square-
+  wrapped picture and fits three characters more. Ruled out with WPS sweeps (`sweep_lines.py`, new
+  `marklatin` set and `SWEEP_FONT`): the mode (12 squeezes as 14), `balanceSingleByteDoubleByteWidth`,
+  the line grid, the font (JhengHei, 華康細圓體), centring, a digit or letter next to the mark; all
+  squeeze as Wenshu does. What's left: the room beside the picture (156 × 117 pt, `wrapSquare`,
+  9 pt side distance) is about 7 pt narrower in WPS on that line. Next: measure the wrap edge
+  beside a margin-relative square picture.
+- **Also:** an extra QR code's bigger box in Wenshu's PDF is only its crop (negative top, 22 %
+  off the bottom: the image is drawn whole under a clip); its wrap area is the frame's, as in WPS.
+
 ## 2026-11-14 (6): a line break takes no height of its own (0084, F52)
 
 - **`a5beccd773`** (a page over): not the semicolon of the 2026-11-04 table any more. Page 1's last
