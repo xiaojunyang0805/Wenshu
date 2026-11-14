@@ -49,7 +49,7 @@ in a fallback face takes SimSun's box as on Windows (0071). Then to **187 / 200*
 document: text in a missing Windows Chinese face takes that face's fixed half-em / one-em widths (0075).
 
 Upstream: 9 PRs on WordCraft (8 ready for review), none merged; the first human review arrived on #5006
-(kennyfs, Word measurements that agree with the WPS-measured rules). The patch queue is 75
+(kennyfs, Word measurements that agree with the WPS-measured rules). The patch queue is 76
 WordCraft patches and 1 winit patch. Upstream `main` is 114 commits past our pin `05f781cf`.
 
 ## Next (decided 2026-11-09)
@@ -66,8 +66,8 @@ Engineering, in order:
    picks its layout mode from `Application`). Follow-ups done the same day: ✅ the OFD cmap regression from the pin bump (`896cafeedf`,
    0068: Chinese in equation normal text); ✅ F45 probes in both modes (no line-height difference;
    tables placed as mode 14 in WPS files, F47, 0069 → Windows 187, Linux 174). Left from F45:
-   F46 (a header's floating picture doesn't push the header text in WPS files; no corpus document
-   has one) and two off documents (`29a7772dfb`, `2d6a9da333`) still unexplained.
+   F46 (a header's floating picture doesn't push the header text in WPS files: done 2026-11-14,
+   0076, all 40 probes match) and two off documents (`29a7772dfb`, `2d6a9da333`) still unexplained.
 4. ✅ **Linux** 2026-11-13: 174 → 182 / 200 (0070, 0071) → 187 / 200 (0075: fixed-pitch widths for
    missing Windows Chinese faces); Linux and Windows now give the same page count on all 200.
 5. **Web build** (M4's engineering part): started 2026-11-13, self-hostable static build (docs/PROGRESS.md).
@@ -117,5 +117,5 @@ beyond what upstream offers.
 3. **Governance:** work as a CJK working group inside the storytold/ArtCraft community, or as a
    separate organisation? This affects branding and CLA.
 4. **Engine risk:** WordCraft is young (a few weeks old when Wenshu pinned it on 2026-10-30). If
-   upstream stalls, the patch queue (75 WordCraft patches and 1 winit patch by 2026-11-13)
+   upstream stalls, the patch queue (76 WordCraft patches and 1 winit patch by 2026-11-14)
    becomes a fork; none has been merged upstream yet (9 PRs open, no maintainer review). `wenshu-core` keeps that cost contained.

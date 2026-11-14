@@ -1,0 +1,126 @@
+Upstream: (not opened; WPS-measured, F46: in WPS Office's own layout mode a header's floating objects don't wrap the header's text; the body starts below those that leave no room beside them)
+diff --git a/crates/layout/src/boxes.rs b/crates/layout/src/boxes.rs
+--- a/crates/layout/src/boxes.rs
++++ b/crates/layout/src/boxes.rs
+@@ -217,6 +217,13 @@ pub(crate) fn layout_box(ctx: &mut Ctx, input: BoxInput<'_>) -> BoxLayout {
+     // bottom edge (#3108). Behind-text and in-front-of-text objects don't: a page-anchored logo or
+     // watermark behind a cell's text must not stretch its row (see `align_h` in table.rs).
+     let mut float_objects_bottom = 0.0f32;
++    // WPS Office's own layout mode (F46): a header's floating objects don't wrap its text, which
++    // stays where it would be without them. The body starts below those that leave no room beside
++    // them (`unwrapped_bottom`, read by `body_top_for`); beside a narrower one its first line
++    // stays where it is.
++    let unwrapped_floats = ctx.doc.settings.wps_layout
++        && matches!(story, StoryRef::Part(id) if ctx.doc.parts.get(&id).is_some_and(|p| p.kind == wordcraft_doc::PartKind::Header));
++    let mut unwrapped_bottom = 0.0f32;
+     let mut table_areas = Vec::new();
+     let mut page_table_wraps = Vec::new();
+     let mut y = 0.0f32;
+@@ -308,7 +315,11 @@ pub(crate) fn layout_box(ctx: &mut Ctx, input: BoxInput<'_>) -> BoxLayout {
+                         r.x = keep_in_cell(r.x, r.w, left, right);
+                     }
+                     let outline = ctx.wrap_outline(o);
+-                    excl.extend(wrap_area(r, float, outline.as_deref().map(Vec::as_slice)));
++                    let area = wrap_area(r, float, outline.as_deref().map(Vec::as_slice));
++                    let blocking = |(a, top_bottom, ..): &WrapArea| *top_bottom || (a.x <= 0.0 && a.right() >= width);
++                    let unwrapped = unwrapped_floats.then(|| area.as_ref().filter(|a| blocking(a)).map(|_| float.spin().bounds(r).bottom()));
++                    unwrapped_bottom = unwrapped.flatten().map_or(unwrapped_bottom, |b| unwrapped_bottom.max(b));
++                    excl.extend(area.filter(|_| !unwrapped_floats));
+                     floats.insert(oi, r);
+                 }
+                 let rel = rel_exclusions(&excl, 0.0, y);
+@@ -404,7 +415,7 @@ pub(crate) fn layout_box(ctx: &mut Ctx, input: BoxInput<'_>) -> BoxLayout {
+     }
+     let floats_bottom = float_tables.iter().map(|r| r.bottom()).fold(float_objects_bottom, f32::max);
+     ctx.hide_deleted = outer_hide;
+-    BoxLayout { items, height: y.max(0.0), floats_bottom, last_top: last_top.max(0.0), table_areas, page_table_wraps }
++    BoxLayout { items, height: y.max(0.0), floats_bottom, unwrapped_bottom, last_top: last_top.max(0.0), table_areas, page_table_wraps }
+ }
+ 
+ /// The width a text frame without one takes: its widest line, with the paragraph's indents.
+@@ -455,14 +466,16 @@ fn frame_float(fr: &wordcraft_doc::props::TextFrame) -> Float {
+ }
+ 
+ /// A laid-out box: items relative to its top-left, the height of its text flow, where its
+-/// floating tables end (a table cell grows to hold them) and where its last block starts (the
+-/// height without it).
++/// floating tables end (a table cell grows to hold them), where the floating objects its text
++/// doesn't wrap around (a header's in WPS Office's own mode) and that leave no room beside them
++/// end, and where its last block starts (the height without it).
+ pub(crate) struct BoxLayout {
+     pub(crate) items: Vec<Placed>,
+     pub(crate) table_areas: Vec<Rect>,
+     pub(crate) page_table_wraps: Vec<WrapArea>,
+     pub(crate) height: f32,
+     pub(crate) floats_bottom: f32,
++    pub(crate) unwrapped_bottom: f32,
+     pub(crate) last_top: f32,
+ }
+ 
+diff --git a/crates/layout/src/page.rs b/crates/layout/src/page.rs
+--- a/crates/layout/src/page.rs
++++ b/crates/layout/src/page.rs
+@@ -518,10 +518,12 @@ pub(crate) fn body_top_for(ctx: &mut Ctx, sect: &SectionProps, header: Option<u3
+     // Placed as `headers_footers` draws it, so page-relative floats wrap the same way.
+     let frame = PageFrame { sect, margin_top: None, origin: (sect.margin_left + sect.gutter, sect.header), number: 1, mirror: ctx.mirror };
+     let track = std::mem::replace(&mut ctx.track_totals, false);
+-    let (h, ..) = with_pin(ctx, id, sect, 1, None, |ctx| {
+-        layout_box(ctx, BoxInput::other(StoryRef::Part(id), &blocks, sect.text_width(), 0, Some(frame))).height
+-    });
++    let (laid, ..) =
++        with_pin(ctx, id, sect, 1, None, |ctx| layout_box(ctx, BoxInput::other(StoryRef::Part(id), &blocks, sect.text_width(), 0, Some(frame))));
+     ctx.track_totals = track;
++    // WPS Office's own layout mode (F46): the header's floating objects don't push its text down,
++    // but the body still starts below those that leave no room beside them.
++    let h = laid.height.max(laid.unwrapped_bottom);
+     // Word starts the body right below a header that reaches past the top margin, no gap;
+     // ODF keeps the header's spacing.
+     let gap = if sect.header_gap.is_finite() { sect.header_gap.clamp(0.0, 1584.0) } else { 0.0 };
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -7264,6 +7264,44 @@ fn page_relative_header_float_wraps_where_it_is_drawn() {
+     assert!((wrapped - in_front).abs() < 0.5, "body starts at {wrapped} with wrapping, {in_front} without");
+ }
+ 
++/// F46: in WPS Office's own layout mode a header's floating picture doesn't push the header's text
++/// down (it overlaps the picture, where it is without one), while the body still starts below a
++/// picture that leaves no room beside it; beside a narrower one the body stays at the top margin.
++/// In the other mode (as in Word) the header text wraps below the picture.
++#[test]
++fn wps_header_floats_leave_the_header_text_in_place() {
++    crate::test_fonts();
++    use wordcraft_doc::para::{Anchor, Float, Wrap};
++    // (header text top, body top) for a 96 pt square-wrapped picture `w` wide at the header's top.
++    let tops = |wps: bool, w: Option<f32>| {
++        let mut d = Document::from_text("Body text.");
++        d.settings.wps_layout = wps;
++        d.last_section.header = 0.0;
++        let mut hp = wordcraft_doc::Paragraph::with_text("Header", Default::default());
++        if let Some(w) = w {
++            let f = Float { wrap: Wrap::Square, h_rel: Anchor::Column, v_rel: Anchor::Paragraph, y: 1.0, ..Default::default() };
++            hp.insert_object(0, rect_shape(w, 96.0, f), &Default::default()).unwrap();
++        }
++        let id = d.add_part(wordcraft_doc::PartKind::Header, vec![wordcraft_doc::para_block(hp)]);
++        d.last_section.headers.default = Some(id);
++        let l = lay(&d);
++        let head = l.pages[0].header.iter().find_map(|i| match i {
++            Placed::Lines { y, .. } => Some(*y),
++            _ => None,
++        });
++        (head.expect("header text laid out"), first_line_top(&l.pages[0].items))
++    };
++    let width = Document::new().last_section.text_width();
++    let (plain_head, plain_body) = tops(true, None);
++    let (head, body) = tops(true, Some(width));
++    assert!((head - plain_head).abs() < 0.5, "WPS: header text at {head}, {plain_head} without the picture");
++    assert!((body - 97.0).abs() < 0.5, "WPS: body at {body}, not below the picture (97)");
++    let (_, beside) = tops(true, Some(width / 2.0));
++    assert!((beside - plain_body).abs() < 0.5, "WPS: body at {beside} beside a half-width picture, {plain_body} without");
++    let (head, body) = tops(false, Some(width));
++    assert!(head > 96.0 && body > head, "other mode: header text at {head} below the picture, body at {body}");
++}
++
+ /// Issue #149: a tall text box floating behind the text in the header (placed relative to the
+ /// page, no wrapping) neither makes the header taller nor pushes the body down: the body starts
+ /// at the top margin and paginates exactly as without the box.

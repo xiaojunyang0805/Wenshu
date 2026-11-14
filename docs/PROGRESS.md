@@ -2,6 +2,24 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-14: F46 done (0076): WPS header floats don't wrap the header text
+
+- **From the 2026-11-13 probes** (40: DrawingML and VML, square / top-and-bottom / none, 96 and
+  40 pt, header distance, header text, several paragraphs, a half-width picture, both modes; WPS
+  PDFs in `out/f45/probes/hdr-ref`, `hdr2-ref`): every other-mode probe already matched; every
+  WPS-mode probe with a wrapping picture reaching the body didn't (`out/f45/hdrcmp.py <exe>`).
+- **0076:** in WPS's own mode a header's floating objects add no wrap area for its text, so the
+  text sits where it is without them; the body starts below those that leave no room beside them
+  (top-and-bottom, or a wrap area as wide as the text), and stays at the top margin beside a
+  narrower one. Footers unchanged (not measured). **All 40 probes match.** Layout test (fails
+  without: header text at 97 pt instead of 0). Layout and engine tests pass; clippy only the earlier
+  `shape_around` complexity (31; `layout_box` kept at the limit).
+- **Gates:** Windows 187 / 200, 0.9447; Linux 187 / 200, 0.9331; both unchanged (no WPS-authored
+  corpus document has a wrapped float in a header).
+- **Not done:** a half-width header picture over the body's first line moves that line beside it
+  in WPS (both modes); Wenshu leaves it at the margin (x only; no page effect seen).
+- **Next:** `29a7772dfb`, `2d6a9da333`.
+
 ## 2026-11-13 (11): Linux 182 → 187 / 200, the same page count as Windows on all 200 (0075)
 
 - **Duplicate fonts in the web build: not there.** Each of WordCraft's 13 bundled fonts is in the

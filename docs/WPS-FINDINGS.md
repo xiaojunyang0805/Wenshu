@@ -772,8 +772,10 @@ the body starts below that line. In WPS's own mode the header's text stays where
 the picture (every header paragraph, also beside a half-width picture), and the body starts at the
 picture's bottom: 13.8 pt (empty paragraph) or 15.6 pt (a line of 12 pt text) higher. The body
 keeps clear of the picture in both modes. A picture that doesn't reach the body changes nothing.
-Wenshu follows the other mode. No WPS-authored corpus document has a wrapped float in a header,
-so nothing in the corpus moves; not implemented yet.
+Implemented 2026-11-14 (patch 0076): in WPS's own mode a header's floats don't wrap its text, and
+the body starts below those that leave no room beside them; the 40 probes (out/f45/probes/hdr,
+hdr2; `out/f45/hdrcmp.py`) all match. No WPS-authored corpus document has a wrapped float in a
+header, so the gates don't move.
 
 Also seen: a half-width header picture overlapping the body's first line moves that line beside
 it in WPS (both modes); Wenshu leaves it at the margin.
