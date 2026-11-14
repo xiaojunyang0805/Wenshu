@@ -952,6 +952,25 @@ it either way (`out/f55/mkrows.py`, 3–13 rows). That was enough to leave page 
 short of fitting, so it moved on whole instead of splitting. Patch 0089: a too-tall floating table
 placed relative to the text starts its offset below it. `a5beccd773` now matches (19 pages).
 
+## F57. The squeeze limit counts gaps; character borders take room; hanging indents in cells
+
+Found 2026-11-14 through `dc-policies-39de0888eb` (now matching, 13 pages):
+
+- **The mode-15 limit's n** (F41, 0080): its list-label line (`1、…，並請`, 35 characters, two
+  commas, 8.55 pt to squeeze) is kept by WPS, broken by Wenshu; the label plays no part (the
+  paragraph without numbering behaves the same). Sweeps (`out/f57/sweep_n.py`: 宋体 12 pt, 24, 30
+  and 36 characters, 2–4 commas, 0.05 pt steps): the limit is k / (k + n/32) with n 1.0–1.6 em
+  under the width before the last unit, whatever k: n counts the gaps between those characters.
+  Patch 0090; 6 of the 9 sweeps then match to the step, the rest one step (0.05 pt) generous.
+- **Character borders** (`w:bdr`): WPS gives a bordered run its border's width on each side (0.5,
+  1.5 and 3 pt borders; `w:space` takes no room; both modes; `out/f57/probe_bdr.py`). Wenshu gave
+  none, which kept a line with `如附件一` boxed one character too long. Patch 0091; the box is
+  drawn in that room. 10 of 10 probes match.
+- **A hanging indent in a cell's minimum width:** the last page's table kept its grid in WPS, but
+  Wenshu widened a column for `R100234567` (70 pt) under `w:left="958" w:hanging="958"`,
+  counting the 47.9 pt left indent though the first line starts at the margin. Patch 0092: the
+  first word at the first line's indent, the rest at the left indent.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

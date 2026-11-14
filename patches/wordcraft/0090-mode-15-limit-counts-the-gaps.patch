@@ -1,0 +1,50 @@
+Upstream: (not opened; WPS-measured, F57: the mode-15 justified squeeze limit k/(k+n/32) counts n as the gaps between the characters before the last unit, one fewer than the characters; 9 sweeps, 24-36 characters, 2-4 marks, 0.05 pt steps)
+diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
+--- a/crates/layout/src/para.rs
++++ b/crates/layout/src/para.rs
+@@ -170,6 +170,13 @@ pub(crate) fn digit_hang_room(a: usize, gaps: f32, n: f32) -> DigitHang {
+     DigitHang { half, whole: whole.filter(|w| *w >= 0.0).map(|w| w.min(gaps / 2.0)) }
+ }
+ 
++/// The n of [`justified_squeeze`] for a line `before` points long before its last unit, in ems
++/// of `em`: the gaps between those characters, one fewer than the characters (WPS, 12 pt, 24- to
++/// 36-character lines, 2–4 marks, 0.05 pt steps: n came out 1.0–1.6 em under the width).
++pub(crate) fn justified_n(before: f32, em: f32) -> f32 {
++    if before.is_finite() && em > 0.0 { (before / em - 1.0).clamp(0.0, 10_000.0) } else { 0.0 }
++}
++
+ /// Room one side of a full-width punctuation mark may give up when its line is squeezed.
+ #[derive(Clone, Copy, Debug, PartialEq)]
+ pub struct Squeeze {
+@@ -293,7 +300,7 @@ impl ParaLayout {
+                 // k / (k + n/32) em: each mark at most an em over k plus a 32nd of the line before
+                 // the last unit (n em long), so a longer line squeezes less.
+                 let before: f32 = self.clusters.get(c0..unit).unwrap_or_default().iter().map(|c| c.adv).sum();
+-                let n = if before.is_finite() && em > 0.0 { (before / em).clamp(0.0, 10_000.0) } else { 0.0 };
++                let n = justified_n(before, em);
+                 let g = self.auto_space.iter().filter(|(c, _)| (c0..c1).contains(c) && self.end_marks.binary_search(c).is_err()).count();
+                 (justified_squeeze(k, n, g), 0.5)
+             }
+diff --git a/crates/layout/src/tests/compress.rs b/crates/layout/src/tests/compress.rs
+--- a/crates/layout/src/tests/compress.rs
++++ b/crates/layout/src/tests/compress.rs
+@@ -325,6 +325,19 @@ fn the_mode_15_hang_after_digits_follows_wps() {
+     }
+ }
+ 
++/// Mode 15, justified: the limit counts the gaps between the characters before the line's last
++/// unit, one fewer than the characters (WPS, 宋体 12 pt, N characters with k commas and the last
++/// overflowing, 0.05 pt steps: the most the line squeezed, in ems).
++#[test]
++fn the_mode_15_limit_counts_the_gaps_before_the_last_unit() {
++    let wps = [(24, 2, 0.746), (24, 3, 0.817), (30, 2, 0.700), (36, 2, 0.654), (36, 3, 0.742), (36, 4, 0.792)];
++    for (chars, k, limit) in wps {
++        let before = (chars - 1) as f32 * 12.0;
++        let got = crate::para::justified_squeeze(k as f32, crate::para::justified_n(before, 12.0), 0);
++        assert!((got - limit).abs() <= 0.006, "{chars} characters, {k} marks: {got} em, WPS {limit}");
++    }
++}
++
+ /// Mode 15, justified, a closing mark that may hang ending the line after digits (F55): with four
+ /// digit groups WPS doesn't hang it whole, and keeps it only if the automatic spaces can bring its
+ /// inked half inside (not at 0.02 em past the character before it: that goes down with it); with

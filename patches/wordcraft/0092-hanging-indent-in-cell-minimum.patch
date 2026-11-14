@@ -1,0 +1,105 @@
+Upstream: (not opened; WPS-observed, F57: a cell's minimum width takes the first word at the first line's indent (a hanging indent takes the left indent back), the rest at the left indent; dc-policies-39de0888eb keeps its grid)
+diff --git a/crates/layout/src/table.rs b/crates/layout/src/table.rs
+--- a/crates/layout/src/table.rs
++++ b/crates/layout/src/table.rs
+@@ -1543,34 +1543,50 @@ const UNBOUNDED: f32 = 100_000.0;
+ fn para_content(pl: &ParaLayout) -> (f32, f32) {
+     // An empty paragraph's indents take no room ([`measure_para`]).
+     let has_content = pl.clusters.iter().any(|c| matches!(c.kind, ClKind::Text | ClKind::Object(_)));
+-    let indents = if has_content { pl.rp.indent_left.max(0.0) + pl.rp.indent_right.max(0.0) + pl.rp.indent_first.max(0.0) } else { 0.0 };
++    if !has_content {
++        return (0.0, 0.0);
++    }
++    // The first word and the first line start at the first line's indent (a hanging indent
++    // takes the left one back: `w:left="958" w:hanging="958"` starts it at the margin), the rest
++    // at the left indent (WPS keeps a 88 pt column for a 70 pt word with that indent).
++    let finite = |v: f32| if v.is_finite() { v } else { 0.0 };
++    let (left, right) = (finite(pl.rp.indent_left).max(0.0), finite(pl.rp.indent_right).max(0.0));
++    let first = (finite(pl.rp.indent_left) + finite(pl.rp.indent_first)).max(0.0);
+     let (mut word, mut line, mut spaces) = (0.0f32, 0.0f32, 0.0f32);
+     let (mut lo, mut hi) = (0.0f32, 0.0f32);
++    // The indent the current word and line start at: the first line's until its first word ends.
++    let (mut word_at, mut line_at) = (first, first);
++    let end_word = |lo: &mut f32, word: &mut f32, word_at: &mut f32| {
++        if *word > 0.0 {
++            *lo = lo.max(*word + *word_at);
++            *word_at = left;
++        }
++        *word = 0.0;
++    };
+     for c in &pl.clusters {
+         let adv = if c.adv.is_finite() { c.adv.clamp(0.0, UNBOUNDED) } else { 0.0 };
+         match c.kind {
+             ClKind::Space => {
+-                lo = lo.max(word);
+-                word = 0.0;
++                end_word(&mut lo, &mut word, &mut word_at);
+                 spaces += adv;
+             }
+             ClKind::LineBreak | ClKind::PageBreak | ClKind::ColumnBreak => {
+-                lo = lo.max(word);
+-                hi = hi.max(line);
+-                (word, line, spaces) = (0.0, 0.0, 0.0);
++                end_word(&mut lo, &mut word, &mut word_at);
++                hi = hi.max(line + line_at);
++                (line, spaces, line_at, word_at) = (0.0, 0.0, left, left);
+             }
+             _ => {
+                 word += adv;
+                 line += spaces + adv;
+                 spaces = 0.0;
+                 if c.break_after {
+-                    lo = lo.max(word);
+-                    word = 0.0;
++                    end_word(&mut lo, &mut word, &mut word_at);
+                 }
+             }
+         }
+     }
+-    (lo.max(word) + indents, hi.max(line) + indents)
++    end_word(&mut lo, &mut word, &mut word_at);
++    (lo + right, hi.max(line + line_at) + right)
+ }
+ 
+ /// Whether nothing in `t` asks for a width (its own or any cell's): its columns then follow
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -8517,6 +8517,37 @@ fn autofit_sizes_columns_by_their_content() {
+     assert_eq!(n, 1, "the word is broken over {n} lines");
+ }
+ 
++/// A cell's longest word needs only its line's indent: a hanging indent takes the left indent
++/// back for the first line (WPS keeps an 88 pt column for a 70 pt word under `w:left="958"
++/// w:hanging="958"`), so the column keeps its grid width where a plain left indent widens it.
++#[test]
++fn a_hanging_indent_leaves_the_first_word_its_column() {
++    crate::test_fonts();
++    let word = "Unbreakable";
++    let w = {
++        let l = lay(&Document::from_text(word));
++        let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
++        para.x_of(0, word.len()).unwrap() - para.x_of(0, 0).unwrap()
++    };
++    let second_column = |left: f32, first: f32| {
++        let mut p = wordcraft_doc::Paragraph::with_text(word, Default::default());
++        p.props.indent_left = Some(left);
++        p.props.indent_first = Some(first);
++        let mut t = Table::new(1, 2, 468.0);
++        t.grid = vec![w + 14.0, 454.0 - w];
++        t.rows[0].cells[0].props.width = Some(w + 14.0);
++        t.rows[0].cells[1].props.width = Some(454.0 - w);
++        t.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(p)];
++        t.rows[0].cells[1].blocks = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text("B", Default::default()))];
++        let mut d = Document::from_text("After");
++        d.insert_block(StoryRef::Body, &Path::top(0), wordcraft_doc::Block::Table(t)).unwrap();
++        para_at(&lay(&d), &[0, 0, 1, 0]).first().map_or(0.0, |p| p.0)
++    };
++    let (none, hanging, left) = (second_column(0.0, 0.0), second_column(30.0, -30.0), second_column(30.0, 0.0));
++    assert!((hanging - none).abs() < 0.01, "with a hanging indent the second column starts at {hanging}, {none} without");
++    assert!(left > none + 1.0, "a plain left indent widens the first column: {left} vs {none}");
++}
++
+ #[test]
+ fn autofit_handles_spanning_cells_long_words_and_empty_tables() {
+     crate::test_fonts();

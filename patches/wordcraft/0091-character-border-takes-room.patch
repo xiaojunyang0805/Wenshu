@@ -1,0 +1,132 @@
+Upstream: (not opened; WPS-measured, F57: a run with a character border (w:bdr) takes the border's width on each side; w:space takes none; 10 probes, both modes)
+diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
+--- a/crates/layout/src/para/grid.rs
++++ b/crates/layout/src/para/grid.rs
+@@ -174,6 +174,49 @@ pub(super) fn auto_space(b: &mut Builder, text: &str, de: bool, dn: bool) -> Vec
+ /// compressed (WPS: `中》《中` advances 》 by 8 pt at 16 pt; on a character grid by half its cell). The
+ /// earlier mark's advance shrinks;
+ /// returns the blank sides taken, (cluster, left side), which compression then leaves alone.
++/// The width of a visible character border (`w:bdr`) in `style`, 0 without one.
++pub(crate) fn border_room(b: Option<wordcraft_doc::props::Border>) -> f32 {
++    b.filter(wordcraft_doc::props::Border::is_visible).map_or(0.0, |b| if b.width.is_finite() { b.width.clamp(0.0, 12.0) } else { 0.0 })
++}
++
++/// A run of characters with a border (`w:bdr`) takes the border's width on each side: its first
++/// character moves right by it and its last is that much wider (WPS, both modes: 0.5, 1.5 and 3 pt
++/// borders widen 丙丁 and AB by twice that; `w:space` takes no room). Consecutive characters with
++/// the same border share one box, as they are drawn.
++pub(super) fn pad_borders(b: &mut Builder) {
++    let border = |b: &Builder, k: usize| {
++        let c = b.clusters.get(k)?;
++        if c.kind == ClKind::Marker && c.adv == 0.0 {
++            return None;
++        }
++        b.styles.get(c.style as usize).and_then(|s| s.rc.border).filter(wordcraft_doc::props::Border::is_visible)
++    };
++    let n = b.clusters.len();
++    let mut k = 0;
++    while k < n {
++        let Some(bd) = border(b, k) else {
++            k += 1;
++            continue;
++        };
++        let mut last = k;
++        while last + 1 < n && border(b, last + 1) == Some(bd) {
++            last += 1;
++        }
++        let w = border_room(Some(bd));
++        if let Some(c) = b.clusters.get_mut(k) {
++            c.adv += w;
++            let (g0, g1) = (c.g0 as usize, c.g1 as usize);
++            for g in b.glyphs.get_mut(g0..g1).into_iter().flatten() {
++                g.dx += w;
++            }
++        }
++        if let Some(c) = b.clusters.get_mut(last) {
++            c.adv += w;
++        }
++        k = last + 1;
++    }
++}
++
+ pub(super) fn kern_punct(b: &mut Builder, text: &str, on_grid: bool) -> Vec<(usize, bool)> {
+     let mark = |b: &Builder, k: usize| -> Option<(char, f32)> {
+         let c = b.clusters.get(k).filter(|c| c.kind == ClKind::Text)?;
+diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
+--- a/crates/layout/src/para/paragraph.rs
++++ b/crates/layout/src/para/paragraph.rs
+@@ -715,6 +715,7 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+     if rp.snap_to_grid {
+         snap_chars(&mut sh.b, &p.text, &env.grid);
+     }
++    super::grid::pad_borders(&mut sh.b);
+     // Kerned text closes up adjacent full-width marks, on a character grid too (WPS: by half the
+     // pitch).
+     let on_grid = rp.snap_to_grid && env.grid.chars.is_some();
+diff --git a/crates/layout/src/display/lines.rs b/crates/layout/src/display/lines.rs
+--- a/crates/layout/src/display/lines.rs
++++ b/crates/layout/src/display/lines.rs
+@@ -459,13 +459,16 @@ fn character_backgrounds(ctx: &LineContext<'_, '_, '_>, out: &mut Vec<Draw>) {
+             *x1 = x1.max(ctx.x + right);
+             continue;
+         }
++        // The box is drawn in the room the run keeps for it on each side (`pad_borders`).
++        let half = |b: &Border| crate::para::border_room(Some(*b)) / 2.0;
+         if let Some((previous, x0, x1)) = open.take() {
+-            char_box(&previous, x0, x1, ctx.top, ctx.bottom, ctx.alpha, out);
++            char_box(&previous, x0 + half(&previous), x1 - half(&previous), ctx.top, ctx.bottom, ctx.alpha, out);
+         }
+         open = border.map(|border| (border, ctx.x + left, ctx.x + right));
+     }
+     if let Some((border, x0, x1)) = open {
+-        char_box(&border, x0, x1, ctx.top, ctx.bottom, ctx.alpha, out);
++        let h = crate::para::border_room(Some(border)) / 2.0;
++        char_box(&border, x0 + h, x1 - h, ctx.top, ctx.bottom, ctx.alpha, out);
+     }
+ }
+ 
+diff --git a/crates/layout/src/para.rs b/crates/layout/src/para.rs
+--- a/crates/layout/src/para.rs
++++ b/crates/layout/src/para.rs
+@@ -20,6 +20,7 @@ mod bidi;
+ mod builder;
+ mod chars;
+ mod grid;
++pub(crate) use grid::border_room;
+ mod justify;
+ mod lines;
+ mod model;
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -3561,7 +3561,29 @@ fn character_border_draws_one_box_around_run() {
+     assert_eq!(horiz.len(), 2);
+     assert_eq!(vert.len(), 2);
+     assert!(horiz.iter().any(|h| (h.1 - top).abs() < 0.01) && horiz.iter().any(|h| (h.1 - bottom).abs() < 0.01), "{lines:?}");
+-    assert!(horiz.iter().all(|h| (h.0 - gx0).abs() < 0.01 && (h.2 - gx1).abs() < 0.01), "{lines:?} {gx0} {gx1}");
++    // The box sits in the room the run keeps on each side, half the border's width inside it.
++    assert!(horiz.iter().all(|h| (h.0 - gx0 - 0.25).abs() < 0.01 && (h.2 - gx1 + 0.25).abs() < 0.01), "{lines:?} {gx0} {gx1}");
++}
++
++/// A run with a character border takes the border's width on each side (WPS, both modes: a 0.5 pt
++/// border moves the run 0.5 pt right and what follows 1 pt; `w:space` takes no room).
++#[test]
++fn a_bordered_run_takes_its_border_width_on_each_side() {
++    crate::test_fonts();
++    use wordcraft_doc::props::Border;
++    let xs = |border: Option<Border>| {
++        let mut d = Document::from_text("ab cd ef");
++        if let Some(b) = border {
++            d.format_range(&Pos::body(0, 3), &Pos::body(0, 5), &|c| c.border = Some(b)).unwrap();
++        }
++        let l = lay(&d);
++        let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
++        let glyph = |k: usize| para.clusters.get(k).and_then(|c| para.glyphs.get(c.g0 as usize)).map_or(0.0, |g| g.dx) + para.x_of(0, k).unwrap();
++        (glyph(3), para.x_of(0, 6).unwrap())
++    };
++    let (plain, spaced) = (xs(None), xs(Some(Border { space: 4.0, ..Border::single(0.5) })));
++    assert!((spaced.0 - plain.0 - 0.5).abs() < 0.01, "the run's first letter at {}, {} without the border", spaced.0, plain.0);
++    assert!((spaced.1 - plain.1 - 1.0).abs() < 0.01, "what follows at {}, {} without the border", spaced.1, plain.1);
+ }
+ 
+ #[test]
