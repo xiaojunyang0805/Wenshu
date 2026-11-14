@@ -1,0 +1,166 @@
+Upstream: (not opened; WPS-measured, F50: text below its own paragraph's top-and-bottom object starts the paragraph's space before below it, also at the top of a page or cell)
+diff --git a/crates/layout/src/floats.rs b/crates/layout/src/floats.rs
+--- a/crates/layout/src/floats.rs
++++ b/crates/layout/src/floats.rs
+@@ -472,7 +472,7 @@ fn anchor_floats_but(
+     anchor: FloatAnchor,
+     late: &[usize],
+ ) -> (HashMap<usize, Rect>, Arc<ParaLayout>, Vec<para::Exclusion>) {
+-    let FloatAnchor { p, block, y0, before, excl_mark, label, place } = anchor;
++    let FloatAnchor { p, block, y0, before, own_before, excl_mark, label, place } = anchor;
+     ctx.fields.page = pb.number;
+     ctx.fields.page_format = pb.page_format;
+     let (col_x, width) = (pb.col_x(), pb.col_w());
+@@ -503,7 +503,7 @@ fn anchor_floats_but(
+             let mut r = float_rect(Some(frame), (col_x, width), y0 - before, w, h, float);
+             let outline = ctx.wrap_outline(o);
+             let outline = outline.as_deref().map(Vec::as_slice);
+-            let mut area = wrap_area(r, float, outline);
++            let mut area = keep_space_before_below(wrap_area(r, float, outline), own_before, y0);
+             if pb.settle && text_before {
+                 let seed = early.and_then(|v| v.iter().find(|(b, k, _)| (*b, *k) == (block, oi))).map(|(_, _, a)| a);
+                 (r, area) = settle_early(r, area, seed, top, |r| wrap_area(r, float, outline));
+@@ -530,6 +530,19 @@ fn anchor_floats_but(
+     (rects, pl, rel)
+ }
+ 
++/// Text below its own paragraph's top-and-bottom object starts the paragraph's space before
++/// (`own_before`) below it, also where the top of a page or a cell leaves the space out above it:
++/// the object's area grows by it when it starts at or above the text's top (`text_top`). WPS,
++/// both modes: 9 pt before puts the text 9 pt under the picture, mid-page and at the top.
++pub(crate) fn keep_space_before_below(area: Option<WrapArea>, own_before: f32, text_top: f32) -> Option<WrapArea> {
++    area.map(|mut a| {
++        if a.1 && own_before > 0.0 && own_before.is_finite() && a.0.y <= text_top + 0.5 {
++            a.0.h += own_before.min(1584.0);
++        }
++        a
++    })
++}
++
+ pub(crate) fn body_wraps(ctx: &mut Ctx, pb: &PageBuilder) -> Vec<WrapArea> {
+     let mut areas = footer_table_wraps(ctx, pb);
+     areas.extend_from_slice(&pb.excl);
+@@ -677,6 +690,8 @@ pub(crate) struct FloatAnchor<'a> {
+     pub block: usize,
+     pub y0: f32,
+     pub before: f32,
++    /// The paragraph's own space before, also where the top of a page takes it away (`before`).
++    pub own_before: f32,
+     pub excl_mark: usize,
+     pub label: &'a Option<(String, Level)>,
+     pub place: bool,
+diff --git a/crates/layout/src/flow.rs b/crates/layout/src/flow.rs
+--- a/crates/layout/src/flow.rs
++++ b/crates/layout/src/flow.rs
+@@ -203,8 +203,12 @@ impl<'a> Flow<'a> {
+         let guess = pb.y + space_before;
+         let label = ctx.next_label(p);
+         let eq_start = ctx.eq_count;
+-        let (float_rects, pl, rel, late) =
+-            anchor_floats(ctx, pb, FloatAnchor { p, block, y0: guess, before: space_before, excl_mark, label: &label, place: true }, &[]);
++        let (float_rects, pl, rel, late) = anchor_floats(
++            ctx,
++            pb,
++            FloatAnchor { p, block, y0: guess, before: space_before, own_before: space_before, excl_mark, label: &label, place: true },
++            &[],
++        );
+         Flow {
+             p,
+             block,
+@@ -242,7 +246,16 @@ impl<'a> Flow<'a> {
+             anchor_floats(
+                 ctx,
+                 pb,
+-                FloatAnchor { p: self.p, block: self.block, y0, before, excl_mark: self.excl_mark, label: &self.label, place: true },
++                FloatAnchor {
++                    p: self.p,
++                    block: self.block,
++                    y0,
++                    before,
++                    own_before: self.pl.rp.space_before,
++                    excl_mark: self.excl_mark,
++                    label: &self.label,
++                    place: true,
++                },
+                 force,
+             )
+         });
+@@ -656,7 +669,9 @@ impl<'a> Flow<'a> {
+         // The floats were placed and drawn with the first piece: they stay there.
+         let (p, block, excl_mark, eq_start, label) = (self.p, self.block, self.excl_mark, self.eq_start, &self.label);
+         let (rects, relaid, relaid_rel, _) = with_page_map(ctx, &mut self.page_map, |ctx| {
+-            again(ctx, eq_start, |ctx| anchor_floats(ctx, pb, FloatAnchor { p, block, y0, before: 0.0, excl_mark, label, place: false }, &[]))
++            again(ctx, eq_start, |ctx| {
++                anchor_floats(ctx, pb, FloatAnchor { p, block, y0, before: 0.0, own_before: 0.0, excl_mark, label, place: false }, &[])
++            })
+         });
+         if let Some(k) = relaid.lines.iter().position(|l| l.start == resume) {
+             (self.float_rects, self.pl, self.rel) = (rects, relaid, relaid_rel);
+diff --git a/crates/layout/src/boxes.rs b/crates/layout/src/boxes.rs
+--- a/crates/layout/src/boxes.rs
++++ b/crates/layout/src/boxes.rs
+@@ -1,6 +1,7 @@
+ use super::ctx::{Ctx, page_anchored};
+ use super::floats::{
+-    ObjFrame, ObjectPlacement, WrapArea, align_in, float_rect, floating, left_out_objects, place_objects, rel_exclusions, wrap_area,
++    ObjFrame, ObjectPlacement, WrapArea, align_in, float_rect, floating, keep_space_before_below, left_out_objects, place_objects, rel_exclusions,
++    wrap_area,
+ };
+ use super::page::PageFrame;
+ use super::placed::Placed;
+@@ -315,7 +316,7 @@ pub(crate) fn layout_box(ctx: &mut Ctx, input: BoxInput<'_>) -> BoxLayout {
+                         r.x = keep_in_cell(r.x, r.w, left, right);
+                     }
+                     let outline = ctx.wrap_outline(o);
+-                    let area = wrap_area(r, float, outline.as_deref().map(Vec::as_slice));
++                    let area = keep_space_before_below(wrap_area(r, float, outline.as_deref().map(Vec::as_slice)), pl.rp.space_before, y);
+                     let blocking = |(a, top_bottom, ..): &WrapArea| *top_bottom || (a.x <= 0.0 && a.right() >= width);
+                     let unwrapped = unwrapped_floats.then(|| area.as_ref().filter(|a| blocking(a)).map(|_| float.spin().bounds(r).bottom()));
+                     unwrapped_bottom = unwrapped.flatten().map_or(unwrapped_bottom, |b| unwrapped_bottom.max(b));
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -7225,6 +7225,43 @@ fn wrap_area_uses_each_distance() {
+     assert!(wrap_area(Rect::new(0.0, 0.0, 10.0, 10.0), &Float { wrap: Wrap::BehindText, ..Default::default() }, None).is_none());
+ }
+ 
++/// Text below its own paragraph's top-and-bottom object starts the paragraph's space before below
++/// it: the object sits at the paragraph's top, above that space, and the text keeps it (WPS, both
++/// modes: 9 pt before puts the text 9 pt under the picture; none, right under it).
++#[test]
++fn text_below_its_top_and_bottom_object_keeps_its_space_before() {
++    crate::test_fonts();
++    use wordcraft_doc::para::{Anchor, Float, Wrap};
++    let tops = |before: f32| {
++        let mut d = Document::from_text(
++            "Previous.
++Text below the picture.",
++        );
++        let f = Float { wrap: Wrap::TopAndBottom, h_rel: Anchor::Column, v_rel: Anchor::Paragraph, ..Default::default() };
++        d.insert_object(&Pos::body(1, 0), rect_shape(200.0, 100.0, f), &Default::default()).unwrap();
++        for b in d.body.iter_mut() {
++            if let Block::Para(p) = Arc::make_mut(b) {
++                p.props.space_before = Some(0.0);
++                p.props.space_after = Some(0.0);
++            }
++        }
++        if let Some(Block::Para(p)) = d.body.get_mut(1).map(Arc::make_mut) {
++            p.props.space_before = Some(before);
++        }
++        let l = lay(&d);
++        let r = shapes(&l.pages[0].items)[0];
++        let text = l.pages[0].items.iter().find_map(|i| match i {
++            Placed::Lines { y, path, story: StoryRef::Body, .. } if path.0.first() == Some(&1) => Some(*y),
++            _ => None,
++        });
++        (r.bottom(), text.expect("the paragraph's text"))
++    };
++    let (bottom, text) = tops(0.0);
++    assert!((text - bottom).abs() < 0.5, "no space before: text at {text}, the picture ends at {bottom}");
++    let (bottom, text) = tops(9.0);
++    assert!((text - bottom - 9.0).abs() < 0.5, "9 pt before: text at {text}, the picture ends at {bottom}");
++}
++
+ #[test]
+ fn float_moved_to_a_new_page_sits_at_its_paragraph_top() {
+     crate::test_fonts();

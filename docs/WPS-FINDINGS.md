@@ -831,6 +831,17 @@ at 16 pt; probes `out/f49/probe_digits.py`, both modes).
   gained (`228229e95c`), one lost (`7f0a1221f0`), one scored lower, and `2d6a9da333` diverged
   earlier, so it interacts with compression in a way not yet measured; not implemented.
 
+## F50. Text below its own top-and-bottom picture keeps the paragraph's space before
+
+Measured 2026-11-14 (`out/f50/probe_tb.py`: a picture with top-and-bottom wrapping anchored in the
+paragraph of its caption, exact 22 pt lines, 0 / 9 pt / half a line before; mid-page and at the
+top of a page; both modes). The picture sits at the paragraph's top, above its space before; the
+text below it starts that space before under the picture (9 pt before: 9 pt lower), also at the
+top of a page, where the space isn't above the picture. Wenshu put the text right under it.
+Patch 0081 (body and table cells); all 16 probes match. `dc-creative-8f343b7812`'s page 3 now
+matches; it is still a page short: an empty table row at a page bottom is squashed onto that page
+in Wenshu, where WPS moves the 40 pt row to the next page (row splitting, not yet traced).
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

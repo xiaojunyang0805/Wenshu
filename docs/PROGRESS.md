@@ -2,6 +2,24 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-14 (4): space before below a top-and-bottom picture (0081, F50); #5462 reply
+
+- **`8f343b7812`** (a page short): its pictures float top-and-bottom in their captions'
+  paragraphs (in table cells), and WPS starts the caption text the paragraph's space before below
+  the picture, also at the top of a page. 16 WPS probes (`out/f50`, both modes, mid-page and at the
+  top). **0081** (body flow and boxes); all match; the document's page 3 now matches. Still a page
+  short: an empty 40 pt table row at a page bottom is squashed onto that page in Wenshu, moved to
+  the next in WPS (row splitting, `table_flow.rs`; next).
+- **Tests:** a layout test failing without the change; layout and engine suites pass; clippy only
+  `shape_around`.
+- **Gates:** Windows 188 / 200, 0.9454; Linux 188 / 200, 0.9336 → 0.9337 (run one after the other
+  with two build jobs: the first parallel attempt was stopped for low memory). Linux baseline
+  updated.
+- **Upstream #5462:** Menonro confirmed the fix from another side (characters lost or redrawn in
+  the wrong face on `main`; 91 forms unchanged). Replied (user-approved); a description edit (their
+  failure modes; drop the agent-attribution line, house rule 15) is drafted, awaiting the user.
+- **Next:** the empty-row split (`8f343b7812`); group B (`a5beccd773`).
+
 ## 2026-11-14 (3): automatic spaces cut the mode-15 squeeze (0080); F49 digits narrowed down
 
 - **F49 digits, further:** WPS's 8.5 pt digits in `2d6a9da333` are not from
