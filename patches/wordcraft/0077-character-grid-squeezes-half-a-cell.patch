@@ -1,0 +1,114 @@
+Upstream: (not opened; WPS-measured: on a character grid punctuation compression squeezes a mark by up to half its cell, not half the font size, with mode 14's pool (no shorter limit for a longer line) in mode 15 too)
+diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
+--- a/crates/layout/src/para/grid.rs
++++ b/crates/layout/src/para/grid.rs
+@@ -201,7 +201,10 @@ pub(super) fn kern_punct(b: &mut Builder, text: &str, on_grid: bool) -> Vec<(usi
+     taken
+ }
+ 
+-pub(super) fn compress_punct(b: &Builder, text: &str, kerned: &[(usize, bool)]) -> (Vec<Squeeze>, Vec<(usize, f32)>) {
++/// On a character grid (`on_grid`) a mark's blank half is half its cell, as in kerning (WPS:
++/// `題：一、董事會如何組成？` fits a 19-cell line on a 17 pt pitch by squeezing `：` and `、` 8.5 pt
++/// each).
++pub(super) fn compress_punct(b: &Builder, text: &str, kerned: &[(usize, bool)], on_grid: bool) -> (Vec<Squeeze>, Vec<(usize, f32)>) {
+     let (mut squeeze, mut end) = (Vec::new(), Vec::new());
+     for (k, c) in b.clusters.iter().enumerate() {
+         if c.kind != ClKind::Text {
+@@ -213,15 +216,16 @@ pub(super) fn compress_punct(b: &Builder, text: &str, kerned: &[(usize, bool)])
+         if !(size.is_finite() && size > 0.0 && c.adv >= 0.9 * size) {
+             continue;
+         }
++        let half = if on_grid && c.adv.is_finite() { c.adv / 2.0 } else { size / 2.0 }.min(200.0);
+         if let Some(side) = crate::kinsoku::squeeze_side(ch) {
+             let left = side == crate::kinsoku::Side::Left;
+             // A blank half kerning took is gone.
+             if !kerned.contains(&(k, left)) {
+-                squeeze.push(Squeeze { k, room: (size / 2.0).min(200.0), left, em: size.min(400.0), gap: false });
++                squeeze.push(Squeeze { k, room: half, left, em: size.min(400.0), gap: false });
+             }
+         }
+         if crate::kinsoku::end_blank(ch) && !kerned.contains(&(k, false)) {
+-            end.push((k, (size / 2.0).min(200.0)));
++            end.push((k, half));
+         }
+     }
+     (squeeze, end)
+diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
+--- a/crates/layout/src/para/paragraph.rs
++++ b/crates/layout/src/para/paragraph.rs
+@@ -717,11 +717,8 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+     }
+     // Kerned text closes up adjacent full-width marks, on a character grid too (WPS: by half the
+     // pitch).
+-    let kerned = if doc.settings.no_punctuation_kerning {
+-        Vec::new()
+-    } else {
+-        super::grid::kern_punct(&mut sh.b, &p.text, rp.snap_to_grid && env.grid.chars.is_some())
+-    };
++    let on_grid = rp.snap_to_grid && env.grid.chars.is_some();
++    let kerned = if doc.settings.no_punctuation_kerning { Vec::new() } else { super::grid::kern_punct(&mut sh.b, &p.text, on_grid) };
+     // Text on a character grid keeps to its cells; compression applies there too (WPS).
+     let mut auto_space =
+         if rp.snap_to_grid && env.grid.chars.is_some() { Vec::new() } else { auto_space(&mut sh.b, &p.text, rp.auto_space_de, rp.auto_space_dn) };
+@@ -736,7 +733,7 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+     let compresses = doc.settings.char_spacing.compresses_punctuation() && (justified || squeeze_rule == super::SqueezeRule::HalfEm);
+     let mut end_marks = Vec::new();
+     let squeeze = if compresses {
+-        let (mut squeeze, end_blank) = compress_punct(&sh.b, &p.text, &kerned);
++        let (mut squeeze, end_blank) = compress_punct(&sh.b, &p.text, &kerned, on_grid);
+         // Mode 14 and older squeeze an automatic space by up to half on an overflowing line, in
+         // the same pool as the marks (WPS, F13).
+         if squeeze_rule == super::SqueezeRule::HalfEm {
+@@ -818,7 +815,10 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+         enclosures,
+         auto_space,
+         squeeze,
+-        squeeze_rule,
++        // On a character grid a line squeezes what it needs, each mark at most half its cell, with
++        // no shorter limit for a longer line (WPS, mode 15: `，（）` a third of a 17 pt cell each to
++        // fit one more character on a 26-cell line).
++        squeeze_rule: if on_grid { super::SqueezeRule::HalfEm } else { squeeze_rule },
+         end_marks,
+         hang_marks,
+     };
+diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
+--- a/crates/layout/src/tests/grid.rs
++++ b/crates/layout/src/tests/grid.rs
+@@ -354,6 +354,37 @@ fn character_indents_on_a_character_grid_count_the_texts_advance() {
+ 
+ /// On a character grid the column is as wide as the most whole pitches it holds (WPS Office,
+ /// `gov-nmpa-6`); a width a whole number of pitches keeps it, and so does a section without one.
++/// Punctuation compression on a character grid: a line one cell too long fits by squeezing its
++/// marks by up to half a cell each, not half the font size, and with no shorter limit for a
++/// longer line, in compatibility mode 15 too (WPS: `題：一、董事會如何組成？` on a 17 pt pitch at
++/// 16 pt squeezes `：` and `、` 8.5 pt each).
++#[test]
++fn a_character_grid_line_squeezes_its_marks_by_half_a_cell() {
++    crate::test_fonts();
++    let lines = wordcraft_doc::SectionProps { doc_grid: Some(DocGrid { kind: DocGridType::Lines, ..Default::default() }), ..Default::default() };
++    let size = para::Grid::of(&Document::from_text(""), &lines).font_size;
++    let cs = DocGrid::char_space_for(size + 2.5, size);
++    let probe = with_grid("日", DocGridType::LinesAndChars, cs);
++    let pitch = probe.last_section.grid_char_pitch(size).unwrap();
++    let first = |d: &Document| {
++        lay(d).pages[0].items.iter().find_map(|it| if let Placed::Lines { para, .. } = it { Some(para.clone()) } else { None }).unwrap()
++    };
++    let cells = (first(&probe).lines[0].right / pitch).round() as usize;
++    // One cell more than the line holds, two of them marks, ending in a unit that can't be split
++    // (`成？`) as in WPS's line.
++    let text = format!("{}：一、成？", "日".repeat(cells - 4));
++    let mut d = with_grid(&text, DocGridType::LinesAndChars, cs);
++    d.settings.compat_mode = 15;
++    d.settings.char_spacing = wordcraft_doc::CharSpacing::CompressPunctuation;
++    for b in d.body.iter_mut() {
++        if let Block::Para(p) = std::sync::Arc::make_mut(b) {
++            p.props.align = Some(wordcraft_doc::props::Align::Justify);
++        }
++    }
++    let pl = first(&d);
++    assert_eq!(pl.lines.len(), 1, "{} cells on a {cells}-cell line of {pitch} pt", cells + 1);
++}
++
+ #[test]
+ fn a_character_grid_narrows_the_column_to_whole_pitches() {
+     let right = |d: &Document| {

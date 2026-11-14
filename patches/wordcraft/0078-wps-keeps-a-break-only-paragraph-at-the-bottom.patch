@@ -1,0 +1,69 @@
+Upstream: (not opened; WPS-measured, F48: in WPS Office's own layout mode a paragraph of only a page break that doesn't fit at a page's bottom stays there, as in Word; 0043's going over is the other mode's)
+diff --git a/crates/layout/src/flow.rs b/crates/layout/src/flow.rs
+--- a/crates/layout/src/flow.rs
++++ b/crates/layout/src/flow.rs
+@@ -459,7 +459,7 @@ impl<'a> Flow<'a> {
+             if over && fit.l1 > l0 && !split {
+                 break;
+             }
+-            if over && fit.l1 == l0 && !pb.fresh() && !split && !self.stays_at_bottom(pb, l) {
++            if over && fit.l1 == l0 && !pb.fresh() && !split && !self.stays_at_bottom(pb, l, ctx.doc.settings.wps_layout) {
+                 break;
+             }
+             fit.notes.extend(line_notes);
+@@ -476,13 +476,13 @@ impl<'a> Flow<'a> {
+     /// would leave a blank page behind it, as in Word), and so does an empty paragraph closing a
+     /// section before a new page (measured in Word: it stays on a full page instead of starting
+     /// one of its own).
+-    fn stays_at_bottom(&self, pb: &PageBuilder, l: &para::Line) -> bool {
++    fn stays_at_bottom(&self, pb: &PageBuilder, l: &para::Line, wps_layout: bool) -> bool {
+         let p = self.p;
+         // WPS keeps it there only when the paragraph goes on after the break (a heading opening
+         // with one); a paragraph of nothing but a break that doesn't fit goes over, and its break
+         // leaves the page after it blank (measured at any line height, with or without space
+-        // after).
+-        let continues = self.pl.lines.iter().any(|m| m.start >= l.stop && !only_markers(p, m.start..m.stop));
++        // after). In WPS's own layout mode it stays, as in Word.
++        let continues = wps_layout || self.pl.lines.iter().any(|m| m.start >= l.stop && !only_markers(p, m.start..m.stop));
+         let only_break = matches!(l.end, LineEnd::PageBreak | LineEnd::ColumnBreak)
+             && continues
+             && only_breaks(p, l.start..l.stop, |c| matches!(c, wordcraft_doc::para::PAGE_BREAK | wordcraft_doc::para::COLUMN_BREAK));
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -10760,6 +10760,35 @@ fn a_paragraph_of_only_a_page_break_goes_over_when_it_does_not_fit() {
+     assert_eq!(pages(full - 1, ""), 2, "with room for it, it stays");
+ }
+ 
++/// In WPS Office's own layout mode a paragraph of only a page break that doesn't fit at a page's
++/// bottom stays there, as in Word, and the text after it starts the next page (WPS probes: 24 lines
++/// of exactly 28 pt, the break, then text: 2 pages in its own mode, 3 in the other).
++#[test]
++fn wps_keeps_a_paragraph_of_only_a_page_break_at_the_bottom() {
++    let pages = |fillers: usize, wps: bool| {
++        let plain = ParaProps {
++            space_before: Some(0.0),
++            space_after: Some(0.0),
++            line_spacing: Some(wordcraft_doc::props::LineSpacing::Exactly(28.0)),
++            ..Default::default()
++        };
++        let para = |text: &str| {
++            let mut x = wordcraft_doc::Paragraph::with_text(text, Default::default());
++            x.props = plain.clone();
++            wordcraft_doc::para_block(x)
++        };
++        let mut d = Document::new();
++        d.settings.wps_layout = wps;
++        d.body = (0..fillers).map(|i| para(&format!("F{i}"))).collect();
++        d.body.push(para(&wordcraft_doc::para::PAGE_BREAK.to_string()));
++        d.body.push(para("Text"));
++        lay(&d).pages.len()
++    };
++    let full = (10..80).find(|n| pages(*n + 1, false) == 3 && pages(*n, false) == 3).expect("a filler count that fills page 1");
++    assert_eq!(pages(full, false), 3, "other mode: the break goes over");
++    assert_eq!(pages(full, true), 2, "WPS's own mode: it stays at the bottom");
++}
++
+ /// A kept heading goes with the paragraph after it when that paragraph cannot start on its
+ /// page (#966): with widow/orphan control on, one line of it at the bottom of the page moves
+ /// over with the rest, so only two lines below the heading hold it there. Word and LibreOffice

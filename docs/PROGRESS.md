@@ -2,6 +2,27 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-14 (2): 188 / 200 on both: 29a7772dfb matches (0078, 0079); grid squeeze (0077)
+
+- **`29a7772dfb`** (WPS's own file, two pages over): (1) a paragraph of only a page break after a
+  full page went over and left page 5 blank. WPS probes in both modes (`out/f48`): only the other
+  mode does that (F28's probes predate F45); in its own mode it stays at the bottom, as in Word
+  (F48, **0078**). (2) The 13 last headings, kept with next, moved to a new page: keep with next
+  measured the run with each space after added to the next space before, where the flow places the
+  larger (**0079**, a plain fix). The document now matches (27 pages).
+- **`2d6a9da333`** (one page short): on its character grid WPS squeezes marks by up to half a cell
+  with mode 14's pool in mode 15 too (F49, **0077**); page 1 now matches. The next difference:
+  WPS gives digits and Latin letters on a character grid the grid's adjustment (+1 pt on a 17 pt
+  grid for 16 pt; probes `out/f49`, both modes). Tried, not kept: +1 document (`228229e95c`), −1
+  (`7f0a1221f0`), one lower score, `2d6a9da333` earlier off; it interacts with compression in a
+  way not yet measured.
+- **Tests:** a test for each patch, each failing without it; layout and engine suites pass; clippy
+  only `shape_around` (31, earlier).
+- **Gates:** **Windows 188 / 200**, 0.9447 → **0.9454**; **Linux 188 / 200**, 0.9331 → **0.9336**;
+  nothing lower. Baselines updated.
+- **Next:** F49's half-width rule with compression (probes of lines that squeeze beside digits),
+  then `2d6a9da333` again; the other 12 off documents (groups A–I, 2026-11-04 table).
+
 ## 2026-11-14: F46 done (0076): WPS header floats don't wrap the header text
 
 - **From the 2026-11-13 probes** (40: DrawingML and VML, square / top-and-bottom / none, 96 and

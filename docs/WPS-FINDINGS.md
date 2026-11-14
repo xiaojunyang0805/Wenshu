@@ -797,6 +797,37 @@ the corpus: 13 WPS-authored documents declare mode 15; `85cb8e4b30` now matches 
 none lower; Windows gate 186 → 187, mean 0.9435 → 0.9445. Patch 0069 (`Settings::wps_layout` from
 `app.xml`, `Settings::layout_compat_mode`).
 
+## F48. WPS's own mode keeps a paragraph of only a page break at the page bottom
+
+Measured 2026-11-14 (probes in both modes, `out/f48/probe_brk.py`: 24 lines of exactly 28 pt, then
+a paragraph of only `<w:br w:type="page"/>`, then text; 17 lines of 40 pt likewise). In the
+other-application mode the break paragraph that doesn't fit goes over and leaves the next page
+blank (3 pages), as F28 measured (its probes predate F45, so they were in that mode). In WPS's own
+mode it stays at the bottom of the full page, as in Word, and the text starts page 2 (2 pages).
+Patch 0078. `dc-administrative-29a7772dfb` (WPS's own file) lost its blank page.
+
+Found on the way, in the same document (a fix, not a WPS difference): a run of 13 headings kept
+with the next paragraph (13 pt before and after) was measured with each heading's space after
+added to the next one's space before, though the flow places the larger of the two; the run looked
+13 pt a heading taller and went to a new page. Patch 0079; the document now matches (27 pages).
+
+## F49. A character grid: compression by half a cell; half-width text gains the adjustment
+
+Measured 2026-11-14 (`dc-reports-2d6a9da333`, Word's file, mode 15, `linesAndChars`, 17 pt pitch
+at 16 pt; probes `out/f49/probe_digits.py`, both modes).
+
+- **Compression:** on a line one cell too long WPS squeezes its marks by up to half their cell
+  (`：` and `、` 8.5 pt each to fit `成？`; `，（）` a third of a cell each, 17 pt together, to fit
+  `系`), not half the font size, and with mode 14's pool in mode 15 too (mode 15's shorter limit
+  for longer lines would allow only about 14 pt). A line that fits squeezes nothing. Patch 0077;
+  that document's first page now matches.
+- **Half-width text:** digits and Latin letters on a character grid keep their own advance plus
+  the grid's adjustment (the pitch less the default size), unsnapped: on a 17 pt grid for 16 pt a
+  digit advances 9 pt, a Times letter its width plus about 1 pt (both modes, with and without
+  automatic spacing). WordCraft keeps them at their own advance. Tried 2026-11-14: one document
+  gained (`228229e95c`), one lost (`7f0a1221f0`), one scored lower, and `2d6a9da333` diverged
+  earlier, so it interacts with compression in a way not yet measured; not implemented.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).

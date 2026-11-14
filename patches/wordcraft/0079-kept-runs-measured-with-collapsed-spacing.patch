@@ -1,0 +1,69 @@
+Upstream: (not opened; a fix: keep-with-next measures a run of kept paragraphs with the space between two the larger of the first's after and the second's before, as the flow places them, not their sum)
+diff --git a/crates/layout/src/flow.rs b/crates/layout/src/flow.rs
+--- a/crates/layout/src/flow.rs
++++ b/crates/layout/src/flow.rs
+@@ -1097,7 +1097,16 @@ fn next_first_line(ctx: &mut Ctx, block: usize, width: f32, depth: usize, counte
+                 pl.rp.space_before + top + lines_height(&pl, if pl.rp.widow_control && k >= 1 { 1 } else { 0 })
+             } else if pl.rp.keep_next && depth < 8 {
+                 let bottom = if joined(ctx.doc, &ctx.doc.body, block + 1, Some(block + 2), None) { 0.0 } else { own.bottom };
+-                pl.rp.space_before + top + pl.height + bottom + pl.rp.space_after + next_first_line(ctx, block + 1, width, depth + 1, counters)
++                // The space between it and the next is the larger of its space after and the next's
++                // space before, as the paragraphs are placed (`space_before`), not their sum: a
++                // run of kept headings looked taller than it is and moved to the next page.
++                let after = pl.rp.space_after;
++                let next_before = match ctx.doc.body.get(block + 2).map(|b| &**b) {
++                    Some(Block::Para(n)) => ctx.doc.styles.resolve_para(&n.props).space_before,
++                    _ => 0.0,
++                };
++                let overlap = if after > 0.0 && next_before > 0.0 && !ctx.doc.settings.sum_paragraph_spacing { after.min(next_before) } else { 0.0 };
++                pl.rp.space_before + top + pl.height + bottom + after - overlap + next_first_line(ctx, block + 1, width, depth + 1, counters)
+             } else {
+                 // The room this one needs to start on the page with the kept paragraph before
+                 // it (#966).
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -10789,6 +10789,43 @@ fn wps_keeps_a_paragraph_of_only_a_page_break_at_the_bottom() {
+     assert_eq!(pages(full, true), 2, "WPS's own mode: it stays at the bottom");
+ }
+ 
++/// A run of headings kept with the next paragraph moves to the next page only when it doesn't fit:
++/// its height counts the larger of a heading's space after and the next one's space before, as
++/// the headings are placed, not their sum (13 headings with 13 pt before and after fit a page in
++/// WPS; counted with the sums the run seemed too tall and went over, leaving a page short).
++#[test]
++fn a_run_of_kept_headings_is_measured_with_its_spacing_collapsed() {
++    let exact = |h: f32| Some(wordcraft_doc::props::LineSpacing::Exactly(h));
++    // The page the first heading lands on after `fillers` lines of exactly 28 pt.
++    let first_heading_page = |fillers: usize| {
++        let mut d = Document::new();
++        let filler = ParaProps { space_before: Some(0.0), space_after: Some(0.0), line_spacing: exact(28.0), ..Default::default() };
++        let heading =
++            ParaProps { space_before: Some(13.0), space_after: Some(13.0), line_spacing: exact(18.0), keep_next: Some(true), ..Default::default() };
++        let para = |text: &str, props: &ParaProps| {
++            let mut x = wordcraft_doc::Paragraph::with_text(text, Default::default());
++            x.props = props.clone();
++            wordcraft_doc::para_block(x)
++        };
++        d.body = (0..fillers).map(|i| para(&format!("F{i}"), &filler)).collect();
++        d.body.extend((0..10).map(|i| para(&format!("H{i}"), &heading)));
++        d.body.push(para("Body", &filler));
++        let l = lay(&d);
++        let body = (d.last_section.page_h - d.last_section.margin_top - d.last_section.margin_bottom, fillers);
++        let page = l
++            .pages
++            .iter()
++            .position(|p| p.items.iter().any(|i| matches!(i, Placed::Lines { path, .. } if path.0.first().is_some_and(|&b| b as usize == fillers))));
++        (page, body)
++    };
++    let last = (1..40).take_while(|n| first_heading_page(*n).0 == Some(0)).last().expect("a filler count leaving the heading on page 1");
++    let (_, (body, n)) = first_heading_page(last);
++    let room = body - n as f32 * 28.0;
++    // The heading measures the next eight with it: 13 + 9 x 18 + 8 x 13 (+ the next's first line)
++    // collapsed, 9 x 44 with the sums.
++    assert!(room < 9.0 * 44.0, "the run started with {room} pt left: measured with its spacing summed");
++}
++
+ /// A kept heading goes with the paragraph after it when that paragraph cannot start on its
+ /// page (#966): with widow/orphan control on, one line of it at the bottom of the page moves
+ /// over with the rest, so only two lines below the heading hold it there. Word and LibreOffice
