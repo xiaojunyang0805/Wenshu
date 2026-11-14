@@ -2,6 +2,19 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-14 (12): 192 / 200 on both: 39de0888eb matches (0090–0092)
+
+- **0090** (F57): the mode-15 squeeze limit counts the gaps before the last unit, one fewer than
+  the characters (6 of 9 WPS cases exact, 3 one 0.05 pt step generous). **0091**: a character
+  border takes its width as room on each side of the bordered run (10 / 10 probes). **0092**: a
+  hanging indent leaves the first word of a cell paragraph its column (autofit minimum).
+  Each with a test failing without it.
+- **Gates:** Windows 192 / 200, 0.9469; Linux 192 / 200, 0.935 (first Linux run stopped for low
+  memory, rerun alone). Baselines updated.
+- **Still off (8):** `2d6a9da333` (F49 digits), `7abe5be4e9`, `228229e95c`, `82eb70e86d`,
+  `cd82c17bf5`, `a180b9d578`, `f7d3afdfdb`, `9c189a35a9`.
+- **Next:** `2d6a9da333`; triage `7abe5be4e9` (lowest score, 0.83).
+
 ## 2026-11-14 (11): 191 / 200 on both: a5beccd773 matches (0089)
 
 - **Page 13** of `a5beccd773`: its last row (`6-2`) fitted but for the 0.5 pt border below it, and
