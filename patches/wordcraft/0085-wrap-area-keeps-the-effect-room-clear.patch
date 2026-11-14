@@ -1,0 +1,42 @@
+Upstream: (not opened; WPS-measured, F53: a floating object's wrap area includes the room its file keeps for effects, wp:effectExtent: 0, 1.5, 10 and 20 pt on a square-wrapped picture's left move the text beside it that much)
+diff --git a/crates/layout/src/floats.rs b/crates/layout/src/floats.rs
+--- a/crates/layout/src/floats.rs
++++ b/crates/layout/src/floats.rs
+@@ -214,8 +214,10 @@ pub(crate) fn wrap_area(r: Rect, float: &Float, outline: Option<&[(f32, f32)]>)
+     }
+     let d = |v: f32| if v.is_finite() { v.clamp(0.0, 1584.0) } else { 0.0 };
+     let (side, top, bottom) = (d(float.dist), d(float.dist_top), d(float.dist_bottom));
+-    // A rotated object keeps text clear of its rotated bounds.
+-    let r = float.spin().bounds(r);
++    // A rotated object keeps text clear of its rotated bounds, and any object of the room its
++    // file keeps for effects around it (`wp:effectExtent`).
++    let [el, et, er, eb] = float.effect_extent();
++    let r = float.spin().bounds(r).union(&Rect::new(r.x - el, r.y - et, r.w + el + er, r.h + et + eb));
+     Some((Rect::new(r.x - side, r.y - top, r.w + side * 2.0, r.h + top + bottom), float.wrap == Wrap::TopAndBottom, None, float.wrap_text, false))
+ }
+ 
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -7225,6 +7225,21 @@ fn wrap_area_uses_each_distance() {
+     assert!(wrap_area(Rect::new(0.0, 0.0, 10.0, 10.0), &Float { wrap: Wrap::BehindText, ..Default::default() }, None).is_none());
+ }
+ 
++/// The room a file keeps for effects around an object (`wp:effectExtent`) is part of what text
++/// keeps clear of (WPS, measured: a square-wrapped picture with 1.5, 10 and 20 pt effect room on
++/// its left moves the text beside it that much further left; none leaves it at the distance).
++#[test]
++fn wrap_area_keeps_the_effect_room_clear() {
++    crate::test_fonts();
++    use wordcraft_doc::para::{Float, Wrap};
++    let f = Float { wrap: Wrap::Square, dist: 9.0, effect: [1.5, 2.0, 0.0, 4.0], ..Default::default() };
++    let (r, ..) = wrap_area(Rect::new(10.0, 20.0, 100.0, 50.0), &f, None).unwrap();
++    assert_eq!((r.x, r.y, r.right(), r.bottom()), (-0.5, 18.0, 119.0, 74.0));
++    let hostile = Float { wrap: Wrap::Square, effect: [f32::NAN, -5.0, f32::INFINITY, 0.0], ..Default::default() };
++    let (r, ..) = wrap_area(Rect::new(0.0, 0.0, 10.0, 10.0), &hostile, None).unwrap();
++    assert!(r.w.is_finite() && r.x == 0.0 && r.y == 0.0, "{r:?}");
++}
++
+ /// Text below its own paragraph's top-and-bottom object starts the paragraph's space before below
+ /// it: the object sits at the paragraph's top, above that space, and the text keeps it (WPS, both
+ /// modes: 9 pt before puts the text 9 pt under the picture; none, right under it).

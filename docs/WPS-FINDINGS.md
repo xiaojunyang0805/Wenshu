@@ -873,6 +873,20 @@ measure sizes with a break, so the break is handled elsewhere for this paragraph
 paragraph's last character, followed by an empty 20 pt run and a 20 pt mark). Next: find where. Its watermark (WordArt in
 the header) is drawn as text by Wenshu, as outlines by WPS, which line comparisons must skip.
 
+## F53. The wrap area includes the effect room
+
+Measured 2026-11-14 (`out/f53/mk.py`: `dc-administrative-a9f763a2b4` with only its QR code's
+`wp:effectExtent` changed): with no effect room the text beside the square-wrapped picture ends
+where the picture's left edge less the 9 pt distance from text puts it (323.6 pt, as in Wenshu);
+with 10 and 20 pt on the left it ends exactly that much further left (313.7, 303.7), and the
+document's own 1.5 pt costs the lines one character (316.8). Wenshu left the effect room out of the
+wrap area. Patch 0085 adds it (with a rotated object's bounds, whichever is larger).
+
+In `a9f763a2b4` this was the "squeezed `、`": with 1.5 pt less room the lines beside the QR code
+can no longer fit a squeezed mark, and page 3 now breaks line for line as in WPS. The document is
+still a page short: column 2's rota table rows come out 2–4 pt shorter than WPS's, which leaves
+room on page 3 for the two empty paragraphs that end the document (WPS: an empty page 4).
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).
