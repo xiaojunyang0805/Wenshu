@@ -1,0 +1,78 @@
+Upstream: (not opened; WPS-measured, F51: WPS Office lays out a cell with w:hideMark as any other, its empty last paragraph taking its line, in both layout modes; Word lets it take no room)
+diff --git a/crates/layout/src/table.rs b/crates/layout/src/table.rs
+--- a/crates/layout/src/table.rs
++++ b/crates/layout/src/table.rs
+@@ -655,20 +655,18 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
+                         ..BoxInput::cell(story, &cell.blocks, &cpath, cw, text, depth)
+                     },
+                 );
+-                // A hidden end-of-cell mark: an empty last paragraph takes no room (Word for
+-                // Windows: a row of empty such cells is only its borders).
++                // A hidden end-of-cell mark (`w:hideMark`) changes nothing: WPS Office lays the cell
++                // out as any other, its empty last paragraph taking its line (both layout modes; Word
++                // for Windows lets it take no room, so a row of empty such cells is only its
++                // borders).
+                 let empty_last = cell.blocks.last().and_then(|b| b.as_para()).is_some_and(|p| p.text.is_empty());
+-                if cell.props.hide_mark && empty_last {
++                collapsed = false;
++                // An empty last paragraph right after a nested table takes no room (WPS Office: the
++                // cell ends at the nested table's bottom; with two empty paragraphs after it, both
++                // count).
++                let n = cell.blocks.len();
++                if empty_last && n >= 2 && cell.blocks.get(n - 2).is_some_and(|b| b.as_table().is_some()) {
+                     height = last_top;
+-                } else {
+-                    collapsed = false;
+-                    // An empty last paragraph right after a nested table takes no room either
+-                    // (WPS Office: the cell ends at the nested table's bottom; with two empty
+-                    // paragraphs after it, both count).
+-                    let n = cell.blocks.len();
+-                    if empty_last && n >= 2 && cell.blocks.get(n - 2).is_some_and(|b| b.as_table().is_some()) {
+-                        height = last_top;
+-                    }
+                 }
+                 for it in &mut items {
+                     it.translate(x0 + margins[1], margins[0] + band_t);
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -10483,12 +10483,13 @@ fn a_list_label_adds_ascent_but_not_descent() {
+     assert!((below(&big) - below(&plain)).abs() < 0.01, "the text's descent: {} vs {}", below(&big), below(&plain));
+ }
+ 
+-/// A cell's hidden end-of-cell mark (`w:hideMark`), measured in Word for Windows (`plan/word`
+-/// R20, 9 cases): its empty last paragraph takes no room, spacing and all, so a row of such empty
+-/// cells is only its borders; one ordinary empty cell keeps the row a line tall, and a paragraph
+-/// with text is never hidden. NIH's Table A showed a blank row Word doesn't.
++/// A cell's hidden end-of-cell mark (`w:hideMark`) changes nothing in WPS Office (probes in both
++/// layout modes: an empty row of such cells, 22 pt exactly with 9 pt before and after, stays 40 pt
++/// and moves to the next page whole), where Word for Windows lets the empty last paragraph take no
++/// room. Rows of hidden marks, mixed and ordinary empty cells, and text before the mark, all lay
++/// out as without it.
+ #[test]
+-fn a_hidden_cell_mark_takes_no_room() {
++fn a_hidden_cell_mark_changes_nothing() {
+     crate::test_fonts();
+     let row3_top = |hide: [bool; 2], second: Option<&str>| {
+         let mut d = Document::from_text("Above");
+@@ -10529,13 +10530,15 @@ fn a_hidden_cell_mark_takes_no_room() {
+         at(1) - at(0)
+     };
+     let row2 = |hide: [bool; 2], second: Option<&str>| row3_top(hide, second) - line;
+-    let hidden = row2([true, true], None);
+-    assert!(hidden < 1.5, "a row of hidden marks is only its borders: {hidden} vs a line of {line}");
+-    let mixed = row2([true, false], None);
+     let plain = row2([false, false], None);
+-    assert!(plain > 5.0 && (mixed - plain).abs() < 0.01, "an ordinary empty cell keeps the row: {mixed} vs {plain}");
++    assert!(plain > 5.0, "an empty row is a line tall: {plain}");
++    for hide in [[true, true], [true, false]] {
++        let hidden = row2(hide, None);
++        assert!((hidden - plain).abs() < 0.01, "hidden marks {hide:?}: {hidden} vs {plain}");
++    }
+     let text = row2([true, true], Some("Tx"));
+-    assert!((text - line).abs() < 0.5, "text stays, the empty mark after it goes: {text} vs {line}");
++    let shown = row2([false, false], Some("Tx"));
++    assert!((text - shown).abs() < 0.01 && text > line + 5.0, "the empty mark after text keeps its line: {text} vs {shown}");
+ }
+ 
+ /// An empty last paragraph right after a nested table takes no room: the cell ends at the nested

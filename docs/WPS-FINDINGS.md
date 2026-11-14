@@ -839,8 +839,21 @@ top of a page; both modes). The picture sits at the paragraph's top, above its s
 text below it starts that space before under the picture (9 pt before: 9 pt lower), also at the
 top of a page, where the space isn't above the picture. Wenshu put the text right under it.
 Patch 0081 (body and table cells); all 16 probes match. `dc-creative-8f343b7812`'s page 3 now
-matches; it is still a page short: an empty table row at a page bottom is squashed onto that page
-in Wenshu, where WPS moves the 40 pt row to the next page (row splitting, not yet traced).
+matches; the rest of that document is F51.
+
+## F51. WPS ignores `w:hideMark`; a row split keeps a picture with its paragraph
+
+Measured 2026-11-14 (`out/f51/probe_row.py`, both modes: an empty one-paragraph row, 22 pt
+exactly with 9 pt before and after, arriving at a page bottom with 2, 10 and 25 pt left).
+
+- **`w:hideMark`** (a cell's hidden end-of-cell mark) changes nothing in WPS: the row stays 40 pt
+  and moves to the next page whole, with or without it. Word lets the empty last paragraph take
+  no room. Wenshu followed Word and squashed the row onto the page (0.5 pt). Patch 0082.
+- **A row split** in Wenshu could leave a caption's own top-and-bottom picture on the page (it
+  fitted above the cut) and move the caption on; WPS moves the row whole. A picture or graphic now
+  goes with its paragraph when that paragraph's first line moves on. Patch 0083.
+
+With F50, `dc-creative-8f343b7812` now matches (6 pages, every page start as in WPS).
 
 ## Still to measure
 

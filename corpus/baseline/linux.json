@@ -242,9 +242,9 @@
   },
   "dc-creative-8f343b7812.docx": {
    "error": null,
-   "pages": 5,
+   "pages": 6,
    "ref": 6,
-   "score": 0.8468
+   "score": 0.9582
   },
   "dc-creative-a23594df1d.docx": {
    "error": null,
@@ -1202,8 +1202,8 @@
   }
  },
  "machine": "Windows-11-10.0.26200-SP0",
- "mean_score": 0.9337,
+ "mean_score": 0.934,
  "page_count_compared": 200,
- "page_count_matches": 188,
+ "page_count_matches": 189,
  "platform": "linux"
 }

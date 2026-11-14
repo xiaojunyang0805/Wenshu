@@ -8,7 +8,7 @@ Wenshu is an independent project, not affiliated with Kingsoft or Microsoft. It 
 made in WPS Office and Microsoft Word.
 
 **Status: MVP jobs met (v0.1.5).** M0 foundations, M1 Chinese layout (page counts
-match WPS on 188 / 200 corpus documents on Windows and on Linux), M2 desktop alpha and M3's OFD
+match WPS on 189 / 200 corpus documents on Windows and on Linux), M2 desktop alpha and M3's OFD
 export are done, and a self-hostable browser version is available (M4 started); [releases](https://github.com/xiaojunyang0805/Wenshu/releases) are published as
 pre-releases. The layout patches are in draft PRs upstream, reworked to WPS measurements across a 200-document corpus
 ([corpus/README.md](corpus/README.md), [docs/WPS-FINDINGS.md](docs/WPS-FINDINGS.md)). The desktop

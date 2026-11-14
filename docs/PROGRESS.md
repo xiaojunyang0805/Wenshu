@@ -2,6 +2,25 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-14 (5): 189 / 200 on both: 8f343b7812 matches (0082, 0083)
+
+- **The empty row** at page 3's bottom (`8f343b7812`): its cell has `w:hideMark`. Probes in both
+  modes (`out/f51`): WPS ignores it (the 40 pt row moves on whole); Wenshu followed Word and
+  squashed the row to 0.5 pt. **0082** lays such cells out as any other (the upstream Word test
+  rewritten to WPS's behaviour).
+- **Then** a row split left a caption's own picture on page 4 (it fitted above the cut) and moved
+  the caption on; WPS moves the row whole. **0083**: a picture or graphic goes with its paragraph
+  when the paragraph's first line moves on. The document now matches: 6 pages, every page start as
+  in WPS.
+- **Tests:** each change has a test failing without it; layout and engine suites pass; clippy only
+  `shape_around` (helpers keep `split_row_with` at the limit).
+- **Gates:** **Windows 189 / 200**, 0.9457; **Linux 189 / 200**, 0.934; nothing lower. Baselines
+  updated.
+- **Also:** #5462's description now has Menonro's failure modes; the agent-attribution line was
+  removed from all nine open upstream PRs (house rule 15; user-approved).
+- **Next:** group B (`a5beccd773`, a semicolon that doesn't hang), `a9f763a2b4`, `39de0888eb`'s
+  list-label line.
+
 ## 2026-11-14 (4): space before below a top-and-bottom picture (0081, F50); #5462 reply
 
 - **`8f343b7812`** (a page short): its pictures float top-and-bottom in their captions'
@@ -16,8 +35,7 @@ Newest first. One entry per working session: what landed, what was verified, wha
   with two build jobs: the first parallel attempt was stopped for low memory). Linux baseline
   updated.
 - **Upstream #5462:** Menonro confirmed the fix from another side (characters lost or redrawn in
-  the wrong face on `main`; 91 forms unchanged). Replied (user-approved); a description edit (their
-  failure modes; drop the agent-attribution line, house rule 15) is drafted, awaiting the user.
+  the wrong face on `main`; 91 forms unchanged). Replied (user-approved); description updated.
 - **Next:** the empty-row split (`8f343b7812`); group B (`a5beccd773`).
 
 ## 2026-11-14 (3): automatic spaces cut the mode-15 squeeze (0080); F49 digits narrowed down
