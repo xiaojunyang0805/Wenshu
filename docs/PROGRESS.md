@@ -2,6 +2,22 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-14 (8): 190 / 200 on both: a9f763a2b4 matches (0085, 0086)
+
+- **The "squeezed `、`"** beside the picture was really the wrap edge: the line is beside the QR
+  code on page 3, whose `wp:effectExtent` keeps 1.5 pt on its left. WPS probes (the document with
+  that room at 0, 1.5, 10, 20 pt): the text edge moves by exactly the effect room. **0085** adds it
+  to the wrap area (F53); page 3 then breaks line for line as in WPS.
+- **The last page:** the rota table's rows were 1 pt short under its double cell borders, leaving
+  room for the two closing empty paragraphs. Probes (the table cut out, borders swapped): a double
+  border takes 3 × its width, a triple 5 ×. **0086** (F54); all probes within 0.1 pt.
+  `thinThickSmallGap` not measured closely enough, left as it was.
+- **Tests:** a unit test of the wrap area and a layout test of the row pitch, each failing without
+  its fix; layout 759 pass; clippy only `shape_around`; all 86 patches replay on a clean worktree.
+- **Gates:** Windows 190 / 200, 0.9459; Linux 190 / 200, 0.9341 (also `dc-forms-1cf94cc345`'s
+  score up 0.92 → 0.95). Baselines updated.
+- **Next:** `a5beccd773` (the 20 pt break path), `39de0888eb`'s list-label line, `2d6a9da333`.
+
 ## 2026-11-14 (7): a5beccd773 and a9f763a2b4 narrowed down (no patch)
 
 - **`a5beccd773`:** with a 12 pt break the document matches WPS; with its 20 pt break only page 1's

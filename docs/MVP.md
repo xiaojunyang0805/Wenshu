@@ -12,7 +12,7 @@ Writer only. Slides and Sheets come after the MVP.
 
 | # | Job | MVP acceptance | Status (2026-11-13) |
 |---|---|---|---|
-| J1 | Open a .docx received from WPS/Word and read it correctly | ≥ 90% of corpus docs open without error; FangSong/Kai/Song/Hei never fall back to sans; page count matches the WPS reference on ≥ 80% | **Met.** 200 / 200 open without error. Page count matches on **189 / 200 (94.5%)** on Windows, mean page score 0.9457 (2026-11-13; baseline 2026-10-31: 112 / 200, 0.903), and on **189 / 200** on Linux with the packaged fonts (mean 0.934; the same page count as Windows on all 200; see open question 2). Fonts: 仿宋/楷体/宋体/黑体 and the Traditional ones (標楷體, 新細明體) map to their designs (on Linux: 朱雀仿宋, 霞鹜文楷 GB, Noto Serif CJK, Noto Sans CJK); Chinese text with no font of its own falls back to 宋体, as in WPS. The 13 documents still a page off on Windows are analysed in docs/PROGRESS.md (2026-11-04); that work is now in maintenance mode (see Next) |
+| J1 | Open a .docx received from WPS/Word and read it correctly | ≥ 90% of corpus docs open without error; FangSong/Kai/Song/Hei never fall back to sans; page count matches the WPS reference on ≥ 80% | **Met.** 200 / 200 open without error. Page count matches on **190 / 200 (95%)** on Windows, mean page score 0.9459 (2026-11-14; baseline 2026-10-31: 112 / 200, 0.903), and on **190 / 200** on Linux with the packaged fonts (mean 0.9341; the same page count as Windows on all 200; see open question 2). Fonts: 仿宋/楷体/宋体/黑体 and the Traditional ones (標楷體, 新細明體) map to their designs (on Linux: 朱雀仿宋, 霞鹜文楷 GB, Noto Serif CJK, Noto Sans CJK); Chinese text with no font of its own falls back to 宋体, as in WPS. The 13 documents still a page off on Windows are analysed in docs/PROGRESS.md (2026-11-04); that work is now in maintenance mode (see Next) |
 | J2 | Write a new 公文 from a template | `wenshu gongwen new` (CLI) and File › New › 公文 (desktop) produce a document that passes all 8 `gongwen check` rules | **Met.** Both paths; a test checks the five templates pass |
 | J3 | Check a 公文 against the standard | `wenshu gongwen check` reports page, margins, type area, grid, body font and size | **Met** (CLI and 检查公文格式 on the ribbon) |
 | J4 | Export PDF to send or print | PDF with embedded subset fonts, selectable Chinese text | **Met, measured 2026-11-03** (`corpus/tools/pdf_check.py`): 200 / 200 PDFs written, page counts equal to Wenshu's layout 200 / 200; every font embedded and subset 200 / 200; text extractable: mean recall 0.9986 (Chinese 0.9984), all characters in 169 / 200, the rest above 0.995 except 7 (a vertical text box, hollow text, a few others); pages look like the screen (worst page > 0.99 in 198 / 200; the two others show screen-only markup, absent from WPS's PDF too); median 0.2 s and 164 KB. Found on the way: mixed-font field results drew wrong glyphs and broke font embedding (patch 0037). Re-measured 2026-11-05 on `main` (patches through 0065): the same or better (recall 0.9987, all characters in 173 / 200, fonts 200 / 200, median 0.1 s) |
@@ -106,8 +106,9 @@ beyond what upstream offers.
    | + embedded subsets go by their table name, Chinese fallback in SimSun's box (0070, 0071) | 182 / 200 | 0.925 |
    | + missing Windows Chinese faces keep their fixed half-em / one-em widths (0075) | 187 / 200 | 0.933 |
    | + break-only paragraphs and kept runs (0078, 0079, 2026-11-14) | 188 / 200 | 0.934 |
-   | + pictures in table rows (0081–0083) | **189 / 200** | **0.934** |
-   | Windows, for comparison | 189 / 200 | 0.9457 |
+   | + pictures in table rows (0081–0083) | 189 / 200 | 0.934 |
+   | + effect room, double borders (0085, 0086) | **190 / 200** | **0.9341** |
+   | Windows, for comparison | 190 / 200 | 0.9459 |
 
    Every package now bundles the Latin fonts as well (OFL, SHA-256-pinned, 2026-11-04; the .tar.gz
    and AppImage can't pull them in as dependencies); a run with only Wenshu's own font folder and
