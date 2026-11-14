@@ -2,6 +2,23 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-14 (10): F55's rule (0088)
+
+- **Sweep** (`out/f55/sweep_fine.py`, 35 sweeps at 0.05 pt: 12 pt, 15–35 characters, 0–6 digit
+  groups): with a automatic spaces on an n-em line, half-in squeezes half of each space, capped at
+  0.905 / (1 + n/102.6) / (1 + 0.08 a) em (0080's divisor again); a whole hang takes 5/12 − n/120 em
+  with one group, 0.2125 − n/171 with two, none from three. Half-in wins when it fits.
+- **0088** implements both (the character before the mark gets the room, the mark is checked
+  exactly; the line is laid out in WPS's regime, the squeeze taken from the automatic spaces).
+  Every sweep then takes WPS's regime; what's left is Wenshu's natural width for the sweep's digits
+  (0.15 pt per group short). A formula test and a layout test (fails without: four groups keep
+  the mark). `a5beccd773` starts pages as WPS through page 12 (was 9).
+- **Found on the way:** a justified line broken before a closing mark's character isn't stretched
+  in Wenshu (WPS spreads every character: the open "justified Chinese lines" item); cosmetic.
+- **Gates:** Windows 190 / 200, 0.9465; Linux 190 / 200, 0.9346.
+- **Next:** `a5beccd773` page 13: Wenshu moves row `6-2` (vertically centred label, merged
+  vertical cell) whole to page 14 where WPS splits it; and `其` after `；` on a narrower cell.
+
 ## 2026-11-14 (9): a5beccd773's break was a page break (0087); F55 measured
 
 - **`a5beccd773`:** the 20 pt break at page 1's bottom is `w:br w:type="page"`, which 0084 (line
