@@ -144,9 +144,10 @@ pages kept, saved vs original 0.9950, 168 pixel-identical.
 | 0090-mode-15-limit-counts-the-gaps | layout | F57: the mode-15 justified squeeze limit k / (k + n/32) counts n as the gaps before the last unit (one fewer than the characters). Unit test against 6 WPS sweeps (fails without: 0.736 em, WPS 0.746) | not opened: WPS-measured |
 | 0091-character-border-takes-room | layout | F57: a run with a character border takes the border's width on each side (`w:space` none); the box is drawn in it. 10 WPS probes match. Layout test (fails without: no shift) | not opened: WPS-measured |
 | 0092-hanging-indent-in-cell-minimum | layout | F57: a cell's minimum width takes its first word at the first line's indent, so a hanging indent doesn't widen the column. Layout test (fails without: the column grows) | not opened: WPS-observed |
+| 0093-half-width-text-gains-grid-room | layout | F58: on a character grid digits and Latin letters keep their own advance plus the grid's adjustment per character, half of it under `balanceSingleByteDoubleByteWidth`. Grid layout test (fails without: Latin keeps its plain advance) | not opened: WPS-observed |
 | winit/0001-windows-ime-results-once-and-unannounced | winit (storytold fork, Windows) | An empty composition string beside a result ends the composition (Wubi: every word was committed twice); a result with no composition announced is committed (Jidian Wubi's full-width punctuation was lost), unless the last composition already committed at its end. Hand-tested | could go upstream (storytold/winit, winit) |
 
-All 92 apply in order on `05f781cf` (0066–0075 added 2026-11-13, 0076–0092 2026-11-14; re-fitted 2026-11-09; before that, 64 on `3b7f7ed`, checked 2026-11-04); the
+All 93 apply in order on `05f781cf` (0066–0075 added 2026-11-13, 0076–0092 2026-11-14, 0093 2026-11-15; re-fitted 2026-11-09; before that, 64 on `3b7f7ed`, checked 2026-11-04); the
 `wordcraft-layout` (613), `-fonts` (109 + 1), `-doc` (242), `-docx` (375 + 134 integration) and
 `-engine` (1095) suites pass with them, and fmt and clippy are clean.
 

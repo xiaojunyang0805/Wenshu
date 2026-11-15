@@ -830,6 +830,8 @@ at 16 pt; probes `out/f49/probe_digits.py`, both modes).
   automatic spacing). WordCraft keeps them at their own advance. Tried 2026-11-14: one document
   gained (`228229e95c`), one lost (`7f0a1221f0`), one scored lower, and `2d6a9da333` diverged
   earlier, so it interacts with compression in a way not yet measured; not implemented.
+  **Resolved by F58:** the full adjustment holds without `balanceSingleByteDoubleByteWidth`, half
+  of it with the setting (patch 0093).
 
 ## F50. Text below its own top-and-bottom picture keeps the paragraph's space before
 
@@ -970,6 +972,27 @@ Found 2026-11-14 through `dc-policies-39de0888eb` (now matching, 13 pages):
   Wenshu widened a column for `R100234567` (70 pt) under `w:left="958" w:hanging="958"`,
   counting the 47.9 pt left indent though the first line starts at the margin. Patch 0092: the
   first word at the first line's indent, the rest at the left indent.
+
+## F58. Half-width text on a character grid gains the grid's adjustment (half of it balanced)
+
+Measured 2026-11-15 (`dc-reports-2d6a9da333`, Word's file, mode 15, `linesAndChars`; probes
+`out/f58/probe_bal.py`, both modes, 16 and 12 pt, `charSpace` 4096 and 8192, with and without a
+grid; cut-downs of the document `out/f58/mkcut.py`, one change each).
+
+- On a character grid (not `snapToChars`), a digit or Latin letter keeps its own advance plus the
+  grid's adjustment, the pitch less the default size, per character: on a 17 pt grid for 16 pt a
+  宋体 digit advances 9 pt, a Times `m` 13.2; on an 18 pt grid 10 pt. 12 pt text gains the same
+  (+1, +2). Without a grid nothing changes.
+- Under `w:balanceSingleByteDoubleByteWidth` it gains **half** the adjustment: 8.5 pt on 17 pt,
+  9 on 18. That is the setting behind the document's 8.5 pt digits (F49 had them as squeezed
+  lines; removing the setting from the cut-down gives 9 pt digits, removing the hint, the 標楷體
+  font or zh-TW changes nothing). Patch 0093; the test fails without it.
+- **Open:** the document's page-2 line `…及於110年12月21日` then `詢`. With 8.5 pt digits it fits
+  only if `，` gives up a full half cell, which leaves 0.004 pt to spare. WPS fits `詢` up to
+  `charSpace` 4112 and not from 4116 (cut-down sweep `out/f58/sw`). In a plain probe the mark
+  gives up exactly half a cell and a line fits with no tolerance (`out/f58/probe_sq.py`, Word's
+  mode; in WPS's own mode no 22-cell line fitted at all). The threshold must come from something
+  else in the document, perhaps the column's whole-cell count (26 cells only up to about 4115).
 
 ## Still to measure
 

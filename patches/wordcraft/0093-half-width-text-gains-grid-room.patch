@@ -1,0 +1,103 @@
+Upstream: (not opened; WPS-observed, F58: on a character grid half-width text (digits, Latin letters) keeps its own advance plus the grid's adjustment per character, half of it under balanceSingleByteDoubleByteWidth; dc-reports-2d6a9da333's 8.5 pt digits)
+diff --git a/crates/layout/src/para/grid.rs b/crates/layout/src/para/grid.rs
+index 5bc37012..8c686469 100644
+--- a/crates/layout/src/para/grid.rs
++++ b/crates/layout/src/para/grid.rs
+@@ -81,10 +81,12 @@ pub fn is_east_asian(c: char) -> bool {
+ /// Character grid: East Asian characters advance by their size (scaled by `w:w`) plus the grid's
+ /// adjustment ([`Grid::advance`]: one pitch at the default size) plus their character spacing,
+ /// the glyph centred in its advance. Latin
+-/// text stays proportional unless everything snaps (`snapToChars`), when it takes whole cells.
++/// text takes whole cells when everything snaps (`snapToChars`); otherwise it keeps its own
++/// advance plus the grid's adjustment per character ([`half_width_room`]).
+ pub(super) fn snap_chars(b: &mut Builder, text: &str, grid: &Grid) {
+     let Some(pitch) = grid.chars else { return };
+     let base = grid.font_size.max(1.0);
++    let half_room = half_width_room(grid, b.env.doc.settings.balance_sbcs_dbcs);
+     for c in b.clusters.iter_mut() {
+         if !matches!(c.kind, ClKind::Text | ClKind::Space) || c.adv <= 0.0 {
+             continue;
+@@ -92,6 +94,15 @@ pub(super) fn snap_chars(b: &mut Builder, text: &str, grid: &Grid) {
+         let Some(ch) = text.get(c.start..).and_then(|t| t.chars().next()) else { continue };
+         let east_asian = is_east_asian(ch);
+         if !(east_asian || (grid.snap_all && c.kind == ClKind::Text)) {
++            if c.kind == ClKind::Text && half_room != 0.0 {
++                let n = text.get(c.start..c.end).map_or(1, |t| t.chars().count().clamp(1, 64)) as f32;
++                let adv = (c.adv + half_room * n).max(c.adv * 0.5);
++                let shift = (adv - c.adv) / 2.0;
++                for g in b.glyphs.get_mut(c.g0 as usize..c.g1 as usize).into_iter().flatten() {
++                    g.dx += shift;
++                }
++                c.adv = adv;
++            }
+             continue;
+         }
+         // Character scaling (`w:w`) scales the size the grid adds its adjustment to, and character
+@@ -113,6 +124,17 @@ pub(super) fn snap_chars(b: &mut Builder, text: &str, grid: &Grid) {
+     }
+ }
+ 
++/// The room a half-width character (digits, Latin letters) gains on a character grid when not
++/// everything snaps: the grid's adjustment (the pitch less the default size), or half of it under
++/// `balanceSingleByteDoubleByteWidth`, whatever its font and size (WPS, both modes: on a 17 pt
++/// grid for 16 pt a 宋体 digit advances 9 pt, 8.5 pt balanced; on 18 pt 10 and 9; 12 pt digits and
++/// Times letters gain the same; F58). Nothing without a character grid.
++pub(crate) fn half_width_room(grid: &Grid, balance: bool) -> f32 {
++    let Some(pitch) = grid.chars else { return 0.0 };
++    let adj = (pitch - grid.font_size) * if balance { 0.5 } else { 1.0 };
++    if adj.is_finite() { adj.clamp(-100.0, 100.0) } else { 0.0 }
++}
++
+ /// Automatic spacing (`w:autoSpaceDE`, `w:autoSpaceDN`): a quarter of the Asian character's font
+ /// size between Asian text and Latin text or digits that touch, across runs. Measured on Word's
+ /// PDF of a Chinese document at 16 pt (#2358), as JIS X 4051 asks. A field or note number is
+diff --git a/crates/layout/src/tests/grid.rs b/crates/layout/src/tests/grid.rs
+index 046be629..531590bf 100644
+--- a/crates/layout/src/tests/grid.rs
++++ b/crates/layout/src/tests/grid.rs
+@@ -239,19 +239,32 @@ fn east_asian_hint_ignores_a_missing_named_font_with_no_installed_substitute() {
+     assert!(faces.iter().all(|f| *f == faces[1]), "{faces:?}");
+ }
+ 
++/// Latin text on a character grid keeps its own advances plus the grid's adjustment (the pitch
++/// less the default size) per character, half of it under `w:balanceSingleByteDoubleByteWidth`
++/// (WPS, both modes: a 宋体 digit at 16 pt advances 9 pt on a 17 pt grid, 8.5 pt balanced; F58).
+ #[test]
+ fn character_grid_places_east_asian_text_on_the_pitch() {
++    for balance in [false, true] {
++        east_asian_on_the_pitch(balance);
++    }
++}
++
++fn east_asian_on_the_pitch(balance: bool) {
+     crate::test_fonts();
+     let text = "日本語の文書abc";
+     // The default font size plus 2.5 pt: a pitch unlike any font's advance.
+     let lines = wordcraft_doc::SectionProps { doc_grid: Some(DocGrid { kind: DocGridType::Lines, ..Default::default() }), ..Default::default() };
+     let size = para::Grid::of(&Document::from_text(""), &lines).font_size;
+     let cs = DocGrid::char_space_for(size + 2.5, size);
+-    let d = with_grid(text, DocGridType::LinesAndChars, cs);
++    let mut d = with_grid(text, DocGridType::LinesAndChars, cs);
++    d.settings.balance_sbcs_dbcs = balance;
+     let pitch = d.last_section.grid_char_pitch(size).unwrap();
+     assert!((pitch - (size + 2.5)).abs() < 0.01);
+     let l = lay(&d);
+-    let plain = lay(&with_grid(text, DocGridType::Lines, cs));
++    let mut plain = with_grid(text, DocGridType::Lines, cs);
++    plain.settings.balance_sbcs_dbcs = balance;
++    let plain = lay(&plain);
++    let room = if balance { 1.25 } else { 2.5 };
+     let first =
+         |l: &DocLayout| l.pages[0].items.iter().find_map(|it| if let Placed::Lines { para, .. } = it { Some(para.clone()) } else { None }).unwrap();
+     let (g, p) = (first(&l), first(&plain));
+@@ -264,8 +277,8 @@ fn character_grid_places_east_asian_text_on_the_pitch() {
+             assert!((x - pitch * k as f32).abs() < 0.01, "cluster {k} at {x}, pitch {pitch}");
+             assert!((c.adv - pitch).abs() < 0.01);
+         } else {
+-            // Latin text keeps its own advances.
+-            assert!((c.adv - p.clusters[k].adv).abs() < 0.01, "latin cluster {k}");
++            // Latin text keeps its own advance plus the adjustment (half of it balanced).
++            assert!((c.adv - p.clusters[k].adv - room).abs() < 0.01, "latin cluster {k}: {} vs {} (balance {balance})", c.adv, p.clusters[k].adv);
+         }
+     }
+ }
