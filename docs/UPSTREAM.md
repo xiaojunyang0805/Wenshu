@@ -146,9 +146,10 @@ pages kept, saved vs original 0.9950, 168 pixel-identical.
 | 0092-hanging-indent-in-cell-minimum | layout | F57: a cell's minimum width takes its first word at the first line's indent, so a hanging indent doesn't widen the column. Layout test (fails without: the column grows) | not opened: WPS-observed |
 | 0093-half-width-text-gains-grid-room | layout | F58: on a character grid digits and Latin letters keep their own advance plus the grid's adjustment per character, half of it under `balanceSingleByteDoubleByteWidth`. Grid layout test (fails without: Latin keeps its plain advance) | not opened: WPS-observed |
 | 0094-ascii-text-ignores-a-lone-hansi-font | docx | F58: ASCII text takes `w:ascii`; `w:hAnsi` names other Latin letters only, so an `w:rFonts` naming only `w:hAnsi` leaves the inherited font (one Latin slot). ECMA-376 §17.3.2.26; reader test (fails without: ASCII takes the hAnsi font); `theme_font_wins_over_the_fixed_font` updated | not opened: spec + WPS-observed |
+| 0095-a-leading-column-break-takes-no-room | layout | F59: a paragraph opening with a column break takes no room in the column it leaves, neither the break's line nor its space before (WPS, Word's modes 14 and 15 and WPS's own mode). Layout test (fails without: a 60 pt break pushes the next continuous section 75 pt lower) | not opened: WPS-measured |
 | winit/0001-windows-ime-results-once-and-unannounced | winit (storytold fork, Windows) | An empty composition string beside a result ends the composition (Wubi: every word was committed twice); a result with no composition announced is committed (Jidian Wubi's full-width punctuation was lost), unless the last composition already committed at its end. Hand-tested | could go upstream (storytold/winit, winit) |
 
-All 94 apply in order on `05f781cf` (0066–0075 added 2026-11-13, 0076–0092 2026-11-14, 0093–0094 2026-11-15; re-fitted 2026-11-09; before that, 64 on `3b7f7ed`, checked 2026-11-04); the
+All 95 apply in order on `05f781cf` (0066–0075 added 2026-11-13, 0076–0092 2026-11-14, 0093–0095 2026-11-15; re-fitted 2026-11-09; before that, 64 on `3b7f7ed`, checked 2026-11-04); the
 `wordcraft-layout` (613), `-fonts` (109 + 1), `-doc` (242), `-docx` (375 + 134 integration) and
 `-engine` (1095) suites pass with them, and fmt and clippy are clean.
 

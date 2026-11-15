@@ -2,6 +2,20 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-15 (2): 193 / 200: `7abe5be4e9` matches (0095, F59)
+
+- **`7abe5be4e9`** (WPS 2 pages, Wenshu 3, the lowest score at 0.83): a converted form made of
+  continuous sections of two to four columns, each column started by a column break. Wenshu gave
+  a paragraph's leading column break its line in the column it left, so that column came out the
+  tallest and the next section started 16 pt low; the drawing group's anchor went to page 2.
+  WPS gives the break no room there (15 probes: break size, exact line height, space before,
+  break-only paragraph; Word's modes 14 and 15 and WPS's own). **0095**; a layout test that fails
+  without it. Page 1 now within 0.5 pt of WPS below the header; score 0.832 → 0.958.
+- **Gates:** Windows 192 → **193 / 200**, 0.9476 → 0.9477. No document lower.
+- **Still off (7):** `2d6a9da333` (F58, 0.1 pt), `228229e95c`, `82eb70e86d`, `cd82c17bf5`,
+  `a180b9d578`, `f7d3afdfdb`, `9c189a35a9`. Left on `7abe5be4e9`: the header's OLE preview
+  (body 2.8 pt lower in WPS).
+
 ## 2026-11-15: half-width text on a character grid (0093, F58); ASCII ignores a lone `w:hAnsi` (0094)
 
 - **`2d6a9da333`** (WPS 22 pages, Wenshu 21): its digits are 8.5 pt in WPS because of

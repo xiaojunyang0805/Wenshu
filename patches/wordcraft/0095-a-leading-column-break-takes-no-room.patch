@@ -1,0 +1,67 @@
+Upstream: (not opened; WPS-measured, F59: a paragraph opening with a column break takes no room in the column it leaves, neither the break's line nor its space before; 15 probes, three modes)
+diff --git a/crates/layout/src/flow.rs b/crates/layout/src/flow.rs
+index 4f0447b..9c8c043 100644
+--- a/crates/layout/src/flow.rs
++++ b/crates/layout/src/flow.rs
+@@ -616,13 +616,28 @@ impl<'a> Flow<'a> {
+         items.extend(front);
+         items.extend(line_numbers(ctx, pb, &self.pl, (l0, l1), y));
+         add_items(pb, behind, items);
+-        if let (Some(f), Some(l)) = (self.pl.lines.get(l0), self.pl.lines.get(l1 - 1)) {
++        if self.leading_column_break(l0, l1) && !pb.web {
++            pb.y = self.anchor_y.min(pb.y);
++        } else if let (Some(f), Some(l)) = (self.pl.lines.get(l0), self.pl.lines.get(l1 - 1)) {
+             pb.y = y + (l.top + l.height - f.top);
+             pb.content_bottom = pb.content_bottom.max(pb.y);
+         }
+         self.l0 = l1;
+     }
+ 
++    /// Whether lines `l0..l1` are just a column break opening the paragraph: it takes no room in
++    /// the column it leaves, neither its line nor the space before (WPS, both modes, any break
++    /// size or line height).
++    fn leading_column_break(&self, l0: usize, l1: usize) -> bool {
++        l0 == 0
++            && l1 == 1
++            && self
++                .pl
++                .lines
++                .first()
++                .is_some_and(|l| l.end == LineEnd::ColumnBreak && only_breaks(self.p, l.start..l.stop, |c| c == wordcraft_doc::para::COLUMN_BREAK))
++    }
++
+     /// Start the next page or column if the lines just placed end one, or are not the last.
+     fn after_lines(&mut self, ctx: &mut Ctx, pb: &mut PageBuilder, forced: Option<LineEnd>, mark_with_break: bool) {
+         let (block, body_top) = (self.block, self.body_top);
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+index 5138ef7..6d1377d 100644
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -10112,6 +10112,27 @@ fn columns_before_a_page_break_or_a_column_break_are_not_balanced() {
+     assert!(br > bl + 50.0 && after >= br - 0.5, "columns end at {bl} and {br}, next section at {after}");
+ }
+ 
++/// A paragraph opening with a column break takes no room in the column it leaves: the break's
++/// line, however large, doesn't make that column end lower (WPS, both modes: the next continuous
++/// section starts below the text of the taller column, not below the break).
++#[test]
++fn a_leading_column_break_takes_no_room_in_the_column_it_leaves() {
++    crate::test_fonts();
++    use wordcraft_doc::section::SectionStart;
++    let next_section_top = |break_size: f32| {
++        let mut d = two_column_section(SectionStart::Continuous, vec![]);
++        let brk = wordcraft_doc::para::COLUMN_BREAK.to_string();
++        d.para_mut(StoryRef::Body, &Path::top(5)).unwrap().insert_text(0, &brk, &Default::default()).unwrap();
++        d.format_range(&Pos::body(5, 0), &Pos::body(5, brk.len()), &|c| c.size = Some(break_size)).unwrap();
++        let l = lay(&d);
++        let b = para_boxes(&l);
++        (b[10].0, b[10].2)
++    };
++    let (small, large) = (next_section_top(11.0), next_section_top(60.0));
++    assert_eq!((small.0, large.0), (0, 0), "the next section stays on page 1");
++    assert!((small.1 - large.1).abs() < 0.01, "next section below a 60 pt break at {}, an 11 pt one at {}", large.1, small.1);
++}
++
+ #[test]
+ fn an_odf_section_says_whether_its_columns_are_balanced() {
+     use wordcraft_doc::section::SectionStart;

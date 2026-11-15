@@ -1007,6 +1007,23 @@ grid; cut-downs of the document `out/f58/mkcut.py`, one change each).
   `charSpace` 4112 and not from 4116, as if the line were about 0.1 pt narrower than the probes
   say. Removing the setting, the hint, the 標楷體 font or zh-TW doesn't explain it.
 
+## F59. A leading column break takes no room in the column it leaves
+
+Measured 2026-11-15 (`out/f59/probe_cb.py`: two continuous columns, four 12 pt lines on the left,
+a paragraph opening with a column break on the right, a one-column marker paragraph below; Word's
+mode 14 and 15 and WPS's own mode): the marker sits below the left column's text, the same whatever
+the break's size (12 or 20 pt), the paragraph's line height (exact 30 pt), its space before (20 pt)
+or whether anything follows the break. Neither the break's line nor the space before takes room
+in the column the break leaves. (The space before still applies at the top of the new column up
+to mode 14, F36.) Wenshu gave the break's line its full height there, so a column that a
+paragraph left by a column break could come out the tallest, and a continuous section after it
+started too low.
+
+`dc-forms-7abe5be4e9` (a converted form: continuous sections of two to four columns, each new
+column started by a column break) started its second section 16 pt low and its drawing group's
+anchor slid to page 2. With this fixed, every line on page 1 is within 0.5 pt of WPS below the
+header, and the page count matches (2).
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).
