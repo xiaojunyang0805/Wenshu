@@ -1,0 +1,51 @@
+Upstream: (not opened; spec + WPS-observed, F58: ASCII text takes w:ascii, w:hAnsi names other Latin letters only, so an rFonts naming only w:hAnsi leaves the inherited font; dc-reports-2d6a9da333's heading-3 digits were Arial)
+diff --git a/crates/docx/src/read/props.rs b/crates/docx/src/read/props.rs
+index 32e0f10b..3cdde465 100644
+--- a/crates/docx/src/read/props.rs
++++ b/crates/docx/src/read/props.rs
+@@ -270,7 +270,12 @@ impl PropCtx {
+                     // `font_cs`: `w:hint` only picks between them for ambiguous characters, never for
+                     // Latin letters. A Normal style with only `w:eastAsia`/`w:cs` keeps the
+                     // `docDefaults` font, and so does a hinted run, as in Word.
+-                    c.font = themed("w:asciiTheme").or_else(|| named("w:ascii")).or_else(|| themed("w:hAnsiTheme")).or_else(|| named("w:hAnsi"));
++                    // ASCII text takes the `w:ascii` font; `w:hAnsi` names the font of other Latin
++                    // letters (é) only, so an element naming only `w:hAnsi` leaves the inherited
++                    // font in place: there is one Latin font slot, and ASCII text is most of it
++                    // (WPS, both modes: Times digits and letters stay Times beside `w:hAnsi="Arial"`,
++                    // only `é` changes; ECMA-376 §17.3.2.26).
++                    c.font = themed("w:asciiTheme").or_else(|| named("w:ascii"));
+                     // The complex-script font (Persian, Arabic, Hebrew text). A `w:cstheme` font is
+                     // left to inherit: the theme's per-script fonts aren't read.
+                     c.font_cs = k.attr("w:cs").filter(|f| !f.is_empty() && f.len() < 256).map(str::to_string);
+diff --git a/crates/docx/tests/it/fixtures.rs b/crates/docx/tests/it/fixtures.rs
+index 04f839df..0da94d44 100644
+--- a/crates/docx/tests/it/fixtures.rs
++++ b/crates/docx/tests/it/fixtures.rs
+@@ -2401,12 +2401,26 @@ fn theme_font_wins_over_the_fixed_font() {
+     let d = themed_docx(body, styles, None);
+     assert_eq!(d.styles.get("Heading1").unwrap().chr.font.as_deref(), Some("Major Face"));
+     let p = paras(&d);
+-    assert_eq!(p[1].props_of_char(0).font.as_deref(), Some("Minor Face"));
++    // A font named only for `w:hAnsi` (other Latin letters) leaves ASCII text its inherited font.
++    assert_eq!(p[1].props_of_char(0).font.as_deref(), None);
+     assert_eq!(p[1].props_of_char(1).font.as_deref(), Some("Minor Face"));
+     // An explicit ascii font still beats a theme font given only for hAnsi.
+     assert_eq!(p[1].props_of_char(2).font.as_deref(), Some("Arial"));
+ }
+ 
++/// ASCII text takes `w:ascii`; a style naming only `w:hAnsi` (the font of other Latin letters, é)
++/// keeps the font it inherits for it (WPS, both modes: `w:hAnsi="Arial"` over Times leaves Times
++/// digits; `dc-reports-2d6a9da333`'s heading 3 had its digits in Arial).
++#[test]
++fn a_font_named_only_for_hansi_leaves_ascii_text_its_inherited_font() {
++    let styles = r#"<w:style w:type="paragraph" w:styleId="Base"><w:name w:val="Base"/><w:rPr><w:rFonts w:ascii="Times New Roman" w:eastAsia="SimSun"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="H"><w:name w:val="H"/><w:basedOn w:val="Base"/><w:rPr><w:rFonts w:hAnsi="Arial"/><w:bCs/></w:rPr></w:style>"#;
++    let body = r#"<w:p><w:pPr><w:pStyle w:val="H"/></w:pPr><w:r><w:rPr><w:rFonts w:hint="eastAsia"/></w:rPr><w:t>110</w:t></w:r></w:p>"#;
++    let d = themed_docx(body, styles, None);
++    let rc = d.styles.resolve_char(Some("H"), paras(&d)[0].props_of_char(0));
++    assert_eq!(rc.font, "Times New Roman");
++    assert!(!rc.bold, "w:bCs is complex-script bold only");
++}
++
+ /// Issue #400: moved text (ECMA-376 §17.13.5.21–28). `w:moveFrom` / `w:moveTo` inside named
+ /// move ranges are the two ends of one move, paragraph marks included; the ranges are written
+ /// back around them. A move missing an end, or whose range never ends, is a plain deletion and

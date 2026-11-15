@@ -2,6 +2,24 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-15: half-width text on a character grid (0093, F58); ASCII ignores a lone `w:hAnsi` (0094)
+
+- **`2d6a9da333`** (WPS 22 pages, Wenshu 21): its digits are 8.5 pt in WPS because of
+  `balanceSingleByteDoubleByteWidth`, the setting the F49 probes lacked. On a character grid a
+  digit or Latin letter gains the grid's adjustment (pitch less default size) per character,
+  half of it balanced (probes at two pitches, two sizes, both modes). **0093**; the grid test now
+  checks both cases and fails without it.
+- **Heading 3** names only `w:hAnsi="Arial"`; WordCraft's one Latin font slot took it, so ASCII
+  digits were Arial. WPS (and the spec) keep `w:ascii` for ASCII. **0094**; a reader test that fails
+  without it; an upstream assertion that expected the old behaviour updated.
+- **Gates:** Windows 192 / 200, 0.9469 → 0.9475 (0093) → 0.9476 (0094); Linux 192 / 200, 0.935 →
+  0.9355 (0093). No document lower.
+- **Open (F58):** two page-2 lines need exactly one cell of squeeze; WPS breaks them, Wenshu fits
+  them 0.03 pt inside the column, and the document behaves as if about 0.1 pt narrower than the
+  probes say. Not explained yet; the page count stays one short.
+- **Next:** that 0.1 pt (a cut-down with the digits replaced; the indents counted in chars?), or
+  `7abe5be4e9` (lowest score).
+
 ## 2026-11-14 (12): 192 / 200 on both: 39de0888eb matches (0090–0092)
 
 - **0090** (F57): the mode-15 squeeze limit counts the gaps before the last unit, one fewer than

@@ -987,12 +987,25 @@ grid; cut-downs of the document `out/f58/mkcut.py`, one change each).
   9 on 18. That is the setting behind the document's 8.5 pt digits (F49 had them as squeezed
   lines; removing the setting from the cut-down gives 9 pt digits, removing the hint, the 標楷體
   font or zh-TW changes nothing). Patch 0093; the test fails without it.
-- **Open:** the document's page-2 line `…及於110年12月21日` then `詢`. With 8.5 pt digits it fits
-  only if `，` gives up a full half cell, which leaves 0.004 pt to spare. WPS fits `詢` up to
-  `charSpace` 4112 and not from 4116 (cut-down sweep `out/f58/sw`). In a plain probe the mark
-  gives up exactly half a cell and a line fits with no tolerance (`out/f58/probe_sq.py`, Word's
-  mode; in WPS's own mode no 22-cell line fitted at all). The threshold must come from something
-  else in the document, perhaps the column's whole-cell count (26 cells only up to about 4115).
+- **A font named only for `w:hAnsi`** leaves ASCII text its `w:ascii` font: `w:hAnsi` is the
+  font of other Latin letters (é) only (`out/f58/probe_hansi.py`, both modes: Times digits and
+  letters stay Times beside `w:hAnsi="Arial"`, in a run or a paragraph style; only `é` turns
+  Arial; `w:bCs` bolds nothing). WordCraft has one Latin font slot and filled it from `w:hAnsi`,
+  so the document's heading-3 paragraphs (`w:rFonts w:hAnsi="Arial"`) set their digits in Arial
+  (9.4 pt), and WPS fitted a `日` Wenshu didn't. Patch 0094 (31 corpus documents have such
+  elements; the gate is unchanged in page counts).
+- **Grid squeeze by the next unit** (`out/f58/probe_sq2.py`, Word's mode, 17 pt grid, two commas):
+  to fit an ideograph or `67` the marks give up at most about 12 pt (mode 15's length-dependent
+  limit), but to fit the Latin word `6%~7%` a whole cell (two half cells, 17 pt). In WPS's own mode
+  the limits are lower (4–6 pt; 14 pt for the word).
+- **Exact fits:** with `charSpace` 4127 a mark gives up exactly half the pitch, line widths are
+  whole twips, and a line 0.013 pt too long breaks (`out/f58/probe_sq3.py`): WPS has no
+  tolerance; Wenshu allows 0.01 pt.
+- **Open:** two page-2 lines of the document (`…21日` + `詢`, `…平均` + `6%~7%`) need exactly
+  that whole cell of squeeze. WPS breaks both; Wenshu fits them, 0.03 pt inside its 442.2 pt column
+  (the page is 11907 twips wide). A cut-down sweep (`out/f58/sw`) has WPS fitting `詢` up to
+  `charSpace` 4112 and not from 4116, as if the line were about 0.1 pt narrower than the probes
+  say. Removing the setting, the hint, the 標楷體 font or zh-TW doesn't explain it.
 
 ## Still to measure
 
