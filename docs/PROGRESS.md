@@ -11,7 +11,8 @@ Newest first. One entry per working session: what landed, what was verified, wha
   WPS gives the break no room there (15 probes: break size, exact line height, space before,
   break-only paragraph; Word's modes 14 and 15 and WPS's own). **0095**; a layout test that fails
   without it. Page 1 now within 0.5 pt of WPS below the header; score 0.832 → 0.958.
-- **Gates:** Windows 192 → **193 / 200**, 0.9476 → 0.9477. No document lower.
+- **Gates:** Windows 192 → **193 / 200**, 0.9476 → 0.9477; Linux 192 → **193 / 200**, 0.9355 →
+  0.9356. No document lower.
 - **Still off (7):** `2d6a9da333` (F58, 0.1 pt), `228229e95c`, `82eb70e86d`, `cd82c17bf5`,
   `a180b9d578`, `f7d3afdfdb`, `9c189a35a9`. Left on `7abe5be4e9`: the header's OLE preview
   (body 2.8 pt lower in WPS).
