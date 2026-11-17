@@ -30,6 +30,13 @@ longer applies, and running the fidelity corpus before and after.
 
 ## Patch queue
 
+**2026-11-17:** first maintainer review round (benandez). #5002 and #5004 approved; #5003 and
+#5470 changes requested and fixed; #5462 closed for upstream #2508. The fixes went to the PR
+branches and, for our queue, into 0096–0099 at the end (folding them into 0001/0002/0004/0027
+would mean rebasing through the later patches that rewrote the same code; done at the next pin
+bump). #5470 is coordinated with #5283, which frees a closed document's fonts: the two fix
+different halves of #3687.
+
 **2026-11-09:** all eight open PRs (#5002–#5006, #5462, #5463, #5470) brought up to date with
 upstream `main` (3,146 commits past our pin) by merging `main` into each branch (a force-push to
 rebase was refused by the session's safety rules; maintainers squash anyway), retested, and marked
@@ -88,7 +95,7 @@ pages kept, saved vs original 0.9950, 168 pixel-identical.
 | 0034-docx-break-inside-text | wordcraft-docx | A `w:br`/`w:cr`/`w:tab` inside `w:t` breaks the line instead of being dropped. Test | not opened: reader robustness, a candidate upstream |
 | 0035-docx-vml-textbox-empty-imagedata | wordcraft-docx | A VML text box with an empty `v:imagedata` is read as a text box (it was dropped). Test | not opened: bug fix, a candidate upstream |
 | 0036-layout-spacing-in-lines | wordcraft-doc, -docx, -layout | `w:beforeLines`/`w:afterLines` read, written back and laid out in grid lines (12 pt without a grid), overriding points; 0 ignored (WPS, F22). Tests | not opened: read/write part is spec, the unit is WPS-measured |
-| 0037-layout-field-result-fonts | wordcraft-layout | A field result shaped in more than one font (`yyyy年M月d日`: digits Latin, 年月日 East Asian) is a cluster per font, each standing for the whole object; one cluster drew every glyph in the first face with the others' glyph ids (wrong glyphs; the PDF face couldn't be subset). Tests | ready for review [#5462](https://github.com/storytold/wordcraft/pull/5462) (2026-11-03, on `main` `ae5c65b9`) |
+| 0037-layout-field-result-fonts | wordcraft-layout | A field result shaped in more than one font (`yyyy年M月d日`: digits Latin, 年月日 East Asian) is a cluster per font, each standing for the whole object; one cluster drew every glyph in the first face with the others' glyph ids (wrong glyphs; the PDF face couldn't be subset). Tests | [#5462](https://github.com/storytold/wordcraft/pull/5462) closed 2026-11-17 in favour of upstream [#2508](https://github.com/storytold/wordcraft/pull/2508), which draws one glyph run per face inside a single cluster and passes our fallback-first cases; drop this patch once #2508 is in our pin |
 | 0038-engine-date-picture-chinese-weekday | wordcraft-engine | Date picture `W` (either case): the Chinese weekday, 二 / 周二 / 星期二 for 1 / 2 / 3+ letters (WPS, F23). Test | not opened: WPS-measured; Word's Chinese pictures to check |
 | 0039-docx-vml-wordart-fill-opacity | wordcraft-docx | VML WordArt letters take the shape fill's `opacity` (a transparent `w14:textFill`) and `filled="f"`; a WPS tracing watermark at opacity 0 was drawn opaque, and after a save WPS showed it too. Test | ready for review [#5463](https://github.com/storytold/wordcraft/pull/5463) (2026-11-03, on `main` `ae5c65b9`) |
 | 0040-layout-page-break-heading-no-empty-page | wordcraft-layout | A paragraph with a page or column break inside is placed as if keep with next / keep lines together were unset; a break line holding only markers still stays at the bottom of a full page (WPS, F25). Tests | not opened: the keep part is WPS-measured (Word to check); the marker part is a plain bug fix |
@@ -147,9 +154,13 @@ pages kept, saved vs original 0.9950, 168 pixel-identical.
 | 0093-half-width-text-gains-grid-room | layout | F58: on a character grid digits and Latin letters keep their own advance plus the grid's adjustment per character, half of it under `balanceSingleByteDoubleByteWidth`. Grid layout test (fails without: Latin keeps its plain advance) | not opened: WPS-observed |
 | 0094-ascii-text-ignores-a-lone-hansi-font | docx | F58: ASCII text takes `w:ascii`; `w:hAnsi` names other Latin letters only, so an `w:rFonts` naming only `w:hAnsi` leaves the inherited font (one Latin slot). ECMA-376 §17.3.2.26; reader test (fails without: ASCII takes the hAnsi font); `theme_font_wins_over_the_fixed_font` updated | not opened: spec + WPS-observed |
 | 0095-a-leading-column-break-takes-no-room | layout | F59: a paragraph opening with a column break takes no room in the column it leaves, neither the break's line nor its space before (WPS, Word's modes 14 and 15 and WPS's own mode). Layout test (fails without: a 60 pt break pushes the next continuous section 75 pt lower) | not opened: WPS-measured |
+| 0096-provided-substitute-before-later-metric-twin | wordcraft-fonts | Review fix on #5002 (2026-11-17): in a fallback list the application's installed substitute for a candidate wins before a later candidate's metric twin (`仿宋_GB2312;Arial` → FangSong, not Liberation Sans); `has_named_substitutes` doc. Test (fails without) | pushed to [#5002](https://github.com/storytold/wordcraft/pull/5002) (approved); fold into 0001 at the next pin bump |
+| 0097-snap-to-chars-keeps-whole-cells | layout | Review fix on #5003 (2026-11-17): `snapToChars` keeps every character in whole cells; size plus grid adjustment is measured for `linesAndChars` only. No corpus document uses `snapToChars`. Test (fails without); parity rows | pushed to [#5003](https://github.com/storytold/wordcraft/pull/5003); fold into 0002 at the next pin bump |
+| 0098-curly-quote-breaks-halfwidth-katakana | layout | Review fixes on #5004 (2026-11-17): curly-quote breaks return early for quote-free text and walk `char_indices()` without collecting; halfwidth katakana counts as East Asian beside the quotes. Test | pushed to [#5004](https://github.com/storytold/wordcraft/pull/5004) (approved); fold into 0004 at the next pin bump |
+| 0099-document-fonts-in-drawing-math-and-fallbacks | wordcraft-fonts, -render, -pdf | Review fixes on #5470 (2026-11-17): rendering and PDF export enter the document's fonts (watermarks, metafile text); the math memo is per document; a variable instance keeps its owner; styled and black-circle fallbacks look up shared faces only (their choice is cached for every document); installing a font ignores document-owned copies. Tests (each fails without) | pushed to [#5470](https://github.com/storytold/wordcraft/pull/5470); fold into 0027 at the next pin bump |
 | winit/0001-windows-ime-results-once-and-unannounced | winit (storytold fork, Windows) | An empty composition string beside a result ends the composition (Wubi: every word was committed twice); a result with no composition announced is committed (Jidian Wubi's full-width punctuation was lost), unless the last composition already committed at its end. Hand-tested | could go upstream (storytold/winit, winit) |
 
-All 95 apply in order on `05f781cf` (0066–0075 added 2026-11-13, 0076–0092 2026-11-14, 0093–0095 2026-11-15; re-fitted 2026-11-09; before that, 64 on `3b7f7ed`, checked 2026-11-04); the
+All 99 apply in order on `05f781cf` (0066–0075 added 2026-11-13, 0076–0092 2026-11-14, 0093–0095 2026-11-15, 0096–0099 2026-11-17; re-fitted 2026-11-09; before that, 64 on `3b7f7ed`, checked 2026-11-04); the
 `wordcraft-layout` (613), `-fonts` (109 + 1), `-doc` (242), `-docx` (375 + 134 integration) and
 `-engine` (1095) suites pass with them, and fmt and clippy are clean.
 

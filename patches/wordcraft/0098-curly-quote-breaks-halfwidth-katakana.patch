@@ -1,0 +1,62 @@
+Upstream: #5004 (review fix, 2026-11-17; fold into 0004 at the next pin bump): curly-quote breaks skip quote-free text; halfwidth katakana counts as East Asian beside the quotes
+diff --git a/crates/layout/src/para/paragraph.rs b/crates/layout/src/para/paragraph.rs
+index 21b888e9..2d89b005 100644
+--- a/crates/layout/src/para/paragraph.rs
++++ b/crates/layout/src/para/paragraph.rs
+@@ -999,16 +999,23 @@ fn break_positions(text: &str, rp: &wordcraft_doc::resolve::ResolvedPara) -> Vec
+ /// before an opening quote (“ ‘) and after a closing one (” ’). Kinsoku then removes those a line
+ /// may not take (a closing mark starting the next line).
+ fn curly_quote_breaks(text: &str) -> Vec<usize> {
+-    let chars: Vec<(usize, char)> = text.char_indices().collect();
+-    let east_asian = |k: Option<&(usize, char)>| k.is_some_and(|(_, c)| super::grid::is_east_asian(*c));
+     let mut out = Vec::new();
+-    for (k, &(i, c)) in chars.iter().enumerate() {
+-        let (before, after) = (k.checked_sub(1).and_then(|j| chars.get(j)), chars.get(k + 1));
++    if !text.contains(['“', '‘', '”', '’']) {
++        return out;
++    }
++    // Halfwidth katakana counts as East Asian here too, as it does for kinsoku, though the
++    // character grid doesn't place it on its pitch.
++    let east_asian = |c: Option<char>| c.is_some_and(|c| super::grid::is_east_asian(c) || crate::kinsoku::is_east_asian(c));
++    let mut before = None;
++    let mut chars = text.char_indices().peekable();
++    while let Some((i, c)) = chars.next() {
++        let after = chars.peek().map(|&(_, c)| c);
+         match c {
+-            '“' | '‘' if k > 0 && east_asian(before) && east_asian(after) => out.push(i),
++            '“' | '‘' if east_asian(before) && east_asian(after) => out.push(i),
+             '”' | '’' if east_asian(before) && east_asian(after) => out.push(i + c.len_utf8()),
+             _ => {}
+         }
++        before = Some(c);
+     }
+     out
+ }
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+index 6d1377da..13de2e0f 100644
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -15496,6 +15496,23 @@ fn an_empty_bulleted_mark_after_a_bulleted_section_closer_draws_no_bullet() {
+     }
+ }
+ 
++/// Halfwidth katakana is East Asian for the curly-quote breaks as for kinsoku: `漢|“ｶﾅ”|漢` breaks
++/// before the opening quote and after the closing one.
++#[test]
++fn curly_quotes_beside_halfwidth_katakana_are_break_opportunities() {
++    for text in ["漢“ｶﾅ”漢", "ｶ“漢字”ﾅ"] {
++        let d = Document::from_text(text);
++        let l = lay(&d);
++        let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
++        let breaks_after = |at: usize| para.clusters.iter().find(|c| c.start <= at && at < c.end).map(|c| c.break_after).unwrap();
++        let open = text.find('“').unwrap();
++        let close = text.find('”').unwrap();
++        let last_before = text[..open].char_indices().next_back().unwrap().0;
++        assert!(breaks_after(last_before), "{text}: a break before “");
++        assert!(breaks_after(close), "{text}: a break after ”");
++    }
++}
++
+ /// A page break before the first row's paragraph moves the whole table to a new page (Word's
+ /// behaviour; an ODT table starting a page opens so), unless the table is at a page's top.
+ #[test]

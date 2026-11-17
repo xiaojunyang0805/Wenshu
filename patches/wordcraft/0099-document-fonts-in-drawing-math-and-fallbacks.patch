@@ -1,0 +1,314 @@
+Upstream: #5470 (review fixes, 2026-11-17; fold into 0027 at the next pin bump): render and PDF export enter the document's fonts; math memo per document; variable instances keep their owner; cached fallbacks stay shared; installing ignores document-owned copies
+diff --git a/crates/engine/src/tests/fonts.rs b/crates/engine/src/tests/fonts.rs
+index 39188fdf..a88ff110 100644
+--- a/crates/engine/src/tests/fonts.rs
++++ b/crates/engine/src/tests/fonts.rs
+@@ -193,6 +193,30 @@ fn a_subset_font_word_embeds_lays_out_text_set_in_its_table_name() {
+     assert!((x - mono).abs() < 0.01, "measured with the embedded subset: {x} vs {mono} (missing {missing})");
+ }
+ 
++/// Text resolved while drawing rather than in layout (a watermark) sees its own document's
++/// embedded fonts too, on screen and in the PDF: a watermark in a font only the document embeds
++/// drew in the substitute while the document's text used the font.
++#[test]
++fn a_watermark_in_a_font_only_the_document_embeds_draws_in_that_font() {
++    const FAMILY: &str = "Embedded Wmark";
++    let font = renamed("JetBrainsMono-Regular.ttf", "JetBrains Mono", FAMILY);
++    let mut doc = crate::io::open_bytes("w.docx", &docx_embedding(FAMILY, Some((&font, "{00000000-0000-0000-0000-000000000000}")), "x")).unwrap();
++    assert_ne!(doc.embedded_fonts.0, 0, "the font belongs to the document");
++    // The body in the default font, so only the watermark can bring the embedded face in.
++    doc.body = wordcraft_doc::Document::from_text("x").body;
++    doc.settings.watermark = Some(wordcraft_doc::Watermark { text: "WMWMiiil".into(), font: FAMILY.into(), ..Default::default() });
++    let lay = wordcraft_layout::layout(&doc, &mut wordcraft_layout::LayoutCache::new(), &wordcraft_layout::LayoutOptions::default());
++    // The same document with its fonts' owner forgotten: the watermark falls back.
++    let mut orphan = doc.clone();
++    orphan.embedded_fonts = wordcraft_doc::EmbeddedFontsOwner(0);
++    let screen = |d: &wordcraft_doc::Document| wordcraft_render::render_page(d, &lay.pages[0], 0.5, &Default::default()).pixels;
++    assert_ne!(screen(&doc), screen(&orphan), "on screen the watermark draws in the embedded face");
++    let pdf = |d: &wordcraft_doc::Document| wordcraft_pdf::export_layout(d, &lay, &Default::default()).unwrap();
++    let names = |b: &[u8]| b.windows(13).any(|w| w == b"JetBrainsMono");
++    assert!(names(&pdf(&doc)), "the PDF embeds the document's font for the watermark");
++    assert!(!names(&pdf(&orphan)), "without the document's fonts it doesn't");
++}
++
+ /// `font.missing`'s fonts, as "font>shownAs".
+ fn missing_list(s: &mut Session) -> Vec<String> {
+     let m = s.run("font.missing", &json!({})).unwrap();
+diff --git a/crates/fonts/src/fontdb/fallback.rs b/crates/fonts/src/fontdb/fallback.rs
+index 6df18534..c99c37a6 100644
+--- a/crates/fonts/src/fontdb/fallback.rs
++++ b/crates/fonts/src/fontdb/fallback.rs
+@@ -28,7 +28,12 @@ impl FontDb {
+             (true, false) => "Bold",
+             _ => "Italic",
+         };
+-        let styled = self.face(&base.family, style);
++        // Shared faces only: the choice is cached for every document, and a document's embedded
++        // bold or italic is its own.
++        let styled = {
++            let _shared = crate::DocumentFonts::enter(0);
++            self.face(&base.family, style)
++        };
+         Some(if styled.family.eq_ignore_ascii_case(&base.family) && styled.covers(c) && styled.id != exclude { styled } else { base })
+     }
+ 
+@@ -75,8 +80,11 @@ impl FontDb {
+         if c != '\u{25CF}' {
+             return None;
+         }
+-        // Word uses this text face for an uncovered black circle, before a UI sans.
++        // Word uses this text face for an uncovered black circle, before a UI sans. Shared faces
++        // only: the choice is cached for every document, so a document's embedded Times New Roman
++        // must not answer.
+         const FAMILY: &str = "Times New Roman";
++        let _shared = crate::DocumentFonts::enter(0);
+         let find = || self.find(FAMILY, "Regular").filter(|f| f.id != exclude && f.covers(c));
+         if let Some(face) = find() {
+             return Some(face);
+@@ -253,7 +261,11 @@ impl FontDb {
+             (true, false) => "Bold",
+             _ => "Italic",
+         };
+-        let styled = self.face(&base.family, style);
++        // Shared faces only, as for the base: the run's choice is cached for every document.
++        let styled = {
++            let _shared = crate::DocumentFonts::enter(0);
++            self.face(&base.family, style)
++        };
+         let face = if styled.family.eq_ignore_ascii_case(&base.family) && chars.iter().all(|c| styled.covers(*c)) && styled.id != exclude {
+             styled
+         } else {
+diff --git a/crates/fonts/src/fontdb/lookup.rs b/crates/fonts/src/fontdb/lookup.rs
+index 74c09522..97d7fcb6 100644
+--- a/crates/fonts/src/fontdb/lookup.rs
++++ b/crates/fonts/src/fontdb/lookup.rs
+@@ -169,6 +169,8 @@ impl FontDb {
+         }
+         let mut f = make_face(base.bytes.clone(), base.index, base.family.clone(), style.to_string(), base.legacy_family.clone(), coords)?;
+         f.local_names = base.local_names.clone();
++        // An instance of a document's font belongs to that document too.
++        f.owner = base.owner;
+         let f = Arc::new(f);
+         self.faces.write().unwrap_or_else(std::sync::PoisonError::into_inner).push(f.clone());
+         Some(f)
+diff --git a/crates/fonts/src/fontdb/tests/sysfonts.rs b/crates/fonts/src/fontdb/tests/sysfonts.rs
+index 91f127c8..b8249021 100644
+--- a/crates/fonts/src/fontdb/tests/sysfonts.rs
++++ b/crates/fonts/src/fontdb/tests/sysfonts.rs
+@@ -659,8 +659,12 @@ fn catalog_full_names() {
+ 
+ /// Give an OFL test face a complete synthetic name table without adding a font asset.
+ fn named_face(file: &str, family: &str) -> Vec<u8> {
++    named_face_styled(file, family, if file.contains("Bold") { "Bold" } else { "Regular" })
++}
++
++/// [`named_face`] with the style named `style`.
++fn named_face_styled(file: &str, family: &str, style: &str) -> Vec<u8> {
+     let mut data = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts").join(file)).unwrap();
+-    let style = if file.contains("Bold") { "Bold" } else { "Regular" };
+     let names =
+         [(1, family.to_string()), (2, style.to_string()), (4, format!("{family} {style}")), (6, format!("{}-{style}", family.replace(' ', "")))];
+     let mut table = Vec::new();
+@@ -850,3 +854,40 @@ fn an_embedded_fonts_localized_name_is_its_documents_only() {
+     let _doc = crate::DocumentFonts::enter(owner);
+     assert!(db.has_family("测试宋体"), "its own document does");
+ }
++
++/// Fallback choices are cached for every document, so a document's embedded faces never make
++/// them: not its Times New Roman for an uncovered black circle, nor its Bold Italic of the family
++/// the fallback chose when that family has none of its own.
++#[test]
++fn fallbacks_never_pick_a_documents_embedded_face() {
++    let db = FontDb::with_font_dirs(Vec::new());
++    db.set_system_fallback(false);
++    let owner = crate::DocumentFonts::new_owner();
++    // A Times New Roman that covers ●, and a Source Sans 3 Bold Italic (bundled without one).
++    db.add_document_fonts(
++        vec![
++            (named_face("SourceSans3-Regular.ttf", "Times New Roman"), "Times New Roman".to_string()),
++            (named_face_styled("SourceSans3-Bold.ttf", FALLBACK_FAMILY, "Bold Italic"), FALLBACK_FAMILY.to_string()),
++        ],
++        owner,
++    );
++    let primary = db.face("Source Serif 4", "Regular");
++    {
++        let _doc = crate::DocumentFonts::enter(owner);
++        assert_eq!(db.face("Times New Roman", "Regular").owner, owner, "the document sees its Times New Roman");
++        assert_eq!(db.face(FALLBACK_FAMILY, "Bold Italic").owner, owner, "and its Bold Italic");
++        assert_eq!(db.fallback_for('●', primary.id()).unwrap().owner, 0, "the circle fallback stays shared");
++    }
++    assert_eq!(db.fallback_for('●', primary.id()).unwrap().owner, 0);
++    // A letter Source Serif 4 lacks falls back to Source Sans 3; bold italic keeps a shared face.
++    let c = ('\u{100}'..='\u{2BFF}')
++        .find(|&c| !primary.covers(c) && db.fallback_for(c, primary.id()).is_some_and(|f| f.family == FALLBACK_FAMILY))
++        .expect("a character Source Sans 3 has and Source Serif 4 lacks");
++    for scope in [owner, 0] {
++        let _doc = crate::DocumentFonts::enter(scope);
++        let styled = db.fallback_styled(c, primary.id(), true, true).unwrap();
++        assert_eq!(styled.owner, 0, "{c:?} in scope {scope}: bold italic fallback stays shared");
++        let run = db.fallback_for_run(&[c], primary.id(), true, true).unwrap();
++        assert_eq!(run.owner, 0, "{c:?} in scope {scope}: run fallback stays shared");
++    }
++}
+diff --git a/crates/fonts/src/fontdb/user.rs b/crates/fonts/src/fontdb/user.rs
+index 36b06eb6..1f2a1c6b 100644
+--- a/crates/fonts/src/fontdb/user.rs
++++ b/crates/fonts/src/fontdb/user.rs
+@@ -529,7 +529,8 @@ impl FontDb {
+             let mut faces = self.faces.write().unwrap_or_else(|e| e.into_inner());
+             let fresh: Vec<_> = new
+                 .iter()
+-                .filter(|f| !faces.iter().any(|g| g.family.eq_ignore_ascii_case(&f.family) && g.style.eq_ignore_ascii_case(&f.style)))
++                // A document's embedded copy doesn't count: other documents can't see it.
++                .filter(|f| !faces.iter().any(|g| g.owner == 0 && g.family.eq_ignore_ascii_case(&f.family) && g.style.eq_ignore_ascii_case(&f.style)))
+                 .cloned()
+                 .collect();
+             faces.extend(fresh.iter().cloned());
+diff --git a/crates/fonts/src/fontdb/user/tests.rs b/crates/fonts/src/fontdb/user/tests.rs
+index a8673e5a..2d6b3972 100644
+--- a/crates/fonts/src/fontdb/user/tests.rs
++++ b/crates/fonts/src/fontdb/user/tests.rs
+@@ -502,3 +502,20 @@ fn a_woff2_collection_font_listing_a_table_twice_is_refused() {
+     let file = woff2_collection(3, &[vec![0, 1, 2], vec![0, 1, 2]]);
+     assert_ne!(decode_font_file(&file), Err(UserFontError::BadWebFont(BAD_COLLECTION.into())));
+ }
++
++/// A family some open document embeds can still be installed: that copy is the document's own,
++/// so without the installed font other documents would go on substituting it. The embedding
++/// document keeps its copy.
++#[test]
++fn a_family_a_document_embeds_can_still_be_installed() {
++    let db = db();
++    let owner = crate::DocumentFonts::new_owner();
++    let font = renamed("SourceSans3-Regular.ttf", FAMILY);
++    db.add_document_fonts(vec![(font.clone(), FAMILY.to_string())], owner);
++    assert!(!db.has_family(FAMILY));
++    db.install_font("Userfont-Regular.ttf", &font).unwrap();
++    assert!(db.has_family(FAMILY), "installed for every document");
++    assert_eq!(db.face(FAMILY, "Regular").owner, 0);
++    let _doc = crate::DocumentFonts::enter(owner);
++    assert_eq!(db.face(FAMILY, "Regular").owner, owner, "the embedding document keeps its copy");
++}
+diff --git a/crates/fonts/src/math.rs b/crates/fonts/src/math.rs
+index 19c4b8ab..510673b6 100644
+--- a/crates/fonts/src/math.rs
++++ b/crates/fonts/src/math.rs
+@@ -323,21 +323,23 @@ const MATH_CACHE_MAX: usize = 1024;
+ /// Math names longer than this (bytes) are resolved but never remembered.
+ const MATH_KEY_MAX: usize = 256;
+ 
+-/// Resolutions tagged with the [`FontDb::generation`] they were made at.
+-type MathMemo = (u64, HashMap<String, (FaceRef, Option<Arc<MathTable>>)>);
++/// Resolutions tagged with the [`FontDb::generation`] they were made at and the document whose
++/// embedded fonts they could see ([`crate::word::memo_scope`]).
++type MathMemo = ((u64, u64), HashMap<String, (FaceRef, Option<Arc<MathTable>>)>);
+ 
+ fn math_cache() -> &'static Mutex<MathMemo> {
+     static CACHE: OnceLock<Mutex<MathMemo>> = OnceLock::new();
+-    CACHE.get_or_init(|| Mutex::new((0, HashMap::new())))
++    CACHE.get_or_init(|| Mutex::new(((0, 0), HashMap::new())))
+ }
+ 
+ /// The face to set math in: `family` when installed and it has a `MATH` table, else the first
+ /// installed substitute that has one, else `family` (or its text substitute) without one.
+-/// Remembered until user fonts are added or removed ([`FontDb::generation`]).
++/// Remembered until user fonts are added or removed ([`FontDb::generation`]), and per document:
++/// one document's embedded math font (often a subset) is never another's.
+ pub fn resolve_math(family: &str) -> (FaceRef, Option<Arc<MathTable>>) {
+     let cache = math_cache();
+     let db = FontDb::global();
+-    let generation = db.generation();
++    let generation = crate::word::memo_scope(db);
+     {
+         let mut c = cache.lock().unwrap_or_else(|e| e.into_inner());
+         if c.0 != generation {
+@@ -433,6 +435,33 @@ mod tests {
+         assert_ne!(resolve_math(fam).0.family, fam, "a removed font must stop being used");
+     }
+ 
++    /// A math font one document embeds is that document's only, in either order: the memo never
++    /// hands one document's embedded face (often a subset) to another laid out after it with no
++    /// font change in between, nor another's substitute to the document that embeds the font.
++    #[test]
++    fn an_embedded_math_font_is_its_documents_only() {
++        use crate::fontdb::user::tests::renamed;
++        let db = FontDb::global();
++        for (k, fam) in ["Zz Math Doc 1", "Zz Math Doc 2"].into_iter().enumerate() {
++            let (embeds, other) = (crate::DocumentFonts::new_owner(), crate::DocumentFonts::new_owner());
++            db.add_document_fonts(vec![(with_math_table(&renamed("SourceSans3-Regular.ttf", fam)), fam.to_string())], embeds);
++            let in_doc = |owner: u64| {
++                let _doc = crate::DocumentFonts::enter(owner);
++                resolve_math(fam)
++            };
++            let order = if k == 0 { [embeds, other] } else { [other, embeds] };
++            for owner in order {
++                let (face, table) = in_doc(owner);
++                if owner == embeds {
++                    assert!(face.family == fam && table.is_some(), "{fam}: the embedding document gets its font");
++                } else {
++                    // It gets an installed math font (with its own table) or a text substitute.
++                    assert_ne!(face.family, fam, "{fam}: another document doesn't get it");
++                }
++            }
++        }
++    }
++
+     #[test]
+     fn math_cache_stays_bounded() {
+         for i in 0..(MATH_CACHE_MAX + 50) {
+diff --git a/crates/fonts/src/word.rs b/crates/fonts/src/word.rs
+index 72f3bd4a..2878bb88 100644
+--- a/crates/fonts/src/word.rs
++++ b/crates/fonts/src/word.rs
+@@ -661,13 +661,13 @@ fn fallback_list_cache() -> &'static Mutex<FallbackListMemo> {
+     CACHE.get_or_init(|| Mutex::new(FallbackListMemo::default()))
+ }
+ 
+-/// Hash and byte length of `family`, used as a compact cache key for fallback lists.
+ /// What the memoised lookups depend on: the database's generation and the document whose embedded
+ /// fonts this thread sees ([`crate::DocumentFonts`]; another document's are invisible to it).
+-fn memo_scope(db: &FontDb) -> (u64, u64) {
++pub(crate) fn memo_scope(db: &FontDb) -> (u64, u64) {
+     (db.generation(), crate::DocumentFonts::current())
+ }
+ 
++/// Hash and byte length of `family`, used as a compact cache key for fallback lists.
+ fn family_list_key(family: &str) -> (u64, usize) {
+     use std::hash::{Hash, Hasher};
+     let mut h = std::collections::hash_map::DefaultHasher::new();
+diff --git a/crates/pdf/src/export.rs b/crates/pdf/src/export.rs
+index 78e575c5..aa83c1b4 100644
+--- a/crates/pdf/src/export.rs
++++ b/crates/pdf/src/export.rs
+@@ -25,6 +25,9 @@ pub fn export_layout(doc: &Document, lay: &DocLayout, opts: &PdfOptions) -> Resu
+ 
+ /// Validate selected pages and retry embedding failures with outlined fonts.
+ fn export_layout_inner(doc: &Document, lay: &DocLayout, opts: &PdfOptions) -> Result<Vec<u8>, PdfError> {
++    // Text resolved while drawing (watermarks, metafile text) sees the document's embedded fonts,
++    // as layout did.
++    let _fonts = wordcraft_fonts::DocumentFonts::enter(doc.embedded_fonts.0);
+     let mut adjusted = opts.clone();
+     adjusted.tagged &= adjusted.sheet_copies <= 1;
+     let opts = &adjusted;
+diff --git a/crates/render/src/lib.rs b/crates/render/src/lib.rs
+index e4c28aed..25fbe897 100644
+--- a/crates/render/src/lib.rs
++++ b/crates/render/src/lib.rs
+@@ -293,6 +293,9 @@ pub fn render_region(doc: &Document, page: &Page, w: u32, h: u32, view: Affine,
+ 
+ /// [`render_region`] with an explicit pixel cap (a small one in tests).
+ fn render_region_capped(doc: &Document, page: &Page, w: u32, h: u32, view: Affine, opts: &RenderOptions, max_pixels: u64) -> Rendered {
++    // Text resolved while drawing (watermarks, metafile text) sees the document's embedded fonts,
++    // as layout did.
++    let _fonts = wordcraft_fonts::DocumentFonts::enter(doc.embedded_fonts.0);
+     let (w, h) = (w.clamp(1, MAX_SIDE), h.clamp(1, MAX_SIDE));
+     let (cw, ch) = wordcraft_geom::fit_pixels(w, h, max_pixels);
+     // Over the cap the whole picture is drawn smaller, not cropped.
+@@ -1201,6 +1204,7 @@ pub fn render_area(doc: &Document, page: &Page, area: wordcraft_geom::Rect, scal
+ /// Draw `items` (page points) alone, on nothing, over the page `area` (points) at `scale` px/pt:
+ /// no paper, no watermark. A dragged object's preview.
+ pub fn render_items(doc: &Document, items: &[Draw], area: wordcraft_geom::Rect, scale: f32, opts: &RenderOptions) -> Rendered {
++    let _fonts = wordcraft_fonts::DocumentFonts::enter(doc.embedded_fonts.0);
+     let wordcraft_geom::Rect { x, y, w, h } = area;
+     let scale = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
+     let (pw, ph) = (((w * scale).ceil() as u32).clamp(1, MAX_SIDE), ((h * scale).ceil() as u32).clamp(1, MAX_SIDE));
