@@ -2,6 +2,19 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-17: first maintainer review round; review fixes as 0096–0099
+
+- **Reviews (benandez):** #5002 and #5004 approved, small points fixed. #5003: the
+  size-plus-adjustment advance had reached `snapToChars` grids, which must keep whole cells;
+  fixed (no corpus document uses `snapToChars`). #5470: draw-time text (watermarks, metafile
+  text) and the math font memo now see only the document's own embedded fonts, and three
+  CodeRabbit points on fallbacks and installing fonts. #5462 closed for upstream #2508, which
+  passes our fallback-first cases; 0037 goes when #2508 is in our pin. #5470 and #5283 (frees a
+  closed document's fonts) are complementary halves of #3687; coordination comments posted.
+- **Queue:** the fixes are 0096–0099 at the end (fold into 0001/0002/0004/0027 at the next pin
+  bump); the queue reproduces the tested tree.
+- **Gates:** Windows **193 / 200**, 0.9477; Linux **193 / 200**, 0.9356; both unchanged.
+
 ## 2026-11-15 (2): 193 / 200: `7abe5be4e9` matches (0095, F59)
 
 - **`7abe5be4e9`** (WPS 2 pages, Wenshu 3, the lowest score at 0.83): a converted form made of
