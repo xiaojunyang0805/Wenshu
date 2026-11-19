@@ -4,7 +4,7 @@ Newest first. One entry per working session: what landed, what was verified, wha
 
 ## 2026-11-19: 194 / 200: split rows follow WPS (0100, F60, F61); `a180b9d578` matches
 
-- **Checkout moved** to `E:7\Wenshu` (tool paths, `d636206`); gate unchanged after the move.
+- **Checkout moved** to `E:\2027\Wenshu` (tool paths, `d636206`); gate unchanged after the move.
 - **`82eb70e86d`** (WPS 17 pages, Wenshu 19): a table row split at the page bottom kept 3 of a
   narrow cell's 5 lines in Wenshu, 4 in WPS. 54 probes from its own table (spacer 0.1 to 31 pt,
   modes none / 12 / 14 / 15, WPS's `app.xml`): before mode 15 WPS applies no widow control in a
