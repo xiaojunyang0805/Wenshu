@@ -2,6 +2,23 @@
 
 Newest first. One entry per working session: what landed, what was verified, what's next.
 
+## 2026-11-19: 194 / 200: split rows follow WPS (0100, F60, F61); `a180b9d578` matches
+
+- **Checkout moved** to `E:7\Wenshu` (tool paths, `d636206`); gate unchanged after the move.
+- **`82eb70e86d`** (WPS 17 pages, Wenshu 19): a table row split at the page bottom kept 3 of a
+  narrow cell's 5 lines in Wenshu, 4 in WPS. 54 probes from its own table (spacer 0.1 to 31 pt,
+  modes none / 12 / 14 / 15, WPS's `app.xml`): before mode 15 WPS applies no widow control in a
+  split cell; in mode 15 a widow takes a line along only from three lines on the page, and two
+  lines and a widow stay (F60). The continuation keeps the row's whole at-least height, 34.5 pt
+  for one line (F61). **0100**; two upstream tests updated to the WPS rule, two new ones fail
+  without it. Pages 11 and 12 now match line for line; the rest is a row of nested tables split
+  over pages 13 to 16 (an empty band on page 14, an empty page 16), still open.
+- **`a180b9d578`** (group H, a split title row) matches as a side effect.
+- **Gates:** Windows 193 → **194 / 200**, 0.9477 → 0.9478; Linux 193 → **194 / 200**, 0.9356 →
+  0.9357. No document lower. Baselines updated.
+- **Still off (6):** `2d6a9da333`, `228229e95c`, `82eb70e86d`, `cd82c17bf5`, `f7d3afdfdb`,
+  `9c189a35a9`.
+
 ## 2026-11-17: first maintainer review round; review fixes as 0096–0099
 
 - **Reviews (benandez):** #5002 and #5004 approved, small points fixed. #5003: the
