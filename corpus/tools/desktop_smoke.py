@@ -3,7 +3,7 @@ session (embedded fonts must not leak between them), compare page counts with th
 save as .docx, reopen, screenshot. python -I -X utf8 out/drive_smoke.py"""
 import json, os, shutil, socket, subprocess, sys, time, pathlib
 
-root = pathlib.Path(r"D:\27_Project\Wenshu")
+root = pathlib.Path(r"E:\2027\Wenshu")
 prof = root / "out" / "smoke-profile"
 shots = root / "out" / "smoke"
 shutil.rmtree(prof, ignore_errors=True)
