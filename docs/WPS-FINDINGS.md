@@ -1024,6 +1024,32 @@ column started by a column break) started its second section 16 pt low and its d
 anchor slid to page 2. With this fixed, every line on page 1 is within 0.5 pt of WPS below the
 header, and the page count matches (2).
 
+## F60. Widow control in a split table cell: none before mode 15, from three lines in it
+
+Measured 2026-11-19 (`out/f60/mk.py`, `mkv.py`, `mkv2.py`: the real split row of
+`dc-administrative-82eb70e86d` (9 pt 宋体, one character a line in a narrow cell, `w:widowControl`
+on, 15.6 pt line grid) behind an exact spacer stepped 0.1 to 31 pt; compatibility mode none, 12,
+14 and 15; WPS's own `app.xml`; 54 probes). Before mode 15 WPS keeps every line of a split cell
+paragraph that fits, the last one alone on the next page if so (4 of 5, 3 of 4, 2 of 3). In mode
+15 a widow takes a line along only when at least three lines are on the page (4 of 5 → 3, 3 of 4
+→ 2), and two lines and a widow stay (2 of 3), the body's rule without its move-on-whole case.
+An orphan still moves the row on in every mode. Wenshu used Word's rule (two lines each side,
+else the paragraph moves), so it kept 3 of 5 lines where WPS kept 4, and moved whole rows on
+where a cell had two lines and a widow.
+
+## F61. Each part of a split row keeps the row's whole minimum height
+
+Same probes: the continuation of a row of at least 679 twips (33.95 pt) is 34.5 pt on the next
+page whether it holds one line or two, in every mode. WPS gives every part of the split row the
+whole minimum height (with the cell margins and border bands), not the rest of it after the part
+on the first page as Wenshu did (16 pt for one line). Wenshu applies it when the minimum is less
+than the room the first part had, so a minimum taller than a page doesn't come back on every page
+(not measured in WPS).
+
+With F60 and F61, `dc-administrative-82eb70e86d`'s pages 11 and 12 match WPS line for line
+(page 12's note started 18 pt high). Its next difference is a nested table split across pages 13
+to 16 (an empty band at the top of page 14, an empty page 16), not explained yet.
+
 ## Still to measure
 
 - Whether every right-compressible mark gets the free line-end half, not only `，` (F1).
@@ -1035,6 +1061,8 @@ header, and the page count matches (2).
   after it with kinsoku off.
 - The automatic space beside Latin text and digits under `w:spacing` (WPS: about a quarter of
   the size plus twice the spacing, 3.0 pt at −1 pt and 4.0 at +1 for 14 pt; Wenshu keeps 3.5).
+- Where centred cell content sits in the part of a split row left on a page (F60 probes: WPS
+  1.8 pt lower with two lines kept, 8 pt lower with two of four in mode 15).
 - Justified Chinese lines: WPS stretches every character; Wenshu leaves them unstretched (no
   effect on breaks).
 - F12 on justified mode-15 lines beyond the line-end cases (the closing-opening line measured

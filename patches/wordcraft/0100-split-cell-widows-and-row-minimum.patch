@@ -1,0 +1,278 @@
+diff --git a/crates/layout/src/table.rs b/crates/layout/src/table.rs
+--- a/crates/layout/src/table.rs
++++ b/crates/layout/src/table.rs
+@@ -28,6 +28,22 @@
+     pub edge: f32,
+     /// The row's cells: the items each one owns and where its content ends.
+     pub cells: Vec<CellPart>,
++    /// When widow control takes a line of a split cell paragraph along to the next page: with at
++    /// least this many of its lines on the page; `None` never. WPS Office: never before
++    /// compatibility mode 15, three lines in it (the body's rule; it leaves two lines and a
++    /// widow). See [`cell_widow_lines`].
++    pub widow_lines: Option<usize>,
++    /// The row's at-least height with its cell margins and border bands (0 without one): every
++    /// part of the row split across pages is at least this tall (WPS Office: a continuation
++    /// holding one line keeps the whole minimum, probes in modes 11 to 15).
++    pub min_height: f32,
++}
++
++/// [`RowLayout::widow_lines`] for a document laid out in compatibility `mode` (WPS Office, probes
++/// with split rows in modes 11 to 15: before 15 a split cell keeps every line that fits, the last
++/// alone on the next page; in 15 a widow takes a line along only from three lines on the page).
++pub fn cell_widow_lines(mode: u32) -> Option<usize> {
++    (mode >= 15).then_some(3)
+ }
+ 
+ /// A cell of a [`RowLayout`].
+@@ -531,6 +547,7 @@
+     let mut rows: Vec<Vec<CellBox>> = Vec::with_capacity(nrows);
+     let mut heights: Vec<f32> = Vec::with_capacity(nrows);
+     let mut bottoms: Vec<f32> = Vec::with_capacity(nrows);
++    let mut minimums: Vec<f32> = Vec::with_capacity(nrows);
+     let mut edges: Vec<f32> = Vec::with_capacity(nrows);
+     for (ri, row) in t.rows.iter().enumerate() {
+         let mut g = row.first_grid();
+@@ -726,13 +743,17 @@
+             (Some(h), _) if h > 0.0 => rh.max(h + row_insets),
+             _ => rh,
+         };
++        minimums.push(match (row.props.height, row.props.height_rule) {
++            (Some(h), HeightRule::AtLeast) if h > 0.0 => h + row_insets,
++            _ => 0.0,
++        });
+         bottoms.push(row_below);
+         edges.push(row_edge);
+         heights.push(if collapsed && !cells.is_empty() { rh.max(0.0) } else { rh.max(4.0) });
+         rows.push(cells);
+     }
+     grow_vertical_merges(&rows, &mut heights);
+-    finish_table_rows(ctx, TableRows { story, table: t, path, depth, cell_text, rows, heights, bottoms, edges, x, total })
++    finish_table_rows(ctx, TableRows { story, table: t, path, depth, cell_text, rows, heights, minimums, bottoms, edges, x, total })
+ }
+ 
+ fn grow_vertical_merges(rows: &[Vec<CellBox>], heights: &mut [f32]) {
+@@ -763,6 +784,7 @@
+     cell_text: Vec<(Region, CellText)>,
+     rows: Vec<Vec<CellBox>>,
+     heights: Vec<f32>,
++    minimums: Vec<f32>,
+     bottoms: Vec<f32>,
+     edges: Vec<f32>,
+     x: f32,
+@@ -770,7 +792,8 @@
+ }
+ 
+ fn finish_table_rows(ctx: &mut Ctx, input: TableRows<'_>) -> TableLayout {
+-    let TableRows { story, table: t, path, depth, cell_text, rows, heights, bottoms, edges, x, total } = input;
++    let widow_lines = cell_widow_lines(ctx.doc.settings.layout_compat_mode());
++    let TableRows { story, table: t, path, depth, cell_text, rows, heights, minimums, bottoms, edges, x, total } = input;
+     // Grid columns holding a vertical-merge continuation, per row.
+     let cont: Vec<Vec<usize>> = t
+         .rows
+@@ -915,6 +938,8 @@
+             bottom: bottoms.get(ri).copied().unwrap_or(0.0),
+             edge: edges.get(ri).copied().unwrap_or(0.0),
+             cells: parts,
++            widow_lines,
++            min_height: minimums.get(ri).copied().unwrap_or(0.0),
+         });
+     }
+     TableLayout { x, width: total, rows: out }
+@@ -927,11 +952,11 @@
+ /// Like Word, the part left on the page keeps the cells' bottom margin and border below its
+ /// text and a cell's last paragraph its space after (a row only that much taller than the room
+ /// left splits rather than moving on whole), and widow control keeps two lines of a paragraph on
+-/// either side of the break. A cell aligned to the middle or bottom of the row is aligned within
+-/// the part left on the page when all its text fits there, and starts at the top of the cell
+-/// otherwise. Each cell's text goes on at the top of the continuation, and the
++/// either side of the break as [`RowLayout::widow_lines`] says. A cell aligned to the middle or
++/// bottom of the row is aligned within the part left on the page when all its text fits there,
++/// and starts at the top of the cell otherwise. Each cell's text goes on at the top of the continuation, and the
+ /// continuation is as tall as the cell needing the most room, and at least the rest of the row
+-/// (a minimum height holds over the pages).
++/// and [`RowLayout::min_height`] (a minimum height holds over the pages).
+ pub fn split_row(row: &RowLayout, cut: f32) -> Option<(RowLayout, RowLayout)> {
+     split_row_with(row, cut, false)
+ }
+@@ -996,7 +1021,7 @@
+                     let Some((para, l0, l1, y)) = text_lines(it) else { return 0 };
+                     // The cell's last paragraph ends with the cell's content (its space after).
+                     let last = l1 == para.lines.len() && crate::item_bottom(y, para, l0, l1).is_some_and(|b| b >= lowest - 0.01);
+-                    line_split(para, (l0, l1), y, limit, end.filter(|_| last))
++                    line_split(para, (l0, l1), y, limit, end.filter(|_| last), row.widow_lines)
+                 })
+                 .collect()
+         })
+@@ -1086,9 +1111,12 @@
+     // Each cell resumes below its own top margin and border band.
+     let shifts: Vec<f32> = moved.iter().zip(&row.cells).map(|(&m, c)| ((if m < f32::MAX { m } else { first_moved }) - c.top).max(0.0)).collect();
+     // The continuation is as tall as the cell needing the most room (what it moves on and the
+-    // bottom margin, the rest of the row for turned text), and at least the rest of the row.
+-    let full = (row.height - shifts.iter().copied().fold(f32::MAX, f32::min)).max(4.0);
+-    let mut need = row.height - cut;
++    // bottom margin, the rest of the row for turned text), and at least the rest of the row and
++    // the row's whole minimum height (WPS Office) when that is less than the room this part had:
++    // a minimum taller than a page would otherwise come back on every page.
++    let min_height = if row.min_height < cut { row.min_height } else { 0.0 };
++    let full = (row.height - shifts.iter().copied().fold(f32::MAX, f32::min)).max(4.0).max(min_height);
++    let mut need = (row.height - cut).max(min_height);
+     for ((end, &m), &s) in ends.iter().zip(&moved).zip(&shifts) {
+         if m < f32::MAX {
+             need = need.max(end.map_or(row.height, |e| e + row.bottom) - s);
+@@ -1217,8 +1245,8 @@
+     }
+     // The part left on the page is placed and never split again.
+     Some((
+-        RowLayout { height: cut, items: a, bottom: row.bottom, edge: 0.0, cells: Vec::new() },
+-        RowLayout { height, items: b, bottom: row.bottom, edge: row.edge, cells: parts },
++        RowLayout { height: cut, items: a, bottom: row.bottom, edge: 0.0, cells: Vec::new(), widow_lines: row.widow_lines, min_height: row.min_height },
++        RowLayout { height, items: b, bottom: row.bottom, edge: row.edge, cells: parts, widow_lines: row.widow_lines, min_height: row.min_height },
+     ))
+ }
+ 
+@@ -1319,8 +1347,8 @@
+ /// The first of lines `l0..l1` of `para` (placed with line `l0`'s top at `y`) that does not fit
+ /// above `limit`: the last line of a cell's last paragraph needs room down to the cell's content
+ /// `end`, its space after. Widow control keeps two lines on either side of the break, or moves
+-/// the paragraph on whole.
+-fn line_split(para: &ParaLayout, (l0, l1): (usize, usize), y: f32, limit: f32, end: Option<f32>) -> usize {
++/// the paragraph on whole (a widow takes a line along only with `widow_lines` on the page).
++fn line_split(para: &ParaLayout, (l0, l1): (usize, usize), y: f32, limit: f32, end: Option<f32>, widow_lines: Option<usize>) -> usize {
+     let n = para.lines.len();
+     let mut k = l0;
+     while k < l1 {
+@@ -1335,7 +1363,7 @@
+     // on the page (`place_para_in_flow`).
+     if para.rp.widow_control && k > l0 && k < l1 {
+         // A widow: take one more line along.
+-        if n - k == 1 {
++        if n - k == 1 && widow_lines.is_some_and(|w| k - l0 >= w) {
+             k -= 1;
+         }
+         // An orphan (the first line alone): the paragraph moves on whole.
+diff --git a/crates/layout/src/tests.rs b/crates/layout/src/tests.rs
+--- a/crates/layout/src/tests.rs
++++ b/crates/layout/src/tests.rs
+@@ -4382,18 +4382,20 @@
+ /// When widow/orphan control leaves a cell of a row split across pages with nothing on the page,
+ /// though its first line would fit, the whole row moves on: Word doesn't leave the other cells
+ /// behind beside an empty one (observed with synthetic documents). A cell that keeps lines splits
+-/// as usual.
++/// as usual. WPS Office's widow rule in a split cell: in compatibility mode 15 a widow takes a
++/// line along only from three lines on the page (two lines and a widow stay), and before 15 never.
+ #[test]
+ fn a_cell_emptied_by_widow_control_takes_its_row_to_the_next_page() {
+     crate::test_fonts();
+     use wordcraft_doc::props::LineSpacing;
+     // Letter, 1 inch margins: 648 pt of text. `filler` lines of exactly 14 pt, then a row whose
+     // second cell holds one paragraph of `lines` lines, 14 pt each.
+-    let pages_of = |filler: usize, lines: usize, widow: bool| {
++    let pages_in = |mode: u32, filler: usize, lines: usize, widow: bool| {
+         let exact =
+             ParaProps { line_spacing: Some(LineSpacing::Exactly(14.0)), space_before: Some(0.0), space_after: Some(0.0), ..Default::default() };
+         let text: Vec<String> = (0..filler).map(|i| format!("Filler {i}")).collect();
+         let mut d = Document::from_text(&format!("{}\nAfter", text.join("\n")));
++        d.settings.compat_mode = mode;
+         for i in 0..=filler {
+             *para_props(&mut d, i) = exact.clone();
+         }
+@@ -4425,12 +4427,17 @@
+             })
+             .collect::<Vec<_>>()
+     };
++    let pages_of = |filler: usize, lines: usize, widow: bool| pages_in(15, filler, lines, widow);
+     // 44 filler lines leave 32 pt: two lines fit.
+     assert_eq!(pages_of(44, 4, true)[..2], [(1, 2), (0, 2)], "four lines split two and two");
+-    assert_eq!(pages_of(44, 3, true)[..2], [(0, 0), (1, 3)], "two and a widow: the whole row moves");
++    assert_eq!(pages_of(44, 3, true)[..2], [(1, 2), (0, 1)], "two lines and a widow stay so");
+     assert_eq!(pages_of(44, 3, false)[..2], [(1, 2), (0, 1)], "without widow control it splits where it falls");
++    // 43 filler lines leave 46 pt: three lines fit, and the widow takes one along.
++    assert_eq!(pages_of(43, 4, true)[..2], [(1, 2), (0, 2)], "three lines and a widow: two and two");
++    assert_eq!(pages_in(14, 43, 4, true)[..2], [(1, 3), (0, 1)], "before mode 15 the widow stays");
+     // 45 filler lines leave 18 pt: one line fits, an orphan.
+     assert_eq!(pages_of(45, 4, true)[..2], [(0, 0), (1, 4)], "an orphan: the whole row moves");
++    assert_eq!(pages_in(14, 45, 4, true)[..2], [(0, 0), (1, 4)], "in every mode");
+ }
+ 
+ // Use real paragraph and table layout to distinguish content from trailing spacing.
+@@ -4492,7 +4499,8 @@
+     for (text, widow, room, expected) in [
+         (two.as_str(), true, 18.0, vec![(0, 0), (2, 4)]),
+         (two.as_str(), false, 18.0, vec![(1, 1), (1, 3)]),
+-        (three.as_str(), true, 32.0, vec![(0, 0), (3, 4)]),
++        // Two lines and a widow stay (WPS Office, mode 15).
++        (three.as_str(), true, 32.0, vec![(2, 2), (1, 2)]),
+         (three.as_str(), false, 32.0, vec![(2, 2), (1, 2)]),
+     ] {
+         let props = ParaProps { space_after: Some(0.0), widow_control: Some(widow), ..Default::default() };
+@@ -4691,6 +4699,43 @@
+     assert!((sum - 1201.0).abs() < 0.05, "{parts:?}");
+ }
+ 
++/// The continuation of a split row with a minimum height shorter than the room its first part
++/// had keeps the whole minimum, not only the rest of it (WPS Office: a 34 pt row split after four
++/// of its five lines is 34.5 pt on the next page holding one line, probes in modes 11 to 15).
++#[test]
++fn a_split_rows_continuation_keeps_its_whole_minimum() {
++    crate::test_fonts();
++    use wordcraft_doc::props::{HeightRule, LineSpacing};
++    let exact = ParaProps { line_spacing: Some(LineSpacing::Exactly(14.0)), space_before: Some(0.0), space_after: Some(0.0), ..Default::default() };
++    // Letter, 1 inch margins: 648 pt of text. 43 filler lines of 14 pt leave 46 pt: three of the
++    // cell's four lines fit, the fourth moves on (mode 14: no widow control in the cell).
++    let text: Vec<String> = (0..43).map(|i| format!("Filler {i}")).collect();
++    let mut d = Document::from_text(&format!("{}\nAfter", text.join("\n")));
++    d.settings.compat_mode = 14;
++    for i in 0..=43 {
++        *para_props(&mut d, i) = exact.clone();
++    }
++    let mut t = Table::new(1, 1, 400.0);
++    t.props.cell_margins = Some([0.0, 5.4, 0.0, 5.4]);
++    t.rows[0].props.height = Some(34.0);
++    t.rows[0].props.height_rule = HeightRule::AtLeast;
++    let mut p = wordcraft_doc::Paragraph::with_text(&["B1", "B2", "B3", "B4"].join(&wordcraft_doc::para::LINE_BREAK.to_string()), Default::default());
++    p.props = exact.clone();
++    t.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(p)];
++    d.insert_block(StoryRef::Body, &Path::top(43), wordcraft_doc::Block::Table(t)).unwrap();
++    let l = lay(&d);
++    let parts: Vec<(usize, f32)> = l
++        .pages
++        .iter()
++        .enumerate()
++        .flat_map(|(i, pg)| pg.items.iter().map(move |it| (i, it)))
++        .filter_map(|(i, it)| if let Placed::Cell { rect, .. } = it { Some((i, rect.h)) } else { None })
++        .collect();
++    assert_eq!(parts.len(), 2, "the row splits: {parts:?}");
++    // 34 pt and the 0.5 pt top and bottom border bands, though one 14 pt line is left.
++    assert!((parts[1].1 - 35.0).abs() < 0.05, "{parts:?}");
++}
++
+ /// A cut that is NaN or infinite, or a row of a NaN height, splits nothing (`clamp` used to panic
+ /// on a NaN cut).
+ #[test]
+@@ -4709,6 +4754,8 @@
+         items: vec![line(0.0), line(150.0)],
+         bottom,
+         cells: vec![CellPart { top: 2.0, items: 0..2, end: Some(170.0), align: None }],
++        widow_lines: Some(3),
++        min_height: 0.0,
+     };
+     for cut in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 0.0, -1.0, 200.0] {
+         assert!(split_row(&row(200.0, 4.0), cut).is_none(), "{cut}");
+@@ -9083,6 +9130,8 @@
+         items: vec![line_row(0.0), line_row(150.0), fill(0.0, 200.0), fill(150.0, 50.0)],
+         bottom: 0.0,
+         cells: vec![CellPart { top: 2.0, items: 0..4, end: None, align: None }],
++        widow_lines: Some(3),
++        min_height: 0.0,
+     };
+     let (a, b) = split_row(&row, 100.0).expect("splits");
+     let fills = |r: &RowLayout| {
+@@ -13047,6 +13096,8 @@
+             edge: 0.0,
+             items: vec![kept, image, frame],
+             cells: vec![CellPart { top, items: 0..3, end: Some(170.0), align: None }],
++            widow_lines: Some(3),
++        min_height: 0.0,
+         };
+         let (first, rest) = split_row(&row, 100.0).unwrap();
+         assert_eq!(first.items.len(), 1);
